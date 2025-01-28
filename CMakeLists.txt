@@ -26,6 +26,9 @@ message(STATUS "Include directories: ${ALL_INCLUDE_DIRS}")
 # Set project include directories
 include_directories(${ALL_INCLUDE_DIRS})
 
+# Add lib directories
+add_subdirectory(${LIB_DIR}/InputOutput)
+
 # Add third-party directories
 add_subdirectory(${THIRD_PARTY_DIR}/csv-parser)
 add_subdirectory(${THIRD_PARTY_DIR}/fmt)
@@ -33,13 +36,11 @@ add_subdirectory(${THIRD_PARTY_DIR}/fmt)
 
 # Find source files
 file(GLOB_RECURSE SRC_FILES
-"${SRC_DIR}/*.cpp"
+    "${SRC_DIR}/*.cpp"
 )
 
 # Add executable
 add_executable(${PROJECT_NAME} ${SRC_FILES})
 
-
-# Link libraries 
-target_link_libraries(${PROJECT_NAME} csv)
-target_link_libraries(${PROJECT_NAME} fmt::fmt)
+# Link libraries
+target_link_libraries(${PROJECT_NAME} fmt::fmt lib-input-output)
