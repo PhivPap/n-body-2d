@@ -1,5 +1,7 @@
 #include <iostream>
 #include "csv.hpp"
+#include <fmt/core.h> 
+
 
 constexpr const char* INPUT_FILE_PATH = "../universe-db/universe-unit-test.csv";
 constexpr const char* OUTPUT_FILE_PATH = "../universe-db/universe-unit-test-output.csv";
@@ -58,9 +60,9 @@ void write_csv(std::string_view path, const std::vector<Body> &bodies) {
 
 int main() {
     try {
+        fmt::print("Reading input...\n");
         const std::vector<Body> bodies = parse_csv(INPUT_FILE_PATH);
         write_csv(OUTPUT_FILE_PATH, bodies);
-
     }
     catch (const std::exception &e) {
         std::cerr << "Error: " << e.what() << std::endl;

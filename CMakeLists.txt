@@ -28,6 +28,7 @@ include_directories(${ALL_INCLUDE_DIRS})
 
 # Add third-party directories
 add_subdirectory(${THIRD_PARTY_DIR}/csv-parser)
+add_subdirectory(${THIRD_PARTY_DIR}/fmt)
 
 
 # Find source files
@@ -41,3 +42,4 @@ add_executable(${PROJECT_NAME} ${SRC_FILES})
 
 # Link libraries 
 target_link_libraries(${PROJECT_NAME} csv)
+target_link_libraries(${PROJECT_NAME} fmt::fmt)
