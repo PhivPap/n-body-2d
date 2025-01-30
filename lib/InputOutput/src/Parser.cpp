@@ -1,7 +1,7 @@
 #include "InputOutput.hpp"
 #include "csv.hpp"
 
-std::vector<Body> IO::parse_csv(std::string_view path) {
+std::vector<Body> IO::parse_csv(const std::string& path) {
     std::vector<Body> bodies;
     try {
         csv::CSVReader reader(path);
@@ -18,14 +18,14 @@ std::vector<Body> IO::parse_csv(std::string_view path) {
     }
     catch (const std::exception &e) {
         std::cerr << "Error: " << e.what() << std::endl;
-        throw std::runtime_error("Failed to parse: " + std::string(path));
+        throw std::runtime_error("Failed to parse: " + path);
     }   
     return bodies;
 }
 
-void IO::write_csv(std::string_view path, const std::vector<Body> &bodies) {
+void IO::write_csv(const std::string& path, const std::vector<Body> &bodies) {
     try {
-        std::ofstream out_file(path);
+        std::ofstream out_file(path.data());
         out_file << "id,mass,x,y,vel_x,vel_y\n";
         for (const Body &body : bodies) {
             out_file << body.id << "," << body.mass << "," << body.pos.x << "," << body.pos.y << "," << body.vel.x <<
@@ -34,6 +34,6 @@ void IO::write_csv(std::string_view path, const std::vector<Body> &bodies) {
     }
     catch (const std::exception &e) {
         std::cerr << "Error: " << e.what() << std::endl;
-        throw std::runtime_error("Failed to write: " + std::string(path));
+        throw std::runtime_error("Failed to write: " + path);
     }
 }
