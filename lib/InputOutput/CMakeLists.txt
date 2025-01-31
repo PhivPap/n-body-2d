@@ -12,4 +12,4 @@ file(GLOB_RECURSE SRC_FILES
 add_library(${PROJECT_NAME} ${SRC_FILES})
 
 # Link other libs
-target_link_libraries(${PROJECT_NAME} csv)
+target_link_libraries(${PROJECT_NAME} csv fmt::fmt)

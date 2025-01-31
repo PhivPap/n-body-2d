@@ -1,6 +1,6 @@
 #include <iostream>
-#include <fmt/core.h>
 #include "InputOutput.hpp"
+#include "logger.hpp"
 
 constexpr const char* INPUT_FILE_PATH = "../universe-db/universe-unit-test.csv";
 constexpr const char* OUTPUT_FILE_PATH = "../universe-db/universe-unit-test-output.csv";
@@ -52,14 +52,14 @@ void simulate(std::vector<Body> &bodies, uint64_t iterations, double timestep) {
 int main() {
     try {
         std::vector<Body> bodies = IO::parse_csv(INPUT_FILE_PATH);
-        fmt::println("Parsed {} bodies from `{}`", bodies.size(), INPUT_FILE_PATH);
+        Log::debug("Parsed {} bodies from `{}`", bodies.size(), INPUT_FILE_PATH);
 
-        //begin simulation
         simulate(bodies, 100, 12);
 
         IO::write_csv(OUTPUT_FILE_PATH, bodies);
+        Log::debug("Wrote {} bodies to `{}`", bodies.size(), OUTPUT_FILE_PATH);
     }
     catch (const std::exception &e) {
-        std::cerr << "Error: " << e.what() << std::endl;
+        Log::error(e.what());
     }
 }

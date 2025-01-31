@@ -1,5 +1,8 @@
 #include "InputOutput.hpp"
-#include "csv.hpp"
+
+#include <csv.hpp>
+
+#include "logger.hpp"
 
 std::vector<Body> IO::parse_csv(const std::string& path) {
     std::vector<Body> bodies;
@@ -17,7 +20,7 @@ std::vector<Body> IO::parse_csv(const std::string& path) {
         }
     }
     catch (const std::exception &e) {
-        std::cerr << "Error: " << e.what() << std::endl;
+        Log::error(e.what());
         throw std::runtime_error("Failed to parse: " + path);
     }   
     return bodies;
@@ -31,9 +34,10 @@ void IO::write_csv(const std::string& path, const std::vector<Body> &bodies) {
             out_file << body.id << "," << body.mass << "," << body.pos.x << "," << body.pos.y << "," << body.vel.x <<
                     "," << body.vel.y << "\n";
         }
+        out_file.flush();
     }
     catch (const std::exception &e) {
-        std::cerr << "Error: " << e.what() << std::endl;
+        Log::error(e.what());
         throw std::runtime_error("Failed to write: " + path);
     }
 }
