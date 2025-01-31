@@ -6,14 +6,14 @@ constexpr const char* INPUT_FILE_PATH = "../universe-db/universe-unit-test.csv";
 constexpr const char* OUTPUT_FILE_PATH = "../universe-db/universe-unit-test-output.csv";
 constexpr double G = 6.67430e-11;
 
-double calculate_distance(const Pos2D &pos1, const Pos2D &pos2) {
-    const double dx = pos1.x - pos2.x;
-    const double dy = pos1.y - pos2.y;
+double calculate_distance(const Pos2D &pos_a, const Pos2D &pos_b) {
+    const double dx = pos_a.x - pos_b.x;
+    const double dy = pos_a.y - pos_b.y;
     return std::sqrt(dx * dx + dy * dy);
 }
 
-double calculate_force(double mass1, double mass2, double distance) {
-    return G * mass1 * mass2 / (distance * distance);
+double calculate_force(double mass_a, double mass_b, double distance) {
+    return G * mass_a * mass_b / (distance * distance);
 }
 
 // O(n^2) solution
