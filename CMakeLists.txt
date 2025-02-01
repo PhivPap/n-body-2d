@@ -27,6 +27,7 @@ message(STATUS "Include directories: ${ALL_INCLUDE_DIRS}")
 include_directories(${ALL_INCLUDE_DIRS})
 
 # Add lib directories
+add_subdirectory(${LIB_DIR}/Logger)
 add_subdirectory(${LIB_DIR}/InputOutput)
 
 # Add third-party directories
@@ -43,4 +44,4 @@ file(GLOB_RECURSE SRC_FILES
 add_executable(${PROJECT_NAME} ${SRC_FILES})
 
 # Link libraries
-target_link_libraries(${PROJECT_NAME} fmt::fmt lib-input-output)
+target_link_libraries(${PROJECT_NAME} PRIVATE logger lib-input-output)
