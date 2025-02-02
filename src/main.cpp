@@ -1,4 +1,5 @@
 #include <iostream>
+#include "Config.hpp"
 #include "InputOutput.hpp"
 #include "logger.hpp"
 
@@ -51,13 +52,16 @@ void simulate(std::vector<Body> &bodies, uint64_t iterations, double timestep) {
 
 int main() {
     try {
-        std::vector<Body> bodies = IO::parse_csv(INPUT_FILE_PATH);
-        Log::debug("Parsed {} bodies from `{}`", bodies.size(), INPUT_FILE_PATH);
+        const Config cfg("../config.json");
+        Log::debug("Parsed config");
 
-        simulate(bodies, 100, 12);
+        std::vector<Body> bodies = IO::parse_csv(cfg.universe_infile);
+        Log::debug("Parsed {} bodies from `{}`", bodies.size(), cfg.universe_infile);
 
-        IO::write_csv(OUTPUT_FILE_PATH, bodies);
-        Log::debug("Wrote {} bodies to `{}`", bodies.size(), OUTPUT_FILE_PATH);
+        simulate(bodies, cfg.iterations, cfg.timestep);
+
+        IO::write_csv(cfg.universe_outfile, bodies);
+        Log::debug("Wrote {} bodies to `{}`", bodies.size(), cfg.universe_outfile);
     }
     catch (const std::exception &e) {
         Log::error(e.what());

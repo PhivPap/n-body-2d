@@ -28,11 +28,13 @@ include_directories(${ALL_INCLUDE_DIRS})
 
 # Add lib directories
 add_subdirectory(${LIB_DIR}/Logger)
+add_subdirectory(${LIB_DIR}/Config)
 add_subdirectory(${LIB_DIR}/InputOutput)
 
 # Add third-party directories
 add_subdirectory(${THIRD_PARTY_DIR}/csv-parser)
 add_subdirectory(${THIRD_PARTY_DIR}/fmt)
+add_subdirectory(${THIRD_PARTY_DIR}/json)
 
 
 # Find source files
@@ -44,4 +46,4 @@ file(GLOB_RECURSE SRC_FILES
 add_executable(${PROJECT_NAME} ${SRC_FILES})
 
 # Link libraries
-target_link_libraries(${PROJECT_NAME} PRIVATE logger lib-input-output)
+target_link_libraries(${PROJECT_NAME} PRIVATE logger lib-input-output lib-config)
