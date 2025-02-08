@@ -1,4 +1,9 @@
 #include <iostream>
+#include <SFML/Window.hpp>
+#include <chrono>
+#include <thread>
+
+
 #include "Config.hpp"
 #include "InputOutput.hpp"
 #include "logger.hpp"
@@ -6,6 +11,8 @@
 constexpr const char* INPUT_FILE_PATH = "../universe-db/universe-unit-test.csv";
 constexpr const char* OUTPUT_FILE_PATH = "../universe-db/universe-unit-test-output.csv";
 constexpr double G = 6.67430e-11;
+
+volatile bool sim_done = false;
 
 double calculate_distance(const Pos2D &pos_a, const Pos2D &pos_b) {
     const double dx = pos_a.x - pos_b.x;
@@ -48,6 +55,15 @@ void simulate(std::vector<Body> &bodies, uint64_t iterations, double timestep) {
         update_positions(bodies, timestep);
         update_velocities(bodies, timestep);
     }
+    sim_done = true;
+}
+
+void display() {
+    sf::Window window(sf::VideoMode({800, 600}), "N-Body Sim");
+    while (!sim_done) {
+        // Do stuff
+        std::this_thread::sleep_for(std::chrono::milliseconds(5));
+    }
 }
 
 int main() {
@@ -58,12 +74,13 @@ int main() {
         std::vector<Body> bodies = IO::parse_csv(cfg.universe_infile);
         Log::debug("Parsed {} bodies from `{}`", bodies.size(), cfg.universe_infile);
 
-        simulate(bodies, cfg.iterations, cfg.timestep);
+        std::thread(simulate, std::ref(bodies), cfg.iterations, cfg.timestep).detach();
+        display();
 
         IO::write_csv(cfg.universe_outfile, bodies);
         Log::debug("Wrote {} bodies to `{}`", bodies.size(), cfg.universe_outfile);
     }
     catch (const std::exception &e) {
-        Log::error(e.what());
+        Log::error(e.what());   
     }
 }
