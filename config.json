@@ -1,0 +1,17 @@
+{
+    "IO": {
+        "universe_infile": "../universe-db/solar-system-plus.csv",
+        "universe_outfile":  "../universe-db/universe-unit-test-output.csv",
+        "echo_config": true
+    },
+    "Simulation": {
+        "timestep": 10,
+        "timestep_range": [1e-6, 1e+6],
+        "iterations": 1e6
+    },
+    "Graphics": {
+        "window_size": [1280, 720],
+        "max_fps": 60,
+        "pixel_resolution": 1e8
+    }
+}

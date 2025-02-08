@@ -6,12 +6,18 @@ class Config {
 public:
     std::string universe_infile;
     std::string universe_outfile;
+    bool echo_config;
+
     double timestep;
     double min_timestep;
     double max_timestep;
     uint64_t iterations;
-    uint64_t max_fps;
+    
+    uint16_t window_width;
+    uint16_t window_height;
+    uint16_t max_fps;
+    double pixel_resolution;
 
     Config() = delete;
-    Config(const std::string& path, bool print=true);
+    Config(const std::string& path);
 };
