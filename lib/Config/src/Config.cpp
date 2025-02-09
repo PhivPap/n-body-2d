@@ -1,14 +1,17 @@
 #include "Config.hpp"
 
 #include <fstream>
-#include <iostream>
-#include <nlohmann/json.hpp>
+
+#include "nlohmann/json.hpp"
+#include "fmt/base.h"
+#include "fmt/color.h"
 
 #include "Logger.hpp"
 
 using json = nlohmann::json;
 
 Config::Config(const std::string &path) {
+    bool echo_config = false;
     try {
         const json json_cfg = json::parse(std::ifstream(path));
 
@@ -16,7 +19,6 @@ Config::Config(const std::string &path) {
         universe_infile = io.at("universe_infile");
         universe_outfile = io.at("universe_outfile");
         echo_config = io.at("echo_config");
-
 
         const auto sim = json_cfg.at("Simulation");
         timestep = sim.at("timestep");
@@ -34,4 +36,22 @@ Config::Config(const std::string &path) {
         Log::error(e.what());
         throw std::runtime_error("Failed to parse config: " + path);
     }
+
+    if (echo_config)
+        print();
+}
+
+void Config::print() {
+    const auto c = fmt::color::purple;
+    fmt::print(fg(c), "Configuration:\n");
+    fmt::print(fg(c), "  universe_infile:  `{}`\n", universe_infile);
+    fmt::print(fg(c), "  universe_outfile: `{}`\n", universe_outfile);
+    fmt::print(fg(c), "  timestep:         {}\n", timestep);
+    fmt::print(fg(c), "  min_timestep:     {}\n", min_timestep);
+    fmt::print(fg(c), "  max_timestep:     {}\n", max_timestep);
+    fmt::print(fg(c), "  iterations:       {}\n", iterations);
+    fmt::print(fg(c), "  window_width:     {}\n", window_width);
+    fmt::print(fg(c), "  window_height:    {}\n", window_height);
+    fmt::print(fg(c), "  max_fps:          {}\n", max_fps);
+    fmt::print(fg(c), "  pixel_resolution: {}\n", pixel_resolution);
 }

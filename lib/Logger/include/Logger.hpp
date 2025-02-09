@@ -1,8 +1,9 @@
 #pragma once
 
-#include <fmt/base.h>
-#include <fmt/color.h>
 #include <string>
+
+#include "fmt/base.h"
+#include "fmt/color.h"
 
 namespace Log {
     enum class Verbosity {

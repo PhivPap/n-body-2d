@@ -6,7 +6,6 @@ class Config {
 public:
     std::string universe_infile;
     std::string universe_outfile;
-    bool echo_config;
 
     double timestep;
     double min_timestep;
@@ -20,4 +19,5 @@ public:
 
     Config() = delete;
     Config(const std::string& path);
+    void print();
 };

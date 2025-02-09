@@ -1,8 +1,8 @@
 #include <iostream>
-#include <SFML/Window.hpp>
 #include <chrono>
 #include <thread>
 
+#include "SFML/Window.hpp"
 
 #include "Config.hpp"
 #include "InputOutput.hpp"
