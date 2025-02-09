@@ -7,10 +7,7 @@
 #include "Config.hpp"
 #include "InputOutput.hpp"
 #include "Logger.hpp"
-
-constexpr const char* INPUT_FILE_PATH = "../universe-db/universe-unit-test.csv";
-constexpr const char* OUTPUT_FILE_PATH = "../universe-db/universe-unit-test-output.csv";
-constexpr double G = 6.67430e-11;
+#include "Constants.hpp"
 
 volatile bool sim_done = false;
 
@@ -21,7 +18,7 @@ double calculate_distance(const Pos2D &pos_a, const Pos2D &pos_b) {
 }
 
 double calculate_force(double mass_a, double mass_b, double distance) {
-    return G * mass_a * mass_b / (distance * distance);
+    return Constants::G * mass_a * mass_b / (distance * distance);
 }
 
 // O(n^2) solution
