@@ -2,7 +2,7 @@
 
 #include <csv.hpp>
 
-#include "logger.hpp"
+#include "Logger.hpp"
 
 std::vector<Body> IO::parse_csv(const std::string& path) {
     std::vector<Body> bodies;

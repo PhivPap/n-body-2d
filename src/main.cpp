@@ -6,7 +6,7 @@
 
 #include "Config.hpp"
 #include "InputOutput.hpp"
-#include "logger.hpp"
+#include "Logger.hpp"
 
 constexpr const char* INPUT_FILE_PATH = "../universe-db/universe-unit-test.csv";
 constexpr const char* OUTPUT_FILE_PATH = "../universe-db/universe-unit-test-output.csv";

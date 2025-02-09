@@ -1,15 +1,12 @@
 project(lib-config)
 
-# Project folder
-set(SRC_DIR "${CMAKE_CURRENT_LIST_DIR}/src")
-
-# Find source files
-file(GLOB_RECURSE SRC_FILES
-  "${SRC_DIR}/*.cpp"
-)
-
 # Add library
-add_library(${PROJECT_NAME} ${SRC_FILES})
+add_library(${PROJECT_NAME} ${CMAKE_CURRENT_LIST_DIR}/src/Config.cpp)
+target_include_directories(${PROJECT_NAME} PRIVATE ${CMAKE_CURRENT_LIST_DIR}/include)
 
-# Link other libs
-target_link_libraries(${PROJECT_NAME} PRIVATE logger nlohmann_json::nlohmann_json)
+# Link libraries & Set include paths
+target_include_directories(${PROJECT_NAME} PRIVATE ${LIB_DIR}/Logger/include)
+target_link_libraries(${PROJECT_NAME} PRIVATE logger)
+
+target_include_directories(${PROJECT_NAME} PRIVATE ${THIRD_PARTY}/json/include)
+target_link_libraries(${PROJECT_NAME} PRIVATE nlohmann_json::nlohmann_json)

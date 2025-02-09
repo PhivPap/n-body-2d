@@ -1,15 +1,12 @@
 project(lib-input-output)
 
-# Project folder
-set(SRC_DIR "${CMAKE_CURRENT_LIST_DIR}/src")
-
-# Find source files
-file(GLOB_RECURSE SRC_FILES
-  "${SRC_DIR}/*.cpp"
-)
-
 # Add library
-add_library(${PROJECT_NAME} ${SRC_FILES})
+add_library(${PROJECT_NAME} ${CMAKE_CURRENT_LIST_DIR}/src/InputOutput.cpp)
+target_include_directories(${PROJECT_NAME} PRIVATE ${CMAKE_CURRENT_LIST_DIR}/include)
 
 # Link other libs
-target_link_libraries(${PROJECT_NAME} PRIVATE csv logger)
+target_include_directories(${PROJECT_NAME} PRIVATE ${LIB_DIR}/Logger/include)
+target_link_libraries(${PROJECT_NAME} PRIVATE logger)
+
+target_include_directories(${PROJECT_NAME} PRIVATE ${THIRD_PARTY}/csv-parser/include)
+target_link_libraries(${PROJECT_NAME} PRIVATE csv)

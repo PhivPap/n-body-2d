@@ -4,7 +4,7 @@
 #include <iostream>
 #include <nlohmann/json.hpp>
 
-#include "logger.hpp"
+#include "Logger.hpp"
 
 using json = nlohmann::json;
 

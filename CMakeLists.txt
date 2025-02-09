@@ -18,18 +18,8 @@ set(SFML_BUILD_AUDIO OFF CACHE BOOL "Disable SFML audio module" FORCE)
 set(SFML_BUILD_NETWORK OFF CACHE BOOL "Disable SFML network module" FORCE)
 set(SFML_BUILD_EXAMPLES OFF CACHE BOOL "Disable SFML examples" FORCE)
 
-# Filter directories named exactly "include"
-file(GLOB_RECURSE ALL_DIRS RELATIVE ${CMAKE_SOURCE_DIR} LIST_DIRECTORIES true "*")
-set(ALL_INCLUDE_DIRS "")
-foreach(DIR ${ALL_DIRS})
-    if(DIR MATCHES ".*/include$|^include$")
-        list(APPEND ALL_INCLUDE_DIRS ${DIR})
-    endif()
-endforeach()
-message(STATUS "Include directories: ${ALL_INCLUDE_DIRS}")
-
-# Set project include directories
-include_directories(${ALL_INCLUDE_DIRS})
+# Set shared inlude dir
+include_directories(${INCLUDE_DIR})
 
 # Add lib directories
 add_subdirectory(${LIB_DIR}/Logger)
@@ -42,14 +32,19 @@ add_subdirectory(${THIRD_PARTY_DIR}/fmt)
 add_subdirectory(${THIRD_PARTY_DIR}/json)
 add_subdirectory(${THIRD_PARTY_DIR}/SFML)
 
-
-# Find source files
-file(GLOB_RECURSE SRC_FILES
-    "${SRC_DIR}/*.cpp"
-)
-
 # Add executable
-add_executable(${PROJECT_NAME} ${SRC_FILES})
+add_executable(${PROJECT_NAME} ${SRC_DIR}/main.cpp)
 
-# Link libraries
-target_link_libraries(${PROJECT_NAME} PRIVATE logger lib-input-output lib-config sfml-graphics sfml-window sfml-system)
+# Link libraries & Set include paths
+target_include_directories(${PROJECT_NAME} PRIVATE ${LIB_DIR}/Logger/include)
+target_link_libraries(${PROJECT_NAME} PRIVATE logger)
+
+target_include_directories(${PROJECT_NAME} PRIVATE ${LIB_DIR}/InputOutput/include)
+target_link_libraries(${PROJECT_NAME} PRIVATE lib-input-output)
+
+target_include_directories(${PROJECT_NAME} PRIVATE ${LIB_DIR}/Config/include)
+target_link_libraries(${PROJECT_NAME} PRIVATE lib-config)
+
+target_include_directories(${PROJECT_NAME} PRIVATE ${THIRD_PARTY_DIR}/SMFL/include)
+target_link_libraries(${PROJECT_NAME} PRIVATE sfml-graphics sfml-window sfml-system)
+

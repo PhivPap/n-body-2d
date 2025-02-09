@@ -2,7 +2,7 @@
 
 #include <vector>
 
-#include "body.hpp"
+#include "Body.hpp"
 
 namespace IO {
     std::vector<Body> parse_csv(const std::string& path);
