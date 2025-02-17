@@ -1,8 +1,11 @@
 #include <iostream>
 #include <chrono>
 #include <thread>
+#include <signal.h>
 
 #include "SFML/Window.hpp"
+#include "SFML/Graphics.hpp"
+#include "SFML/Window/Event.hpp"
 
 #include "Config.hpp"
 #include "InputOutput.hpp"
@@ -48,7 +51,7 @@ void update_positions(std::vector<Body> &bodies, double timestep) {
 }
 
 void simulate(std::vector<Body> &bodies, uint64_t iterations, double timestep) {
-    for (uint64_t i = 0; i < iterations; i++) {
+    for (uint64_t i = 0; i < iterations && !sim_done; i++) {
         update_positions(bodies, timestep);
         update_velocities(bodies, timestep);
     }
@@ -56,10 +59,29 @@ void simulate(std::vector<Body> &bodies, uint64_t iterations, double timestep) {
 }
 
 void display() {
-    sf::Window window(sf::VideoMode({800, 600}), "N-Body Sim");
-    while (!sim_done) {
-        // Do stuff
-        std::this_thread::sleep_for(std::chrono::milliseconds(5));
+    sf::RenderWindow window(sf::VideoMode({800, 600}), "N-Body Sim");
+    window.setFramerateLimit(60);
+    float x = 0, y = 0;
+    while (window.isOpen() && !sim_done) {
+        while (const std::optional event = window.pollEvent()) {
+            // Close window: exit
+            if (event->is<sf::Event::Closed>()) {
+                window.close();
+                sim_done = true;
+            }
+        }
+        window.clear(sf::Color::Black);
+        sf::CircleShape shape(50.f);
+        shape.setFillColor(sf::Color(100, 250, 50));
+        shape.setPosition({x++, y++});
+        window.draw(shape);
+        window.display();
+    }
+}
+
+void exit_gracefully(int signum) {
+    if (signum == SIGINT) {
+        sim_done = true;
     }
 }
 
@@ -71,8 +93,11 @@ int main() {
         std::vector<Body> bodies = IO::parse_csv(cfg.universe_infile);
         Log::debug("Parsed {} bodies from `{}`", bodies.size(), cfg.universe_infile);
 
-        std::thread(simulate, std::ref(bodies), cfg.iterations, cfg.timestep).detach();
+        signal(SIGINT, exit_gracefully);
+
+        std::thread sim(simulate, std::ref(bodies), cfg.iterations, cfg.timestep);
         display();
+        sim.join();
 
         IO::write_csv(cfg.universe_outfile, bodies);
         Log::debug("Wrote {} bodies to `{}`", bodies.size(), cfg.universe_outfile);
