@@ -25,6 +25,8 @@ include_directories(${INCLUDE_DIR})
 add_subdirectory(${LIB_DIR}/Logger)
 add_subdirectory(${LIB_DIR}/Config)
 add_subdirectory(${LIB_DIR}/InputOutput)
+add_subdirectory(${LIB_DIR}/Quadtree)
+add_subdirectory(${LIB_DIR}/Body)
 
 # Add third-party directories
 add_subdirectory(${THIRD_PARTY_DIR}/csv-parser)
@@ -45,6 +47,11 @@ target_link_libraries(${PROJECT_NAME} PRIVATE lib-input-output)
 target_include_directories(${PROJECT_NAME} PRIVATE ${LIB_DIR}/Config/include)
 target_link_libraries(${PROJECT_NAME} PRIVATE lib-config)
 
+target_include_directories(${PROJECT_NAME} PRIVATE ${LIB_DIR}/Quadtree/include)
+target_link_libraries(${PROJECT_NAME} PRIVATE lib-quadtree)
+
+target_include_directories(${PROJECT_NAME} PRIVATE ${LIB_DIR}/Body/include)
+target_link_libraries(${PROJECT_NAME} PRIVATE body)
+
 target_include_directories(${PROJECT_NAME} PRIVATE ${THIRD_PARTY_DIR}/SMFL/include)
 target_link_libraries(${PROJECT_NAME} PRIVATE sfml-graphics sfml-window sfml-system)
-

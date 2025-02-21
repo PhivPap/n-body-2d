@@ -14,7 +14,7 @@
 
 volatile bool sim_done = false;
 
-double calculate_distance(const Pos2D &pos_a, const Pos2D &pos_b) {
+double calculate_distance(const sf::Vector2<double> &pos_a, const sf::Vector2<double> &pos_b) {
     const double dx = pos_a.x - pos_b.x;
     const double dy = pos_a.y - pos_b.y;
     return std::sqrt(dx * dx + dy * dy);
