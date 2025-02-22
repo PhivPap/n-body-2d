@@ -2,6 +2,8 @@
 #include <chrono>
 #include <thread>
 #include <signal.h>
+#include <mutex>
+#include <shared_mutex>
 
 #include "SFML/Window.hpp"
 #include "SFML/Graphics.hpp"
@@ -11,6 +13,11 @@
 #include "InputOutput.hpp"
 #include "Logger.hpp"
 #include "Constants.hpp"
+
+typedef std::shared_mutex Lock;
+typedef std::unique_lock<Lock> WriteLock;
+typedef std::shared_lock<Lock> ReadLock;
+Lock rw_body_mutex;
 
 volatile bool sim_done = false;
 
@@ -52,6 +59,7 @@ void update_positions(std::vector<Body> &bodies, double timestep) {
 
 void simulate(std::vector<Body> &bodies, uint64_t iterations, double timestep) {
     for (uint64_t i = 0; i < iterations && !sim_done; i++) {
+        WriteLock wlock(rw_body_mutex);
         update_positions(bodies, timestep);
         update_velocities(bodies, timestep);
     }
@@ -71,10 +79,12 @@ void display() {
             }
         }
         window.clear(sf::Color::Black);
+        ReadLock rlock(rw_body_mutex);
         sf::CircleShape shape(50.f);
         shape.setFillColor(sf::Color(100, 250, 50));
         shape.setPosition({x++, y++});
         window.draw(shape);
+        rlock.unlock();
         window.display();
     }
 }
