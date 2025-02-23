@@ -4,15 +4,18 @@
 #include <signal.h>
 #include <mutex>
 #include <shared_mutex>
+#include <optional>
 
 #include "SFML/Window.hpp"
 #include "SFML/Graphics.hpp"
 #include "SFML/Window/Event.hpp"
+#include "SFML/Graphics/Rect.hpp"
 
 #include "Config.hpp"
 #include "InputOutput.hpp"
 #include "Logger.hpp"
 #include "Constants.hpp"
+#include "Body.hpp"
 
 typedef std::shared_mutex Lock;
 typedef std::unique_lock<Lock> WriteLock;
@@ -66,9 +69,19 @@ void simulate(std::vector<Body> &bodies, uint64_t iterations, double timestep) {
     sim_done = true;
 }
 
-void display() {
-    sf::RenderWindow window(sf::VideoMode({800, 600}), "N-Body Sim");
+std::optional<sf::Vector2<float>> body_position_on_viewport(const Body& b, const sf::Rect<double> &viewport) {
+    const auto relative_pos = (b.pos - viewport.position).componentWiseDiv(viewport.size);
+    if (relative_pos.x < 0.0 || relative_pos.x >= 1.0 || relative_pos.y < 0.0 || relative_pos.y >= 1.0)
+        return std::nullopt;
+    return static_cast<sf::Vector2<float>>(relative_pos);
+}
+
+void display(const std::vector<Body> &bodies) {
+    const sf::Vector2<uint32_t> window_res {1280, 720};
+    const sf::Vector2<float> window_res_f(window_res);
+    sf::RenderWindow window(sf::VideoMode(window_res), "N-Body Sim");
     window.setFramerateLimit(60);
+    const sf::Rect<double> viewport {{-1e12, -5625e8}, {2e12, 1.125e+12}};
     float x = 0, y = 0;
     while (window.isOpen() && !sim_done) {
         while (const std::optional event = window.pollEvent()) {
@@ -80,10 +93,15 @@ void display() {
         }
         window.clear(sf::Color::Black);
         ReadLock rlock(rw_body_mutex);
-        sf::CircleShape shape(50.f);
-        shape.setFillColor(sf::Color(100, 250, 50));
-        shape.setPosition({x++, y++});
-        window.draw(shape);
+        sf::CircleShape shape(2.f);
+        shape.setFillColor(sf::Color::White);
+        for (const Body& b: bodies) {
+            const auto rel_pos = body_position_on_viewport(b, viewport);
+            if (rel_pos) {
+                shape.setPosition(rel_pos->componentWiseMul(window_res_f));
+                window.draw(shape);
+            }
+        }
         rlock.unlock();
         window.display();
     }
@@ -106,7 +124,7 @@ int main() {
         signal(SIGINT, exit_gracefully);
 
         std::thread sim(simulate, std::ref(bodies), cfg.iterations, cfg.timestep);
-        display();
+        display(bodies);
         sim.join();
 
         IO::write_csv(cfg.universe_outfile, bodies);
