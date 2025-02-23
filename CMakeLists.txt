@@ -27,12 +27,14 @@ add_subdirectory(${LIB_DIR}/Config)
 add_subdirectory(${LIB_DIR}/InputOutput)
 add_subdirectory(${LIB_DIR}/Quadtree)
 add_subdirectory(${LIB_DIR}/Body)
+add_subdirectory(${LIB_DIR}/CommandLineArgs)
 
 # Add third-party directories
 add_subdirectory(${THIRD_PARTY_DIR}/csv-parser)
 add_subdirectory(${THIRD_PARTY_DIR}/fmt)
 add_subdirectory(${THIRD_PARTY_DIR}/json)
 add_subdirectory(${THIRD_PARTY_DIR}/SFML)
+add_subdirectory(${THIRD_PARTY_DIR}/argparse)
 
 # Add executable
 add_executable(${PROJECT_NAME} ${SRC_DIR}/main.cpp)
@@ -52,6 +54,9 @@ target_link_libraries(${PROJECT_NAME} PRIVATE lib-quadtree)
 
 target_include_directories(${PROJECT_NAME} PRIVATE ${LIB_DIR}/Body/include)
 target_link_libraries(${PROJECT_NAME} PRIVATE body)
+
+target_include_directories(${PROJECT_NAME} PRIVATE ${LIB_DIR}/CommandLineArgs/include)
+target_link_libraries(${PROJECT_NAME} PRIVATE lib-clargs)
 
 target_include_directories(${PROJECT_NAME} PRIVATE ${THIRD_PARTY_DIR}/SMFL/include)
 target_link_libraries(${PROJECT_NAME} PRIVATE sfml-graphics sfml-window sfml-system)

@@ -6,12 +6,11 @@
     },
     "Simulation": {
         "timestep": 10,
-        "timestep_range": [1e-6, 1e+6],
-        "iterations": 1e6
+        "iterations": 1e8
     },
     "Graphics": {
-        "window_size": [1280, 720],
-        "max_fps": 60,
+        "resolution": [1280, 720],
+        "target_fps": 60,
         "pixel_resolution": 1e8
     }
 }

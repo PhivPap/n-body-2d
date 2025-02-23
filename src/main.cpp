@@ -16,6 +16,7 @@
 #include "Logger.hpp"
 #include "Constants.hpp"
 #include "Body.hpp"
+#include "CLArgs.hpp"
 
 typedef std::shared_mutex Lock;
 typedef std::unique_lock<Lock> WriteLock;
@@ -113,9 +114,12 @@ void exit_gracefully(int signum) {
     }
 }
 
-int main() {
+int main(int argc, const char *argv[]) {
     try {
-        const Config cfg("../config.json");
+        const CLArgs clargs(argc, argv);
+        Log::debug("Parsed command line. Config: `{}`", clargs.config_path);
+
+        const Config cfg(clargs.config_path);
         Log::debug("Parsed config");
 
         std::vector<Body> bodies = IO::parse_csv(cfg.universe_infile);
@@ -131,6 +135,8 @@ int main() {
         Log::debug("Wrote {} bodies to `{}`", bodies.size(), cfg.universe_outfile);
     }
     catch (const std::exception &e) {
-        Log::error(e.what());   
+        Log::error(e.what());
+        return 1;
     }
+    return 0;
 }

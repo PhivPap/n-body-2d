@@ -7,6 +7,7 @@
 #include "fmt/color.h"
 
 #include "Logger.hpp"
+#include "Constants.hpp"
 
 using json = nlohmann::json;
 
@@ -22,19 +23,21 @@ Config::Config(const std::string &path) {
 
         const auto sim = json_cfg.at("Simulation");
         timestep = sim.at("timestep");
-        min_timestep = sim.at("timestep_range").at(0);
-        max_timestep = sim.at("timestep_range").at(1);
         iterations = sim.at("iterations");
 
         const auto graphics = json_cfg.at("Graphics");
-        window_width = graphics.at("window_size").at(0);
-        window_height = graphics.at("window_size").at(1);
-        max_fps = graphics.at("max_fps");
+        resolution = {
+            graphics.at("resolution").at(0),
+            graphics.at("resolution").at(1)
+        };
+        target_fps = graphics.at("target_fps");
         pixel_resolution = graphics.at("pixel_resolution");
+
+        validate();
     }
     catch (const std::exception &e) {
         Log::error(e.what());
-        throw std::runtime_error("Failed to parse config: " + path);
+        throw std::runtime_error("Failed to parse config: `" + path + "`");
     }
 
     if (echo_config)
@@ -47,11 +50,37 @@ void Config::print() {
     fmt::print(fg(c), "  universe_infile:  `{}`\n", universe_infile);
     fmt::print(fg(c), "  universe_outfile: `{}`\n", universe_outfile);
     fmt::print(fg(c), "  timestep:         {}\n", timestep);
-    fmt::print(fg(c), "  min_timestep:     {}\n", min_timestep);
-    fmt::print(fg(c), "  max_timestep:     {}\n", max_timestep);
     fmt::print(fg(c), "  iterations:       {}\n", iterations);
-    fmt::print(fg(c), "  window_width:     {}\n", window_width);
-    fmt::print(fg(c), "  window_height:    {}\n", window_height);
-    fmt::print(fg(c), "  max_fps:          {}\n", max_fps);
+    fmt::print(fg(c), "  resolution:       {}x{}\n", resolution.x, resolution.y);
+    fmt::print(fg(c), "  window_height:    {}\n", resolution.y);
+    fmt::print(fg(c), "  max_fps:          {}\n", target_fps);
     fmt::print(fg(c), "  pixel_resolution: {}\n", pixel_resolution);
+}
+
+void Config::validate() {
+    bool fail = false;
+    if (timestep < Constants::MIN_TIMESTEP || timestep > Constants::MAX_TIMESTEP) {
+        fail = true;
+        Log::error("Config::timestep {} not within allowed range [{}, {}]", timestep, 
+                Constants::MIN_TIMESTEP, Constants::MAX_TIMESTEP);
+    }
+    if (resolution.x > Constants::MAX_WINDOW_WIDTH || 
+            resolution.y > Constants::MAX_WINDOW_HEIGHT) {
+        fail = true;
+        Log::error("Config::resolution {}x{} not within allowed range {}x{}", resolution.x,  
+                resolution.y, Constants::MAX_WINDOW_WIDTH, Constants::MAX_WINDOW_HEIGHT);
+    }
+    if (target_fps < Constants::MIN_FPS || target_fps > Constants::MAX_FPS) {
+        fail = true;
+        Log::error("Config::target_fps {} not within allowed range [{}, {}]", target_fps, 
+                Constants::MIN_FPS, Constants::MAX_FPS);
+    }
+    if (pixel_resolution < Constants::MIN_PIXEL_RES ||
+            pixel_resolution > Constants::MAX_PIXEL_RES) {
+        fail = true;
+        Log::error("Config::timestep {} not within allowed range [{}, {}]", pixel_resolution, 
+                Constants::MIN_PIXEL_RES, Constants::MAX_PIXEL_RES);
+    }
+    if (fail)
+        throw std::runtime_error("Config validation failed");
 }

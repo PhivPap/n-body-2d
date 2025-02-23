@@ -10,3 +10,6 @@
 [submodule "third_party/SFML"]
 	path = third_party/SFML
 	url = git@github.com:SFML/SFML.git
+[submodule "third_party/argparse"]
+	path = third_party/argparse
+	url = git@github.com:p-ranav/argparse.git
