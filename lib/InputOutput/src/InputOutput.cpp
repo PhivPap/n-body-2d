@@ -23,6 +23,7 @@ std::vector<Body> IO::parse_csv(const std::string& path) {
         Log::error(e.what());
         throw std::runtime_error("Failed to parse: " + path);
     }   
+    bodies.shrink_to_fit();
     return bodies;
 }
 

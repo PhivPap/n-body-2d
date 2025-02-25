@@ -77,11 +77,10 @@ std::optional<sf::Vector2<float>> body_position_on_viewport(const Body& b, const
     return static_cast<sf::Vector2<float>>(relative_pos);
 }
 
-void display(const std::vector<Body> &bodies) {
-    const sf::Vector2<uint32_t> window_res {1280, 720};
-    const sf::Vector2<float> window_res_f(window_res);
-    sf::RenderWindow window(sf::VideoMode(window_res), "N-Body Sim");
-    window.setFramerateLimit(60);
+void display(const Config &cfg, const std::vector<Body> &bodies) {
+    const sf::Vector2<float> window_res_f(cfg.resolution);
+    sf::RenderWindow window(sf::VideoMode(cfg.resolution), "N-Body Sim");
+    window.setFramerateLimit(cfg.fps);
     const sf::Rect<double> viewport {{-1e12, -5625e8}, {2e12, 1.125e+12}};
     float x = 0, y = 0;
     while (window.isOpen() && !sim_done) {
@@ -109,18 +108,19 @@ void display(const std::vector<Body> &bodies) {
 }
 
 void exit_gracefully(int signum) {
-    if (signum == SIGINT) {
-        sim_done = true;
-    }
+    assert (signum == SIGINT);
+    constexpr const char* txt = "\nInterrupted\n";
+    write(STDOUT_FILENO, txt, strlen(txt) + 1);
+    sim_done = true;
 }
 
 int main(int argc, const char *argv[]) {
     try {
         const CLArgs clargs(argc, argv);
-        Log::debug("Parsed command line. Config: `{}`", clargs.config_path);
+        Log::debug("Parsed command line");
 
         const Config cfg(clargs.config_path);
-        Log::debug("Parsed config");
+        Log::debug("Parsed configuration from `{}`", clargs.config_path);
 
         std::vector<Body> bodies = IO::parse_csv(cfg.universe_infile);
         Log::debug("Parsed {} bodies from `{}`", bodies.size(), cfg.universe_infile);
@@ -128,7 +128,7 @@ int main(int argc, const char *argv[]) {
         signal(SIGINT, exit_gracefully);
 
         std::thread sim(simulate, std::ref(bodies), cfg.iterations, cfg.timestep);
-        display(bodies);
+        display(cfg, bodies);
         sim.join();
 
         IO::write_csv(cfg.universe_outfile, bodies);

@@ -13,7 +13,7 @@ public:
     uint64_t iterations;
     
     sf::Vector2<uint32_t> resolution;
-    uint32_t target_fps;
+    uint32_t fps;
     double pixel_resolution;
 
     Config() = delete;

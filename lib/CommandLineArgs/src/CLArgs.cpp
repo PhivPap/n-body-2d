@@ -1,29 +1,36 @@
 #include "CLArgs.hpp"
 
+#include <filesystem>
+
 #include "argparse/argparse.hpp"
 
 #include "Logger.hpp"
 
 using namespace argparse;
+namespace fs = std::filesystem;
 
-static void parse_verbosity(const ArgumentParser &argparser) {
+static Log::Verbosity parse_verbosity(const ArgumentParser &argparser) {
     const std::string verbosity_in = argparser.get("--verbosity");
     if (verbosity_in == "DEBUG") {
-        Log::verbosity = Log::Verbosity::DEBUG;
-    } 
+        return Log::Verbosity::DEBUG;
+    }
     else if (verbosity_in == "INFO") {
-        Log::verbosity = Log::Verbosity::INFO;
+        return Log::Verbosity::INFO;
     }
     else if (verbosity_in == "WARNING") {
-        Log::verbosity = Log::Verbosity::WARNING;
+        return Log::Verbosity::WARNING;
     }
     else if (verbosity_in == "ERROR") {
-        Log::verbosity = Log::Verbosity::ERROR;
+        return Log::Verbosity::ERROR;
     }
     else {
         Log::error("`{}` is not a valid verbosity level", verbosity_in);
         throw std::runtime_error("Failed to parse verbosity");
     }
+}
+
+static std::string parse_config_path(const ArgumentParser &argparser) {
+    return fs::canonical(fs::path(argparser.get("config"))).string();
 }
 
 CLArgs::CLArgs(int argc, const char *argv[]) {
@@ -36,8 +43,8 @@ CLArgs::CLArgs(int argc, const char *argv[]) {
             .metavar("CONFIG");
     try {
         argparser.parse_args(argc, argv);
-        parse_verbosity(argparser);
-        config_path = argparser.get("config");
+        Log::verbosity = parse_verbosity(argparser);
+        config_path = parse_config_path(argparser);
     } 
     catch (const std::exception &e) {
         Log::error(e.what());

@@ -1,6 +1,7 @@
 #include "Config.hpp"
 
 #include <fstream>
+#include <filesystem>
 
 #include "nlohmann/json.hpp"
 #include "fmt/base.h"
@@ -11,14 +12,18 @@
 
 using json = nlohmann::json;
 
+static std::string parse_path(const std::string& path) {
+    return std::filesystem::canonical(std::filesystem::path(path)).string();
+}
+
 Config::Config(const std::string &path) {
     bool echo_config = false;
     try {
         const json json_cfg = json::parse(std::ifstream(path));
 
         const auto io = json_cfg.at("IO");
-        universe_infile = io.at("universe_infile");
-        universe_outfile = io.at("universe_outfile");
+        universe_infile = parse_path(io.at("universe_infile"));
+        universe_outfile = parse_path(io.at("universe_outfile"));
         echo_config = io.at("echo_config");
 
         const auto sim = json_cfg.at("Simulation");
@@ -30,7 +35,7 @@ Config::Config(const std::string &path) {
             graphics.at("resolution").at(0),
             graphics.at("resolution").at(1)
         };
-        target_fps = graphics.at("target_fps");
+        fps = graphics.at("fps");
         pixel_resolution = graphics.at("pixel_resolution");
 
         validate();
@@ -52,8 +57,7 @@ void Config::print() {
     fmt::print(fg(c), "  timestep:         {}\n", timestep);
     fmt::print(fg(c), "  iterations:       {}\n", iterations);
     fmt::print(fg(c), "  resolution:       {}x{}\n", resolution.x, resolution.y);
-    fmt::print(fg(c), "  window_height:    {}\n", resolution.y);
-    fmt::print(fg(c), "  max_fps:          {}\n", target_fps);
+    fmt::print(fg(c), "  fps:              {}\n", fps);
     fmt::print(fg(c), "  pixel_resolution: {}\n", pixel_resolution);
 }
 
@@ -70,9 +74,9 @@ void Config::validate() {
         Log::error("Config::resolution {}x{} not within allowed range {}x{}", resolution.x,  
                 resolution.y, Constants::MAX_WINDOW_WIDTH, Constants::MAX_WINDOW_HEIGHT);
     }
-    if (target_fps < Constants::MIN_FPS || target_fps > Constants::MAX_FPS) {
+    if (fps < Constants::MIN_FPS || fps > Constants::MAX_FPS) {
         fail = true;
-        Log::error("Config::target_fps {} not within allowed range [{}, {}]", target_fps, 
+        Log::error("Config::fps {} not within allowed range [{}, {}]", fps, 
                 Constants::MIN_FPS, Constants::MAX_FPS);
     }
     if (pixel_resolution < Constants::MIN_PIXEL_RES ||
