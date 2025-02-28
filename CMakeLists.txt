@@ -28,6 +28,7 @@ add_subdirectory(${LIB_DIR}/InputOutput)
 add_subdirectory(${LIB_DIR}/Quadtree)
 add_subdirectory(${LIB_DIR}/Body)
 add_subdirectory(${LIB_DIR}/CommandLineArgs)
+add_subdirectory(${LIB_DIR}/StopWatch)
 
 # Add third-party directories
 add_subdirectory(${THIRD_PARTY_DIR}/csv-parser)
@@ -57,6 +58,9 @@ target_link_libraries(${PROJECT_NAME} PRIVATE body)
 
 target_include_directories(${PROJECT_NAME} PRIVATE ${LIB_DIR}/CommandLineArgs/include)
 target_link_libraries(${PROJECT_NAME} PRIVATE lib-clargs)
+
+target_include_directories(${PROJECT_NAME} PRIVATE ${LIB_DIR}/StopWatch/include)
+target_link_libraries(${PROJECT_NAME} PRIVATE lib-stopwatch)
 
 target_include_directories(${PROJECT_NAME} PRIVATE ${THIRD_PARTY_DIR}/SMFL/include)
 target_link_libraries(${PROJECT_NAME} PRIVATE sfml-graphics sfml-window sfml-system)

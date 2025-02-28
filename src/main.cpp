@@ -1,10 +1,7 @@
-#include <iostream>
-#include <chrono>
 #include <thread>
 #include <signal.h>
 #include <mutex>
 #include <shared_mutex>
-#include <optional>
 
 #include "SFML/Window.hpp"
 #include "SFML/Graphics.hpp"
@@ -17,6 +14,7 @@
 #include "Constants.hpp"
 #include "Body.hpp"
 #include "CLArgs.hpp"
+#include "StopWatch.hpp"
 
 typedef std::shared_mutex Lock;
 typedef std::unique_lock<Lock> WriteLock;
@@ -109,30 +107,39 @@ void display(const Config &cfg, const std::vector<Body> &bodies) {
 
 void exit_gracefully(int signum) {
     assert (signum == SIGINT);
-    constexpr const char* txt = "\nInterrupted\n";
+    constexpr const char* txt = "\nInterrupted (SIGINT)\n";
     write(STDOUT_FILENO, txt, strlen(txt) + 1);
     sim_done = true;
 }
 
 int main(int argc, const char *argv[]) {
+    StopWatch sw;
     try {
         const CLArgs clargs(argc, argv);
         Log::debug("Parsed command line");
 
+        sw.reset();
         const Config cfg(clargs.config_path);
-        Log::debug("Parsed configuration from `{}`", clargs.config_path);
+        Log::debug("Parsed configuration from `{}`: [{}]", clargs.config_path, sw);
 
+        sw.reset();
         std::vector<Body> bodies = IO::parse_csv(cfg.universe_infile);
-        Log::debug("Parsed {} bodies from `{}`", bodies.size(), cfg.universe_infile);
+        Log::debug("Parsed {} bodies from `{}`: [{}]", bodies.size(), cfg.universe_infile, sw);
 
+        sw.reset();
         signal(SIGINT, exit_gracefully);
+        Log::debug("SIGINT handler set: [{}]", sw);
 
+        Log::debug("Starting sim");
+        sw.reset();
         std::thread sim(simulate, std::ref(bodies), cfg.iterations, cfg.timestep);
         display(cfg, bodies);
         sim.join();
+        Log::debug("Stopped sim: [{}]", sw);
 
+        sw.reset();
         IO::write_csv(cfg.universe_outfile, bodies);
-        Log::debug("Wrote {} bodies to `{}`", bodies.size(), cfg.universe_outfile);
+        Log::debug("Wrote {} bodies to `{}`: [{}]", bodies.size(), cfg.universe_outfile, sw);
     }
     catch (const std::exception &e) {
         Log::error(e.what());
