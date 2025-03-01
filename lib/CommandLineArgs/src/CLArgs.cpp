@@ -5,6 +5,7 @@
 #include "argparse/argparse.hpp"
 
 #include "Logger.hpp"
+#include "StopWatch.hpp"
 
 using namespace argparse;
 namespace fs = std::filesystem;
@@ -29,11 +30,12 @@ static Log::Verbosity parse_verbosity(const ArgumentParser &argparser) {
     }
 }
 
-static std::string parse_config_path(const ArgumentParser &argparser) {
-    return fs::canonical(fs::path(argparser.get("config"))).string();
+static fs::path parse_config_path(const ArgumentParser &argparser) {
+    return fs::canonical(fs::path(argparser.get("config")));
 }
 
 CLArgs::CLArgs(int argc, const char *argv[]) {
+    StopWatch sw;
     ArgumentParser argparser("n-body-2d");
     argparser.add_argument("--verbosity")
             .default_value(std::string{"DEBUG"})
@@ -44,11 +46,12 @@ CLArgs::CLArgs(int argc, const char *argv[]) {
     try {
         argparser.parse_args(argc, argv);
         Log::verbosity = parse_verbosity(argparser);
-        config_path = parse_config_path(argparser);
+        config = parse_config_path(argparser);
     } 
     catch (const std::exception &e) {
         Log::error(e.what());
         std::cout << argparser << std::endl;
         throw std::runtime_error("Command line argument parsing failed");
     }
+    Log::debug("Parsed command line: [{}]", sw);
 }

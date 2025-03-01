@@ -1,13 +1,16 @@
 #pragma once
 
 #include <string>
+#include <filesystem>
 
 #include "SFML/System/Vector2.hpp"
 
+namespace fs = std::filesystem;
+
 class Config {
 public:
-    std::string universe_infile;
-    std::string universe_outfile;
+    fs::path universe_infile;
+    fs::path universe_outfile;
 
     double timestep;
     uint64_t iterations;
@@ -17,7 +20,7 @@ public:
     double pixel_resolution;
 
     Config() = delete;
-    Config(const std::string& path);
+    Config(const fs::path& path);
     void print();
 private:
     void validate();

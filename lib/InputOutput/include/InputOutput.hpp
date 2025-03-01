@@ -1,10 +1,12 @@
 #pragma once
 
+#include <filesystem>
 #include <vector>
 
 #include "Body.hpp"
 
 namespace IO {
-    std::vector<Body> parse_csv(const std::string& path);
-    void write_csv(const std::string& path, const std::vector<Body> &bodies);
+    namespace fs = std::filesystem; 
+    std::vector<Body> parse_csv(const fs::path& path);
+    void write_csv(const fs::path& path, const std::vector<Body> &bodies);
 }

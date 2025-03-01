@@ -2,6 +2,8 @@
 
 #include <fstream>
 #include <filesystem>
+#include <system_error>
+		
 
 #include "nlohmann/json.hpp"
 #include "fmt/base.h"
@@ -9,26 +11,24 @@
 
 #include "Logger.hpp"
 #include "Constants.hpp"
+#include "StopWatch.hpp"
 
 using json = nlohmann::json;
 
-static std::string parse_path(const std::string& path) {
-    return std::filesystem::canonical(std::filesystem::path(path)).string();
-}
-
-Config::Config(const std::string &path) {
+Config::Config(const fs::path &path) {
+    StopWatch sw;
     bool echo_config = false;
     try {
-        const json json_cfg = json::parse(std::ifstream(path));
+        const json json_cfg = json::parse(std::ifstream(path.c_str()));
 
         const auto io = json_cfg.at("IO");
-        universe_infile = parse_path(io.at("universe_infile"));
-        universe_outfile = parse_path(io.at("universe_outfile"));
+        universe_infile = fs::path(io.at("universe_infile"));
+        universe_outfile = fs::path(io.at("universe_outfile"));
         echo_config = io.at("echo_config");
 
         const auto sim = json_cfg.at("Simulation");
         timestep = sim.at("timestep");
-        iterations = sim.at("iterations");
+        iterations = sim.at("iterations");      
 
         const auto graphics = json_cfg.at("Graphics");
         resolution = {
@@ -42,23 +42,60 @@ Config::Config(const std::string &path) {
     }
     catch (const std::exception &e) {
         Log::error(e.what());
-        throw std::runtime_error("Failed to parse config: `" + path + "`");
+        throw std::runtime_error("Failed to parse config: `" + path.string() + "`");
     }
 
     if (echo_config)
         print();
+
+    Log::debug("Parsed configuration from `{}`: [{}]", path.c_str(), sw);
 }
 
 void Config::print() {
     const auto c = fmt::color::purple;
     fmt::print(fg(c), "Configuration:\n");
-    fmt::print(fg(c), "  universe_infile:  `{}`\n", universe_infile);
-    fmt::print(fg(c), "  universe_outfile: `{}`\n", universe_outfile);
+    fmt::print(fg(c), "  universe_infile:  `{}`\n", universe_infile.string());
+    fmt::print(fg(c), "  universe_outfile: `{}`\n", universe_outfile.string());
     fmt::print(fg(c), "  timestep:         {}\n", timestep);
     fmt::print(fg(c), "  iterations:       {}\n", iterations);
     fmt::print(fg(c), "  resolution:       {}x{}\n", resolution.x, resolution.y);
     fmt::print(fg(c), "  fps:              {}\n", fps);
     fmt::print(fg(c), "  pixel_resolution: {}\n", pixel_resolution);
+}
+
+static fs::path resolve_infile_path(const fs::path &infile) {
+    const fs::path resolved = fs::canonical(infile);
+    if (!fs::is_regular_file(resolved))
+        throw std::runtime_error("Path `" + resolved.string() + "` is not a regular file");
+    if (const auto perms = fs::status(resolved).permissions(); 
+            (perms & fs::perms::owner_read) ==       fs::perms::none) {
+        throw std::runtime_error("No read permissions for `" + resolved.string() + "`");
+    }
+    return resolved;
+}
+
+static fs::path resolve_outfile_path(const fs::path &outfile) {
+    std::error_code ec;
+    if (const fs::path resolved = fs::canonical(outfile, ec); !ec) {
+        if (!fs::is_regular_file(resolved))
+            throw std::runtime_error("Path `" + resolved.string() + "` is not a regular file");
+        if (const auto perms = fs::status(resolved).permissions(); 
+                (perms & fs::perms::owner_write) == fs::perms::none) {
+            throw std::runtime_error("No write permissions for `" + resolved.string() + "`");
+        }
+        return resolved;
+    }
+    const fs::path parent = outfile.parent_path();
+    if (const fs::path parent_resolved = fs::canonical(parent, ec); !ec) {
+        if (const auto perms = fs::status(parent_resolved).permissions(); 
+                (perms & fs::perms::owner_write) == fs::perms::none) {
+            throw std::runtime_error("No write permissions for parent directory `" + 
+                    parent_resolved.string() + "`");
+        }
+        return parent_resolved / outfile.filename();
+    }
+    else 
+        throw std::runtime_error("Cannot resolve parent path of `" + outfile.string() + "`");
 }
 
 void Config::validate() {
@@ -84,6 +121,20 @@ void Config::validate() {
         fail = true;
         Log::error("Config::timestep {} not within allowed range [{}, {}]", pixel_resolution, 
                 Constants::MIN_PIXEL_RES, Constants::MAX_PIXEL_RES);
+    }
+    try {
+        universe_infile = resolve_infile_path(universe_infile);
+    }
+    catch (const std::exception &e) {
+        fail = true;
+        Log::error("Config::universe_infile: {}", e.what());
+    }
+    try {
+        universe_outfile = resolve_outfile_path(universe_outfile);
+    }
+    catch (const std::exception &e) {
+        fail = true;
+        Log::error("Config::universe_outfile: {}", e.what());
     }
     if (fail)
         throw std::runtime_error("Config validation failed");
