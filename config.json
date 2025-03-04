@@ -6,7 +6,8 @@
     },
     "Simulation": {
         "timestep": 10,
-        "iterations": 1e8
+        "iterations": 1e8,
+        "algorithm": "barnes-hut"
     },
     "Graphics": {
         "resolution": [1280, 720],

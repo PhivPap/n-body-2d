@@ -14,7 +14,9 @@ public:
 
     double timestep;
     uint64_t iterations;
-    
+    enum class Algorithm {BARNES_HUT, BRUTE_FORCE};
+    Algorithm algorithm;
+
     sf::Vector2<uint32_t> resolution;
     uint32_t fps;
     double pixel_resolution;
@@ -24,4 +26,6 @@ public:
     void print();
 private:
     void validate();
+    Algorithm string_to_enum(std::string);
+    std::string enum_to_string(Algorithm algorithm);
 };

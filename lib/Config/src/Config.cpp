@@ -28,7 +28,8 @@ Config::Config(const fs::path &path) {
 
         const auto sim = json_cfg.at("Simulation");
         timestep = sim.at("timestep");
-        iterations = sim.at("iterations");      
+        iterations = sim.at("iterations");
+        algorithm = string_to_enum(sim.at("algorithm"));
 
         const auto graphics = json_cfg.at("Graphics");
         resolution = {
@@ -51,6 +52,31 @@ Config::Config(const fs::path &path) {
     Log::debug("Parsed configuration from `{}`: [{}]", path.c_str(), sw);
 }
 
+Config::Algorithm Config::string_to_enum(std::string str) {
+    for (unsigned short i = 0; const char *s : Constants::ALLOWED_ALGORITHMS) {
+        if (str == s) {
+            return static_cast<Config::Algorithm>(i);
+        }
+        i++;
+    }
+    return static_cast<Config::Algorithm>(-1);
+}
+
+std::string Config::enum_to_string(Algorithm algorithm) {
+    switch (algorithm)
+        {
+        case Algorithm::BARNES_HUT:
+            return "Barnes Hut";
+            break;
+        case Algorithm::BRUTE_FORCE:
+            return "Brute force";
+            break;
+        default:
+            return "Invalid";
+    }
+}
+
+
 void Config::print() {
     const auto c = fmt::color::purple;
     fmt::print(fg(c), "Configuration:\n");
@@ -58,6 +84,7 @@ void Config::print() {
     fmt::print(fg(c), "  universe_outfile: `{}`\n", universe_outfile.string());
     fmt::print(fg(c), "  timestep:         {}\n", timestep);
     fmt::print(fg(c), "  iterations:       {}\n", iterations);
+    fmt::print(fg(c), "  algorithm:        {}\n", enum_to_string(algorithm));
     fmt::print(fg(c), "  resolution:       {}x{}\n", resolution.x, resolution.y);
     fmt::print(fg(c), "  fps:              {}\n", fps);
     fmt::print(fg(c), "  pixel_resolution: {}\n", pixel_resolution);
@@ -121,6 +148,11 @@ void Config::validate() {
         fail = true;
         Log::error("Config::timestep {} not within allowed range [{}, {}]", pixel_resolution, 
                 Constants::MIN_PIXEL_RES, Constants::MAX_PIXEL_RES);
+    }
+    if (algorithm == static_cast<Config::Algorithm>(-1)) {
+        fail = true;
+        Log::error("Config::algorithm must be one of allowed values [{}, {}]",
+                Constants::ALLOWED_ALGORITHMS[0], Constants::ALLOWED_ALGORITHMS[1]);
     }
     try {
         universe_infile = resolve_infile_path(universe_infile);

@@ -12,4 +12,5 @@ namespace Constants {
     constexpr uint16_t MAX_FPS = 512;
     constexpr double MIN_PIXEL_RES = 1e-12;                 // picometer (m)
     constexpr double MAX_PIXEL_RES = 8.8e50;                // observable universe diameter (m)
+    const char* const ALLOWED_ALGORITHMS[] = { "barnes-hut", "brute-force" };
 }
