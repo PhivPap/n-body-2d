@@ -1,6 +1,6 @@
-#include "StopWatch.hpp"
+#include "StopWatch/StopWatch.hpp"
 
-#include "Logger.hpp"
+#include "Logger/Logger.hpp"
 #include "fmt/format.h"
 #include "fmt/chrono.h"
 

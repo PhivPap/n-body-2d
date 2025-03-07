@@ -27,7 +27,7 @@ add_subdirectory(${LIB_DIR}/Config)
 add_subdirectory(${LIB_DIR}/InputOutput)
 add_subdirectory(${LIB_DIR}/Quadtree)
 add_subdirectory(${LIB_DIR}/Body)
-add_subdirectory(${LIB_DIR}/CommandLineArgs)
+add_subdirectory(${LIB_DIR}/CLArgs)
 add_subdirectory(${LIB_DIR}/StopWatch)
 
 # Add third-party directories
@@ -56,7 +56,7 @@ target_link_libraries(${PROJECT_NAME} PRIVATE lib-quadtree)
 target_include_directories(${PROJECT_NAME} PRIVATE ${LIB_DIR}/Body/include)
 target_link_libraries(${PROJECT_NAME} PRIVATE body)
 
-target_include_directories(${PROJECT_NAME} PRIVATE ${LIB_DIR}/CommandLineArgs/include)
+target_include_directories(${PROJECT_NAME} PRIVATE ${LIB_DIR}/CLArgs/include)
 target_link_libraries(${PROJECT_NAME} PRIVATE lib-clargs)
 
 target_include_directories(${PROJECT_NAME} PRIVATE ${LIB_DIR}/StopWatch/include)

@@ -1,11 +1,11 @@
-#include "CLArgs.hpp"
+#include "CLArgs/CLArgs.hpp"
 
 #include <filesystem>
 
 #include "argparse/argparse.hpp"
 
-#include "Logger.hpp"
-#include "StopWatch.hpp"
+#include "Logger/Logger.hpp"
+#include "StopWatch/StopWatch.hpp"
 
 using namespace argparse;
 namespace fs = std::filesystem;

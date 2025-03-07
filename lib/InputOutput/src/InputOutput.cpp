@@ -1,9 +1,9 @@
-#include "InputOutput.hpp"
+#include "InputOutput/InputOutput.hpp"
 
 #include "csv.hpp"
 
-#include "Logger.hpp"
-#include "StopWatch.hpp"
+#include "Logger/Logger.hpp"
+#include "StopWatch/StopWatch.hpp"
 
 static void print_bodies(const std::vector<Body> &bodies) {
     // const auto c = fmt::color::medium_purple;

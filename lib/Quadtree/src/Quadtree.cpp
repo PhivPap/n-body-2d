@@ -1,7 +1,8 @@
+#include "Quadtree/Quadtree.hpp"
+
 #include <limits>
 
-#include "Quadtree.hpp"
-#include "Body.hpp"
+#include "Body/Body.hpp"
 
 
 sf::Rect<double> get_universe_boundaries(const std::vector<Body> &bodies) {

@@ -1,17 +1,16 @@
-#include "Config.hpp"
+#include "Config/Config.hpp"
 
 #include <fstream>
 #include <filesystem>
 #include <system_error>
-		
 
 #include "nlohmann/json.hpp"
 #include "fmt/base.h"
 #include "fmt/color.h"
 
-#include "Logger.hpp"
+#include "Logger/Logger.hpp"
 #include "Constants.hpp"
-#include "StopWatch.hpp"
+#include "StopWatch/StopWatch.hpp"
 
 using json = nlohmann::json;
 

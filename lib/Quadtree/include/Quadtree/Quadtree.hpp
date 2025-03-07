@@ -4,7 +4,7 @@
 
 #include "SFML/Graphics/Rect.hpp"
 
-#include "Body.hpp"
+#include "Body/Body.hpp"
 
 class Quadtree {
 public:

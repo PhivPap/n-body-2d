@@ -3,7 +3,7 @@
 #include <filesystem>
 #include <vector>
 
-#include "Body.hpp"
+#include "Body/Body.hpp"
 
 namespace IO {
     namespace fs = std::filesystem; 

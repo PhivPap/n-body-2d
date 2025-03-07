@@ -8,13 +8,13 @@
 #include "SFML/Window/Event.hpp"
 #include "SFML/Graphics/Rect.hpp"
 
-#include "Config.hpp"
-#include "InputOutput.hpp"
-#include "Logger.hpp"
+#include "Config/Config.hpp"
+#include "InputOutput/InputOutput.hpp"
+#include "Logger/Logger.hpp"
 #include "Constants.hpp"
-#include "Body.hpp"
-#include "CLArgs.hpp"
-#include "StopWatch.hpp"
+#include "Body/Body.hpp"
+#include "CLArgs/CLArgs.hpp"
+#include "StopWatch/StopWatch.hpp"
 
 typedef std::shared_mutex Lock;
 typedef std::unique_lock<Lock> WriteLock;
