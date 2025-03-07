@@ -1,8 +1,9 @@
 {
-    "IO": {
-        "universe_infile": "../universe-db/solar-system-plus.csv",
+   "IO": {
+        "universe_infile": "../universe-db/universe-unit-test-output.csv",
         "universe_outfile":  "../universe-db/universe-unit-test-output.csv",
-        "echo_config": true
+        "echo_config": true,
+	    "echo_bodies": true
     },
     "Simulation": {
         "timestep": 10,

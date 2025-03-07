@@ -25,6 +25,7 @@ Config::Config(const fs::path &path) {
         universe_infile = fs::path(io.at("universe_infile"));
         universe_outfile = fs::path(io.at("universe_outfile"));
         echo_config = io.at("echo_config");
+        echo_bodies = io.at("echo_bodies");
 
         const auto sim = json_cfg.at("Simulation");
         timestep = sim.at("timestep");
@@ -38,16 +39,19 @@ Config::Config(const fs::path &path) {
         };
         fps = graphics.at("fps");
         pixel_resolution = graphics.at("pixel_resolution");
-
-        validate();
     }
     catch (const std::exception &e) {
         Log::error(e.what());
         throw std::runtime_error("Failed to parse config: `" + path.string() + "`");
     }
 
-    if (echo_config)
+    if (!validate()) {
+        throw std::runtime_error("Failed to validate config: `" + path.string() + "`");
+    }
+
+    if (echo_config) {
         print();
+    }
 
     Log::debug("Parsed configuration from `{}`: [{}]", path.c_str(), sw);
 }
@@ -78,22 +82,23 @@ std::string Config::enum_to_string(Algorithm algorithm) {
 
 
 void Config::print() {
-    const auto c = fmt::color::purple;
-    fmt::print(fg(c), "Configuration:\n");
-    fmt::print(fg(c), "  universe_infile:  `{}`\n", universe_infile.string());
-    fmt::print(fg(c), "  universe_outfile: `{}`\n", universe_outfile.string());
-    fmt::print(fg(c), "  timestep:         {}\n", timestep);
-    fmt::print(fg(c), "  iterations:       {}\n", iterations);
-    fmt::print(fg(c), "  algorithm:        {}\n", enum_to_string(algorithm));
-    fmt::print(fg(c), "  resolution:       {}x{}\n", resolution.x, resolution.y);
-    fmt::print(fg(c), "  fps:              {}\n", fps);
-    fmt::print(fg(c), "  pixel_resolution: {}\n", pixel_resolution);
+    // const auto c = fmt::color::medium_purple;
+    fmt::print("Configuration:\n");
+    fmt::print("  universe_infile:  `{}`\n", universe_infile.string());
+    fmt::print("  universe_outfile: `{}`\n", universe_outfile.string());
+    fmt::print("  timestep:         {}\n", timestep);
+    fmt::print("  iterations:       {}\n", iterations);
+    fmt::print("  algorithm:        {}\n", enum_to_string(algorithm));
+    fmt::print("  resolution:       {}x{}\n", resolution.x, resolution.y);
+    fmt::print("  fps:              {}\n", fps);
+    fmt::print("  pixel_resolution: {}\n", pixel_resolution);
 }
 
 static fs::path resolve_infile_path(const fs::path &infile) {
     const fs::path resolved = fs::canonical(infile);
-    if (!fs::is_regular_file(resolved))
+    if (!fs::is_regular_file(resolved)) {
         throw std::runtime_error("Path `" + resolved.string() + "` is not a regular file");
+    }
     if (const auto perms = fs::status(resolved).permissions(); 
             (perms & fs::perms::owner_read) ==       fs::perms::none) {
         throw std::runtime_error("No read permissions for `" + resolved.string() + "`");
@@ -104,8 +109,9 @@ static fs::path resolve_infile_path(const fs::path &infile) {
 static fs::path resolve_outfile_path(const fs::path &outfile) {
     std::error_code ec;
     if (const fs::path resolved = fs::canonical(outfile, ec); !ec) {
-        if (!fs::is_regular_file(resolved))
+        if (!fs::is_regular_file(resolved)) {
             throw std::runtime_error("Path `" + resolved.string() + "` is not a regular file");
+        }
         if (const auto perms = fs::status(resolved).permissions(); 
                 (perms & fs::perms::owner_write) == fs::perms::none) {
             throw std::runtime_error("No write permissions for `" + resolved.string() + "`");
@@ -121,11 +127,12 @@ static fs::path resolve_outfile_path(const fs::path &outfile) {
         }
         return parent_resolved / outfile.filename();
     }
-    else 
+    else {
         throw std::runtime_error("Cannot resolve parent path of `" + outfile.string() + "`");
+    }
 }
 
-void Config::validate() {
+bool Config::validate() {
     bool fail = false;
     if (timestep < Constants::MIN_TIMESTEP || timestep > Constants::MAX_TIMESTEP) {
         fail = true;
@@ -135,7 +142,7 @@ void Config::validate() {
     if (resolution.x > Constants::MAX_WINDOW_WIDTH || 
             resolution.y > Constants::MAX_WINDOW_HEIGHT) {
         fail = true;
-        Log::error("Config::resolution {}x{} not within allowed range {}x{}", resolution.x,  
+        Log::error("Config::resolution {}x{} not within allowed range {}x{}", resolution.x,
                 resolution.y, Constants::MAX_WINDOW_WIDTH, Constants::MAX_WINDOW_HEIGHT);
     }
     if (fps < Constants::MIN_FPS || fps > Constants::MAX_FPS) {
@@ -146,8 +153,8 @@ void Config::validate() {
     if (pixel_resolution < Constants::MIN_PIXEL_RES ||
             pixel_resolution > Constants::MAX_PIXEL_RES) {
         fail = true;
-        Log::error("Config::timestep {} not within allowed range [{}, {}]", pixel_resolution, 
-                Constants::MIN_PIXEL_RES, Constants::MAX_PIXEL_RES);
+        Log::error("Config::pixel_resolution {} not within allowed range [{}, {}]", 
+                pixel_resolution, Constants::MIN_PIXEL_RES, Constants::MAX_PIXEL_RES);
     }
     if (algorithm == static_cast<Config::Algorithm>(-1)) {
         fail = true;
@@ -168,6 +175,6 @@ void Config::validate() {
         fail = true;
         Log::error("Config::universe_outfile: {}", e.what());
     }
-    if (fail)
-        throw std::runtime_error("Config validation failed");
+
+    return !fail;
 }

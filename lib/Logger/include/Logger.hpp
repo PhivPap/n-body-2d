@@ -19,19 +19,22 @@ namespace Log {
 
     template <typename ...T>
     void warning(const std::string& fmt_str, T&&... args) {
-        if (verbosity >= Verbosity::WARNING)
+        if (verbosity >= Verbosity::WARNING) {
             fmt::print(fg(fmt::color::orange), "[Warning] " + fmt_str + '\n', args...);
+        }
     }
 
     template <typename ...T>
     void info(const std::string& fmt_str, T&&... args) {
-        if (verbosity >= Verbosity::INFO)
+        if (verbosity >= Verbosity::INFO) {
             fmt::print("[Info] " + fmt_str + '\n', args...);
+        }
     }   
 
     template <typename ...T>
     void debug(const std::string& fmt_str, T&&... args) {
-        if (verbosity >= Verbosity::DEBUG)
+        if (verbosity >= Verbosity::DEBUG) {
             fmt::print(fg(fmt::color::dark_cyan), "[Debug] " + fmt_str + '\n', args...);
+        }
     }
 }

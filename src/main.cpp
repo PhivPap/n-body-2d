@@ -70,8 +70,9 @@ void simulate(std::vector<Body> &bodies, uint64_t iterations, double timestep) {
 
 std::optional<sf::Vector2<float>> body_position_on_viewport(const Body& b, const sf::Rect<double> &viewport) {
     const auto relative_pos = (b.pos - viewport.position).componentWiseDiv(viewport.size);
-    if (relative_pos.x < 0.0 || relative_pos.x >= 1.0 || relative_pos.y < 0.0 || relative_pos.y >= 1.0)
+    if (relative_pos.x < 0.0 || relative_pos.x >= 1.0 || relative_pos.y < 0.0 || relative_pos.y >= 1.0) {
         return std::nullopt;
+    }
     return static_cast<sf::Vector2<float>>(relative_pos);
 }
 
@@ -87,6 +88,7 @@ void display(const Config &cfg, const std::vector<Body> &bodies) {
             if (event->is<sf::Event::Closed>()) {
                 window.close();
                 sim_done = true;
+                Log::info("Window closed");
             }
         }
         window.clear(sf::Color::Black);
@@ -124,7 +126,7 @@ int main(int argc, const char *argv[]) {
     try {
         const CLArgs clargs(argc, argv);
         const Config cfg(clargs.config);
-        std::vector<Body> bodies = IO::parse_csv(cfg.universe_infile.string());
+        std::vector<Body> bodies = IO::parse_csv(cfg.universe_infile.string(), cfg.echo_bodies);
         signal(SIGINT, exit_gracefully);
         run_sim(cfg, bodies);
         IO::write_csv(cfg.universe_outfile.string(), bodies);

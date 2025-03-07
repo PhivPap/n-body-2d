@@ -11,6 +11,7 @@ class Config {
 public:
     fs::path universe_infile;
     fs::path universe_outfile;
+    bool echo_bodies;
 
     double timestep;
     uint64_t iterations;
@@ -25,7 +26,7 @@ public:
     Config(const fs::path& path);
     void print();
 private:
-    void validate();
+    bool validate();
     Algorithm string_to_enum(std::string);
     std::string enum_to_string(Algorithm algorithm);
 };
