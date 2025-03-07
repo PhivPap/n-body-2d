@@ -110,7 +110,9 @@ void display(const Config &cfg, const std::vector<Body> &bodies) {
 void run_sim(const Config &cfg, std::vector<Body> &bodies) {
     StopWatch sw;
     std::thread sim(simulate, std::ref(bodies), cfg.iterations, cfg.timestep);
-    display(cfg, bodies);
+    if (cfg.graphics_enabled) {
+         display(cfg, bodies);
+    }
     sim.join();
     Log::debug("Sim done: [{}]", sw);   
 }

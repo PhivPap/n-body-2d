@@ -32,6 +32,7 @@ Config::Config(const fs::path &path) {
         algorithm = string_to_enum(sim.at("algorithm"));
 
         const auto graphics = json_cfg.at("Graphics");
+        graphics_enabled = graphics.at("enabled");
         resolution = {
             graphics.at("resolution").at(0),
             graphics.at("resolution").at(1)
@@ -82,15 +83,16 @@ std::string Config::enum_to_string(Algorithm algorithm) {
 
 void Config::print() {
     // const auto c = fmt::color::medium_purple;
-    fmt::print("Configuration:\n");
-    fmt::print("  universe_infile:  `{}`\n", universe_infile.string());
-    fmt::print("  universe_outfile: `{}`\n", universe_outfile.string());
-    fmt::print("  timestep:         {}\n", timestep);
-    fmt::print("  iterations:       {}\n", iterations);
-    fmt::print("  algorithm:        {}\n", enum_to_string(algorithm));
-    fmt::print("  resolution:       {}x{}\n", resolution.x, resolution.y);
-    fmt::print("  fps:              {}\n", fps);
-    fmt::print("  pixel_resolution: {}\n", pixel_resolution);
+    fmt::println("Configuration:");
+    fmt::println("  universe_infile:  `{}`", universe_infile.string());
+    fmt::println("  universe_outfile: `{}`", universe_outfile.string());
+    fmt::println("  timestep:         {}", timestep);
+    fmt::println("  iterations:       {}", iterations);
+    fmt::println("  algorithm:        {}", enum_to_string(algorithm));
+    fmt::println("  graphics_enabled: {}", graphics_enabled);
+    fmt::println("  resolution:       {}x{}", resolution.x, resolution.y);
+    fmt::println("  fps:              {}", fps);
+    fmt::println("  pixel_resolution: {}", pixel_resolution);
 }
 
 static fs::path resolve_infile_path(const fs::path &infile) {

@@ -11,6 +11,7 @@
         "algorithm": "barnes-hut"
     },
     "Graphics": {
+        "enabled": true,
         "resolution": [1280, 720],
         "fps": 60,
         "pixel_resolution": 1e8
