@@ -10,6 +10,39 @@ StopWatch::StopWatch(State state): state(state) {
     }
 }
 
+StopWatch StopWatch::operator+(const StopWatch& sw) const {
+    StopWatch res(State::PAUSED);
+    res.previously_elapsed = 
+        this->duration<SecondsF64>() + sw.duration<SecondsF64>();
+    return res;
+}
+
+StopWatch StopWatch::operator-(const StopWatch& sw) const {
+    StopWatch res(State::PAUSED);
+    res.previously_elapsed = 
+        this->duration<SecondsF64>() - sw.duration<SecondsF64>();
+    return res;
+}
+
+double StopWatch::operator/(const StopWatch& sw) const {
+    return this->duration<SecondsF64>() / sw.duration<SecondsF64>();
+}
+
+StopWatch StopWatch::operator*(double d) const {
+    StopWatch res(State::PAUSED);
+    res.previously_elapsed = 
+        this->duration<SecondsF64>() * d;
+    return res;
+}
+
+StopWatch StopWatch::operator/(double d) const {
+    StopWatch res(State::PAUSED);
+    res.previously_elapsed = 
+        this->duration<SecondsF64>() / d;
+    return res;
+}
+
+
 void StopWatch::resume() {
     if (state == State::RUNNING) {
         Log::warning("StopWatch::resume() called on running StopWatch");
@@ -42,30 +75,46 @@ StopWatch::State StopWatch::current_state() const {
 }
 
 std::string StopWatch::to_string() const {
-    const auto total_elapsed = state == State::RUNNING ?
-            previously_elapsed + std::chrono::duration_cast<decltype(previously_elapsed)>
-                (std::chrono::high_resolution_clock::now() - last_start) :
-            previously_elapsed;
-
     using namespace std::chrono_literals;
-    if (total_elapsed < 1ms) {
-        return fmt::format("{}us", round(std::chrono::duration_cast<
-                std::chrono::duration<double, std::chrono::microseconds::period>
-            >(total_elapsed).count()));
+
+    auto full_duration = duration<SecondsF64>();
+    char sign = 0;
+    if (full_duration < 0s) {
+        sign = '-';
+        full_duration = -full_duration;
     }
-    else if (total_elapsed < 1s) {
-        return fmt::format("{}ms", round(std::chrono::duration_cast<
-                std::chrono::duration<double, std::chrono::milliseconds::period>
-            >(total_elapsed).count()));
+
+    if (full_duration < 1ms) {
+        const int64_t us = cast_to_i64<std::chrono::microseconds>(full_duration);
+        const int64_t ns = cast_to_i64<std::chrono::nanoseconds>(full_duration) % 1000;
+        return fmt::format("{}{}.{:03}us", sign, us, ns);
     }
-    else if (total_elapsed < 1min) {
-        return fmt::format("{}s", round(total_elapsed.count()));
+    else if (full_duration < 1s) {
+        const int64_t ms = cast_to_i64<std::chrono::milliseconds>(full_duration);
+        const int64_t us = cast_to_i64<std::chrono::microseconds>(full_duration) % 1000;
+        return fmt::format("{}{}.{:03}ms", sign, ms, us);
     }
-    else if (total_elapsed < 1h) {
-        return fmt::format("{:%Mm}{}s", total_elapsed, round(total_elapsed.count()));
+    else if (full_duration < 1min) {
+        const int64_t s = cast_to_i64<std::chrono::seconds>(full_duration);
+        const int64_t ms = cast_to_i64<std::chrono::milliseconds>(full_duration) % 1000;
+        return fmt::format("{}{}.{:03}s", sign, s, ms);
     }
-    else if (total_elapsed < 24h) {
-        return fmt::format("{:%Hh%Mm}{}s", total_elapsed, round<0>(total_elapsed.count()));
+    else if (full_duration < 1h) {
+        const int64_t m = cast_to_i64<std::chrono::minutes>(full_duration);
+        const int64_t s = cast_to_i64<std::chrono::seconds>(full_duration) % 60;
+        const int64_t ms = cast_to_i64<std::chrono::milliseconds>(full_duration) % 1000;
+        return fmt::format("{}{:02}m{:02}.{:03}s", sign, m, s, ms);
     }
-    return fmt::format("{:%jd%Hh%Mm}", total_elapsed, round(total_elapsed.count()));
+    else if (full_duration < 24h) {
+        const int64_t h = cast_to_i64<std::chrono::hours>(full_duration);
+        const int64_t m = cast_to_i64<std::chrono::minutes>(full_duration) % 60;
+        const int64_t s = cast_to_i64<std::chrono::seconds>(full_duration) % 60;
+        return fmt::format("{}{:02}h{:02}m{:02}s", sign, h, m, s);
+    }
+    else {
+        const int64_t d = cast_to_i64<std::chrono::hours>(full_duration) / 24;
+        const int64_t h = cast_to_i64<std::chrono::hours>(full_duration) % 24;
+        const int64_t m = cast_to_i64<std::chrono::minutes>(full_duration) % 60;
+        return fmt::format("{}{}d{:02}h{:02}m", sign, d, h, m);
+    }
 }
