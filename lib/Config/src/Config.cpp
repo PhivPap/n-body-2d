@@ -37,6 +37,7 @@ Config::Config(const fs::path &path) {
             graphics.at("resolution").at(0),
             graphics.at("resolution").at(1)
         };
+        vsync_enabled = graphics.at("vsync");
         fps = graphics.at("fps");
         pixel_resolution = graphics.at("pixel_resolution");
     }
@@ -88,9 +89,10 @@ void Config::print() {
     fmt::println("  universe_outfile: `{}`", universe_outfile.string());
     fmt::println("  timestep:         {}", timestep);
     fmt::println("  iterations:       {}", iterations);
-    fmt::println("  algorithm:        {}", enum_to_string(algorithm));
+    fmt::println("  algorithm:        `{}`", enum_to_string(algorithm));
     fmt::println("  graphics_enabled: {}", graphics_enabled);
     fmt::println("  resolution:       {}x{}", resolution.x, resolution.y);
+    fmt::println("  vsync:            {}", vsync_enabled);
     fmt::println("  fps:              {}", fps);
     fmt::println("  pixel_resolution: {}", pixel_resolution);
 }

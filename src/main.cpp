@@ -80,6 +80,7 @@ void display(const Config &cfg, const std::vector<Body> &bodies) {
     const sf::Vector2<float> window_res_f(cfg.resolution);
     sf::RenderWindow window(sf::VideoMode(cfg.resolution), "N-Body Sim");
     window.setFramerateLimit(cfg.fps);
+    window.setVerticalSyncEnabled(cfg.vsync_enabled);
     const sf::Rect<double> viewport {{-1e12, -5625e8}, {2e12, 1.125e+12}};
     float x = 0, y = 0;
     while (window.isOpen() && !sim_done) {

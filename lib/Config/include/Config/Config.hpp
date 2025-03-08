@@ -20,6 +20,7 @@ public:
 
     bool graphics_enabled;
     sf::Vector2<uint32_t> resolution;
+    bool vsync_enabled;
     uint32_t fps;
     double pixel_resolution;
 
