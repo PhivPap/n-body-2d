@@ -15,7 +15,7 @@
 using json = nlohmann::json;
 
 Config::Config(const fs::path &path) {
-    StopWatch sw;
+    const StopWatch sw;
     bool echo_config = false;
     try {
         const json json_cfg = json::parse(std::ifstream(path.c_str()));

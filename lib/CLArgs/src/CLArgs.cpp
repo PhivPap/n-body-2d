@@ -35,7 +35,7 @@ static fs::path parse_config_path(const ArgumentParser &argparser) {
 }
 
 CLArgs::CLArgs(int argc, const char *argv[]) {
-    StopWatch sw;
+    const StopWatch sw;
     ArgumentParser argparser("n-body-2d");
     argparser.add_argument("--verbosity")
             .default_value(std::string{"DEBUG"})

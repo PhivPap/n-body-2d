@@ -33,7 +33,7 @@ static bool validate_bodies(const std::vector<Body> &bodies) {
 }
 
 std::vector<Body> IO::parse_csv(const fs::path& path, bool echo_bodies) {
-    StopWatch sw;
+    const StopWatch sw;
     std::vector<Body> bodies;
     try {
         csv::CSVReader reader(path.c_str());
@@ -68,7 +68,7 @@ std::vector<Body> IO::parse_csv(const fs::path& path, bool echo_bodies) {
 }
 
 void IO::write_csv(const fs::path& path, const std::vector<Body> &bodies) {
-    StopWatch sw;
+    const StopWatch sw;
     try {
         std::ofstream out_file(path.c_str());
         if (out_file.fail()) {
