@@ -5,8 +5,6 @@
 
 #include "SFML/Window.hpp"
 #include "SFML/Graphics.hpp"
-#include "SFML/Window/Event.hpp"
-#include "SFML/Graphics/Rect.hpp"
 
 #include "Config/Config.hpp"
 #include "InputOutput/InputOutput.hpp"
@@ -15,6 +13,8 @@
 #include "Body/Body.hpp"
 #include "CLArgs/CLArgs.hpp"
 #include "StopWatch/StopWatch.hpp"
+#include "ViewPort/ViewPort.hpp"
+
 
 typedef std::shared_mutex Lock;
 typedef std::unique_lock<Lock> WriteLock;
@@ -68,28 +68,26 @@ void simulate(std::vector<Body> &bodies, uint64_t iterations, double timestep) {
     sim_done = true;
 }
 
-std::optional<sf::Vector2<float>> body_position_on_viewport(const Body& b, const sf::Rect<double> &viewport) {
-    const auto relative_pos = (b.pos - viewport.position).componentWiseDiv(viewport.size);
-    if (relative_pos.x < 0.0 || relative_pos.x >= 1.0 || relative_pos.y < 0.0 || relative_pos.y >= 1.0) {
-        return std::nullopt;
-    }
-    return static_cast<sf::Vector2<float>>(relative_pos);
-}
-
 void display(const Config &cfg, const std::vector<Body> &bodies) {
-    const sf::Vector2<float> window_res_f(cfg.resolution);
+    ViewPort vp(static_cast<sf::Vector2f>(cfg.resolution), cfg.pixel_resolution);
     sf::RenderWindow window(sf::VideoMode(cfg.resolution), "N-Body Sim");
     window.setFramerateLimit(cfg.fps);
     window.setVerticalSyncEnabled(cfg.vsync_enabled);
-    const sf::Rect<double> viewport {{-1e12, -5625e8}, {2e12, 1.125e+12}};
-    float x = 0, y = 0;
     while (window.isOpen() && !sim_done) {
         while (const std::optional event = window.pollEvent()) {
-            // Close window: exit
             if (event->is<sf::Event::Closed>()) {
                 window.close();
                 sim_done = true;
                 Log::info("Window closed");
+            }
+            else if (const auto *resized = event->getIf<sf::Event::Resized>()) {
+                vp.resize(sf::Vector2f(resized->size));
+                sf::Rect<float> area({0.f, 0.f}, sf::Vector2f(resized->size));
+                window.setView(sf::View(area));
+            }
+            else if (const auto *scrolled = event->getIf<sf::Event::MouseWheelScrolled>()) {
+                vp.zoom(scrolled->delta > 0 ? ViewPort::Zoom::IN : ViewPort::Zoom::OUT, 
+                        sf::Vector2f(sf::Mouse::getPosition(window)));
             }
         }
         window.clear(sf::Color::Black);
@@ -97,9 +95,9 @@ void display(const Config &cfg, const std::vector<Body> &bodies) {
         sf::CircleShape shape(2.f);
         shape.setFillColor(sf::Color::White);
         for (const Body& b: bodies) {
-            const auto rel_pos = body_position_on_viewport(b, viewport);
-            if (rel_pos) {
-                shape.setPosition(rel_pos->componentWiseMul(window_res_f));
+            const auto pos_on_vp = vp.body_on_viewport(b.pos);
+            if (pos_on_vp) {
+                shape.setPosition(static_cast<sf::Vector2f>(*pos_on_vp));
                 window.draw(shape);
             }
         }
