@@ -60,30 +60,61 @@ void simulate(std::vector<Body> &bodies, uint64_t iterations, double timestep) {
     sim_done = true;
 }
 
+void handle_events(sf::RenderWindow& window, ViewPort &vp) {
+    // static variables for view panning
+    static bool mouse_button_hold = false;
+    static sf::Vector2i cursor_pos;
+
+    while (const std::optional event = window.pollEvent()) {
+        if (event->is<sf::Event::Closed>()) {
+            window.close();
+            sim_done = true;
+            Log::info("Window closed");
+        }
+        else if (const auto *resized = event->getIf<sf::Event::Resized>()) {
+            vp.resize(sf::Vector2f(resized->size));
+            sf::Rect<float> area({0.f, 0.f}, sf::Vector2f(resized->size));
+            window.setView(sf::View(area));
+        }
+        else if (const auto *scrolled = event->getIf<sf::Event::MouseWheelScrolled>()) {
+            vp.zoom(scrolled->delta > 0 ? ViewPort::Zoom::IN : ViewPort::Zoom::OUT, 
+                    sf::Vector2f(sf::Mouse::getPosition(window)));
+        }
+        else if (const auto *mouse_clicked = event->getIf<sf::Event::MouseButtonPressed>()) {
+            if (mouse_clicked->button == sf::Mouse::Button::Left) {
+                static const auto def_cursor = *sf::Cursor::createFromSystem(
+                        sf::Cursor::Type::Cross);
+                window.setMouseCursor(def_cursor);
+                mouse_button_hold = true;
+                cursor_pos = sf::Mouse::getPosition(window);
+            }
+        }
+        else if (const auto *mouse_released = event->getIf<sf::Event::MouseButtonReleased>()) {
+            if (mouse_released->button == sf::Mouse::Button::Left) {
+                static const auto grabbed_cursor = *sf::Cursor::createFromSystem(
+                        sf::Cursor::Type::Arrow);
+                window.setMouseCursor(grabbed_cursor);
+                mouse_button_hold = false;
+            }
+        }
+    }
+
+    if (mouse_button_hold) {
+        const sf::Vector2i new_cursor_pos = sf::Mouse::getPosition(window);
+        vp.pan(sf::Vector2f(cursor_pos - new_cursor_pos));
+        cursor_pos = new_cursor_pos;
+    }
+}
+
 void display(const Config &cfg, const std::vector<Body> &bodies) {
     ViewPort vp(static_cast<sf::Vector2f>(cfg.resolution), cfg.pixel_resolution);
     sf::RenderWindow window(sf::VideoMode(cfg.resolution), "N-Body Sim");
     window.setFramerateLimit(cfg.fps);
     window.setVerticalSyncEnabled(cfg.vsync_enabled);
     while (window.isOpen() && !sim_done) {
-        while (const std::optional event = window.pollEvent()) {
-            if (event->is<sf::Event::Closed>()) {
-                window.close();
-                sim_done = true;
-                Log::info("Window closed");
-            }
-            else if (const auto *resized = event->getIf<sf::Event::Resized>()) {
-                vp.resize(sf::Vector2f(resized->size));
-                sf::Rect<float> area({0.f, 0.f}, sf::Vector2f(resized->size));
-                window.setView(sf::View(area));
-            }
-            else if (const auto *scrolled = event->getIf<sf::Event::MouseWheelScrolled>()) {
-                vp.zoom(scrolled->delta > 0 ? ViewPort::Zoom::IN : ViewPort::Zoom::OUT, 
-                        sf::Vector2f(sf::Mouse::getPosition(window)));
-            }
-        }
-        window.clear(sf::Color::Black);
-        sf::CircleShape shape(2.f);
+        handle_events(window, vp);
+        window.clear(sf::Color(15, 15, 15));
+        sf::CircleShape shape(2.f, 16);
         shape.setFillColor(sf::Color::White);
         for (const Body& b: bodies) {
             const auto pos_on_vp = vp.body_on_viewport(b.pos);

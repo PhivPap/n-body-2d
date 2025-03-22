@@ -20,5 +20,6 @@ public:
     ViewPort(sf::Vector2f window_res, double pixel_res);
     void zoom(Zoom direction, sf::Vector2f cursor_pos);
     void resize(sf::Vector2f new_res);
+    void pan(sf::Vector2f pan_pixels);
     std::optional<sf::Vector2f> body_on_viewport(const sf::Vector2<double> &body_pos);
 };

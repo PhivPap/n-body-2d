@@ -49,6 +49,11 @@ void ViewPort::resize(sf::Vector2f new_res) {
     compute_rect_size();
 }
 
+void ViewPort::pan(sf::Vector2f pan_pixels) {
+    rect.position += sf::Vector2<double>(pan_pixels.componentWiseDiv(window_res))
+            .componentWiseMul(rect.size);
+}
+
 std::optional<sf::Vector2f> ViewPort::body_on_viewport(
         const sf::Vector2<double> &body_pos) {
     const auto relative_pos = (body_pos - rect.position).componentWiseDiv(rect.size);
