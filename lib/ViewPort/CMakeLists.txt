@@ -8,5 +8,8 @@ target_include_directories(${PROJECT_NAME} PRIVATE ${CMAKE_CURRENT_LIST_DIR}/inc
 target_include_directories(${PROJECT_NAME} PRIVATE ${LIB_DIR}/Logger/include)
 target_link_libraries(${PROJECT_NAME} PRIVATE logger)
 
+target_include_directories(${PROJECT_NAME} PRIVATE ${LIB_DIR}/Constants/include)
+target_link_libraries(${PROJECT_NAME} PRIVATE constants)
+
 target_include_directories(${PROJECT_NAME} PRIVATE ${THIRD_PARTY_DIR}/SFML/include)
 target_link_libraries(${PROJECT_NAME} PRIVATE sfml-system sfml-graphics)

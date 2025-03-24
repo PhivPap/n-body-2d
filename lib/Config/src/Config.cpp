@@ -9,7 +9,7 @@
 #include "fmt/color.h"
 
 #include "Logger/Logger.hpp"
-#include "Constants.hpp"
+#include "Constants/Constants.hpp"
 #include "StopWatch/StopWatch.hpp"
 
 using json = nlohmann::json;

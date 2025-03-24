@@ -7,7 +7,7 @@
 #include "Config/Config.hpp"
 #include "InputOutput/InputOutput.hpp"
 #include "Logger/Logger.hpp"
-#include "Constants.hpp"
+#include "Constants/Constants.hpp"
 #include "Body/Body.hpp"
 #include "CLArgs/CLArgs.hpp"
 #include "StopWatch/StopWatch.hpp"
@@ -113,7 +113,7 @@ void display(const Config &cfg, const std::vector<Body> &bodies) {
     window.setVerticalSyncEnabled(cfg.vsync_enabled);
     while (window.isOpen() && !sim_done) {
         handle_events(window, vp);
-        window.clear(sf::Color(15, 15, 15));
+        window.clear(Constants::background_color);
         sf::CircleShape shape(2.f, 16);
         shape.setFillColor(sf::Color::White);
         for (const Body& b: bodies) {
