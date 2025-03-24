@@ -30,7 +30,7 @@ endif()
 
 # Project folders
 set(SRC_DIR "${CMAKE_SOURCE_DIR}/src")
-set(LIB_DIR "${CMAKE_SOURCE_DIR}/lib")
+set(LIB_DIR "${SRC_DIR}/lib")
 set(THIRD_PARTY_DIR "${CMAKE_SOURCE_DIR}/third_party")
 
 # Disable unused SFML modules 
