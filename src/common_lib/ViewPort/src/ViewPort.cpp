@@ -4,8 +4,8 @@
 #include "Logger/Logger.hpp"
 
 
-ViewPort::ViewPort(sf::Vector2f window_res, double pixel_res) : window_res(window_res), 
-        pixel_res(pixel_res) {
+ViewPort::ViewPort(sf::Vector2f window_res, double pixel_scale) : window_res(window_res), 
+        pixel_scale(pixel_scale) {
     init_rect();
 }
 
@@ -15,28 +15,28 @@ void ViewPort::init_rect() {
 }
 
 void ViewPort::compute_rect_size() {
-    rect.size = sf::Vector2<double>(window_res) * pixel_res;
+    rect.size = sf::Vector2<double>(window_res) * pixel_scale;
 }
 
 void ViewPort::zoom(Zoom direction, sf::Vector2f cursor_pos) {
     if (direction == Zoom::IN) {
-        const double new_pixel_res = pixel_res * Constants::zoom_factor;
+        const double new_pixel_res = pixel_scale * Constants::zoom_factor;
         if (new_pixel_res < Constants::MIN_PIXEL_RES) {
             Log::warning("Reached max zoom, cannot zoom in");
             return;
         }
-        pixel_res = new_pixel_res;
+        pixel_scale = new_pixel_res;
         rect.position += sf::Vector2<double>(cursor_pos.componentWiseDiv(window_res))
                 .componentWiseMul(rect.size) * (1 - Constants::zoom_factor);
         compute_rect_size();
     }
     else {
-        const double new_pixel_res = pixel_res / Constants::zoom_factor;
+        const double new_pixel_res = pixel_scale / Constants::zoom_factor;
         if (new_pixel_res > Constants::MAX_PIXEL_RES) {
             Log::warning("Reached min zoom, cannot zoom out");
             return;
         }
-        pixel_res = new_pixel_res;
+        pixel_scale = new_pixel_res;
         compute_rect_size();
         rect.position -= sf::Vector2<double>(cursor_pos.componentWiseDiv(window_res))
                 .componentWiseMul(rect.size) * (1 - Constants::zoom_factor);

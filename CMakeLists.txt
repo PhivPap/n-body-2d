@@ -30,7 +30,7 @@ endif()
 
 # Project folders
 set(SRC_DIR "${CMAKE_SOURCE_DIR}/src")
-set(LIB_DIR "${SRC_DIR}/lib")
+set(LIB_DIR "${SRC_DIR}/common_lib")
 set(THIRD_PARTY_DIR "${CMAKE_SOURCE_DIR}/third_party")
 
 # Disable unused SFML modules 
@@ -48,6 +48,9 @@ add_subdirectory(${LIB_DIR}/CLArgs)
 add_subdirectory(${LIB_DIR}/StopWatch)
 add_subdirectory(${LIB_DIR}/ViewPort)
 add_subdirectory(${LIB_DIR}/Constants)
+add_subdirectory(${SRC_DIR}/Model)
+add_subdirectory(${SRC_DIR}/View)
+add_subdirectory(${SRC_DIR}/Controller)
 
 # Add third-party directories
 add_subdirectory(${THIRD_PARTY_DIR}/csv-parser)
@@ -60,6 +63,16 @@ add_subdirectory(${THIRD_PARTY_DIR}/argparse)
 add_executable(${PROJECT_NAME} ${SRC_DIR}/main.cpp)
 
 # Link libraries & Set include paths
+target_include_directories(${PROJECT_NAME} PRIVATE ${SRC_DIR}/Model/include)
+target_link_libraries(${PROJECT_NAME} PRIVATE model)
+
+target_include_directories(${PROJECT_NAME} PRIVATE ${SRC_DIR}/View/include)
+target_link_libraries(${PROJECT_NAME} PRIVATE view)
+
+target_include_directories(${PROJECT_NAME} PRIVATE ${SRC_DIR}/Controller/include)
+target_link_libraries(${PROJECT_NAME} PRIVATE controller)
+
+
 target_include_directories(${PROJECT_NAME} PRIVATE ${LIB_DIR}/Logger/include)
 target_link_libraries(${PROJECT_NAME} PRIVATE logger)
 

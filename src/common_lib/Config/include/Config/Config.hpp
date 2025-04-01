@@ -22,7 +22,7 @@ public:
     sf::Vector2<uint32_t> resolution;
     bool vsync_enabled;
     uint32_t fps;
-    double pixel_resolution;
+    double pixel_scale;
 
     Config() = delete;
     Config(const fs::path& path);

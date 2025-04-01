@@ -39,7 +39,7 @@ Config::Config(const fs::path &path) {
         };
         vsync_enabled = graphics.at("vsync");
         fps = graphics.at("fps");
-        pixel_resolution = graphics.at("pixel_resolution");
+        pixel_scale = graphics.at("pixel_scale");
     }
     catch (const std::exception &e) {
         Log::error(e.what());
@@ -94,7 +94,7 @@ void Config::print() {
     fmt::println("  resolution:       {}x{}", resolution.x, resolution.y);
     fmt::println("  vsync:            {}", vsync_enabled);
     fmt::println("  fps:              {}", fps);
-    fmt::println("  pixel_resolution: {}", pixel_resolution);
+    fmt::println("  pixel_scale: {}", pixel_scale);
 }
 
 static fs::path resolve_infile_path(const fs::path &infile) {
@@ -153,11 +153,11 @@ bool Config::validate() {
         Log::error("Config::fps {} not within allowed range [{}, {}]", fps, 
                 Constants::MIN_FPS, Constants::MAX_FPS);
     }
-    if (pixel_resolution < Constants::MIN_PIXEL_RES ||
-            pixel_resolution > Constants::MAX_PIXEL_RES) {
+    if (pixel_scale < Constants::MIN_PIXEL_RES ||
+            pixel_scale > Constants::MAX_PIXEL_RES) {
         fail = true;
-        Log::error("Config::pixel_resolution {} not within allowed range [{}, {}]", 
-                pixel_resolution, Constants::MIN_PIXEL_RES, Constants::MAX_PIXEL_RES);
+        Log::error("Config::pixel_scale {} not within allowed range [{}, {}]", 
+                pixel_scale, Constants::MIN_PIXEL_RES, Constants::MAX_PIXEL_RES);
     }
     if (algorithm == static_cast<Config::Algorithm>(-1)) {
         fail = true;

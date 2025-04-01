@@ -16,7 +16,7 @@ namespace Constants {
     constexpr double MAX_PIXEL_RES = 8.8e50;                // observable universe diameter (m)
     const char* const ALLOWED_ALGORITHMS[] = { "barnes-hut", "brute-force" };
     constexpr double zoom_factor = 0.9;
-    constexpr sf::Color background_color(15, 15, 15);
+    constexpr sf::Color background_color(0, 0, 0);
     constexpr sf::Color grid_color(75, 75, 75);
 
     static_assert(zoom_factor > 0.0 && zoom_factor < 1.0);
