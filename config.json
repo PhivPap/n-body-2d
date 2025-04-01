@@ -1,12 +1,12 @@
 {
    "IO": {
-        "universe_infile": "../universe-db/universe-unit-test-output.csv",
+        "universe_infile": "../universe-db/solar-system-plus.csv",
         "universe_outfile":  "../universe-db/universe-unit-test-output.csv",
         "echo_config": true,
 	    "echo_bodies": true
     },
     "Simulation": {
-        "timestep": 10,
+        "timestep": 5,
         "iterations": 1e8,
         "algorithm": "barnes-hut"
     },
@@ -15,6 +15,6 @@
         "resolution": [1280, 720],
         "fps": 60,
 	    "vsync": true,
-        "pixel_resolution": 1e8
+        "pixel_scale": 1e8
     }
 }

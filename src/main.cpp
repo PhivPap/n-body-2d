@@ -1,6 +1,7 @@
 #include <thread>
 #include <signal.h>
 #include <utility>
+#include <unistd.h>
 
 #include "SFML/Window.hpp"
 #include "SFML/Graphics.hpp"
@@ -20,7 +21,6 @@
 
 
 volatile bool sim_done = false;
-constexpr double e = 1e39;
 
 double calculate_distance(const sf::Vector2<double> &pos_a, const sf::Vector2<double> &pos_b) {
     const double dx = pos_a.x - pos_b.x;
@@ -29,7 +29,7 @@ double calculate_distance(const sf::Vector2<double> &pos_a, const sf::Vector2<do
 }
 
 double calculate_force(double mass_a, double mass_b, double distance) {
-    return Constants::G * mass_a * mass_b / (distance * distance + e);
+    return Constants::G * mass_a * mass_b / (distance * distance);
 }
 
 // O(n^2) solution
@@ -92,8 +92,13 @@ void handle_events(sf::RenderWindow& window, ViewPort &vp) {
             window.setView(sf::View(area));
         }
         else if (const auto *scrolled = event->getIf<sf::Event::MouseWheelScrolled>()) {
-            vp.zoom(scrolled->delta > 0 ? ViewPort::Zoom::IN : ViewPort::Zoom::OUT, 
-                    sf::Vector2f(sf::Mouse::getPosition(window)));
+            Log::debug("Scroll delta: {}", scrolled->delta);
+            if (scrolled->delta > 0) {
+                vp.zoom(ViewPort::Zoom::IN, sf::Vector2f(sf::Mouse::getPosition(window)));
+            }
+            else if (scrolled->delta < 0) {
+                vp.zoom(ViewPort::Zoom::OUT, sf::Vector2f(sf::Mouse::getPosition(window)));
+            }
         }
         else if (const auto *mouse_clicked = event->getIf<sf::Event::MouseButtonPressed>()) {
             if (mouse_clicked->button == sf::Mouse::Button::Left) {

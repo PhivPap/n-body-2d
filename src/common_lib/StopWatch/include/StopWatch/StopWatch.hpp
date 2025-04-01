@@ -34,7 +34,7 @@ private:
 
     template <uint8_t DECIMALS = 3>
     static double round(double d) {
-        constexpr double ROUNDING_FACTOR = std::pow(10.0, DECIMALS);
+        const double ROUNDING_FACTOR = std::pow(10.0, DECIMALS);
         return std::round(ROUNDING_FACTOR * d) / ROUNDING_FACTOR;
     }
     template <typename TargetDuration, uint8_t DECIMALS, typename Duration>
