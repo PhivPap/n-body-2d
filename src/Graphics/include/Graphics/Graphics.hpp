@@ -5,7 +5,7 @@
 #include "Config/Config.hpp"
 #include "Body/Body.hpp"
 
-class Model {
+class Graphics {
 public:
-    Model(const Config &cfg, std::vector<Body> &bodies);
+    Graphics(const Config &cfg, const std::vector<Body> &bodies);
 };

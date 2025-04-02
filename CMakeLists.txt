@@ -48,8 +48,8 @@ add_subdirectory(${LIB_DIR}/CLArgs)
 add_subdirectory(${LIB_DIR}/StopWatch)
 add_subdirectory(${LIB_DIR}/ViewPort)
 add_subdirectory(${LIB_DIR}/Constants)
-add_subdirectory(${SRC_DIR}/Model)
-add_subdirectory(${SRC_DIR}/View)
+add_subdirectory(${SRC_DIR}/Simulation)
+add_subdirectory(${SRC_DIR}/Graphics)
 add_subdirectory(${SRC_DIR}/Controller)
 
 # Add third-party directories
@@ -63,11 +63,11 @@ add_subdirectory(${THIRD_PARTY_DIR}/argparse)
 add_executable(${PROJECT_NAME} ${SRC_DIR}/main.cpp)
 
 # Link libraries & Set include paths
-target_include_directories(${PROJECT_NAME} PRIVATE ${SRC_DIR}/Model/include)
-target_link_libraries(${PROJECT_NAME} PRIVATE model)
+target_include_directories(${PROJECT_NAME} PRIVATE ${SRC_DIR}/Simulation/include)
+target_link_libraries(${PROJECT_NAME} PRIVATE simulation)
 
-target_include_directories(${PROJECT_NAME} PRIVATE ${SRC_DIR}/View/include)
-target_link_libraries(${PROJECT_NAME} PRIVATE view)
+target_include_directories(${PROJECT_NAME} PRIVATE ${SRC_DIR}/Graphics/include)
+target_link_libraries(${PROJECT_NAME} PRIVATE graphics)
 
 target_include_directories(${PROJECT_NAME} PRIVATE ${SRC_DIR}/Controller/include)
 target_link_libraries(${PROJECT_NAME} PRIVATE controller)

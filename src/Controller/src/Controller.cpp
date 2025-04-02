@@ -1,6 +1,6 @@
 #include "Controller/Controller.hpp"
 
-Controller::Controller(const Config &cfg, Model &model, View &view) {
+Controller::Controller(const Config &cfg, Simulation &sim, Graphics &graphics) {
 
 }
 

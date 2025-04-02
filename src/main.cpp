@@ -15,8 +15,8 @@
 #include "StopWatch/StopWatch.hpp"
 #include "ViewPort/ViewPort.hpp"
 
-#include "Model/Model.hpp"
-#include "View/View.hpp"
+#include "Simulation/Simulation.hpp"
+#include "Graphics/Graphics.hpp"
 #include "Controller/Controller.hpp"
 
 
@@ -92,7 +92,6 @@ void handle_events(sf::RenderWindow& window, ViewPort &vp) {
             window.setView(sf::View(area));
         }
         else if (const auto *scrolled = event->getIf<sf::Event::MouseWheelScrolled>()) {
-            Log::debug("Scroll delta: {}", scrolled->delta);
             if (scrolled->delta > 0) {
                 vp.zoom(ViewPort::Zoom::IN, sf::Vector2f(sf::Mouse::getPosition(window)));
             }
@@ -214,9 +213,9 @@ int main(int argc, const char *argv[]) {
         std::vector<Body> bodies = IO::parse_csv(cfg.universe_infile.string(), cfg.echo_bodies);
         signal(SIGINT, exit_gracefully);
 
-        Model model(std::as_const(cfg), bodies);
-        View view(std::as_const(cfg), std::as_const(bodies));
-        Controller controller(cfg, model, view);
+        Simulation sim(std::as_const(cfg), bodies);
+        Graphics graphics(std::as_const(cfg), std::as_const(bodies));
+        Controller controller(cfg, sim, graphics);
 
         run_sim(cfg, bodies);
         IO::write_csv(cfg.universe_outfile.string(), bodies);
