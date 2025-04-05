@@ -8,6 +8,9 @@ target_include_directories(${PROJECT_NAME} PRIVATE ${CMAKE_CURRENT_LIST_DIR}/inc
 target_include_directories(${PROJECT_NAME} PRIVATE ${LIB_DIR}/Logger/include)
 target_link_libraries(${PROJECT_NAME} PRIVATE logger)
 
+target_include_directories(${PROJECT_NAME} PRIVATE ${LIB_DIR}/Exit/include)
+target_link_libraries(${PROJECT_NAME} PRIVATE exit)
+
 target_include_directories(${PROJECT_NAME} PRIVATE ${LIB_DIR}/Config/include)
 target_link_libraries(${PROJECT_NAME} PRIVATE lib-config)
 

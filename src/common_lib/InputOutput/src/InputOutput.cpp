@@ -49,7 +49,7 @@ std::vector<Body> IO::parse_csv(const fs::path& path, bool echo_bodies) {
         }
     }
     catch (const std::exception &e) {
-        Log::error(e.what());
+        Log::error("{}", e.what());
         throw std::runtime_error("Failed to parse: `" + path.string() + "`");
     }
 
@@ -81,7 +81,7 @@ void IO::write_csv(const fs::path& path, const std::vector<Body> &bodies) {
         }
     }
     catch (const std::exception &e) {
-        Log::error(e.what());
+        Log::error("{}", e.what());
         throw std::runtime_error("Failed to write: `" + path.string() + "`");
     }
     Log::debug("Wrote {} bodies to `{}`: [{}]", bodies.size(), path.c_str(), sw);

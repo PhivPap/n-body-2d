@@ -44,6 +44,7 @@ add_subdirectory(${LIB_DIR}/Config)
 add_subdirectory(${LIB_DIR}/InputOutput)
 add_subdirectory(${LIB_DIR}/Quadtree)
 add_subdirectory(${LIB_DIR}/Body)
+add_subdirectory(${LIB_DIR}/Exit)
 add_subdirectory(${LIB_DIR}/CLArgs)
 add_subdirectory(${LIB_DIR}/StopWatch)
 add_subdirectory(${LIB_DIR}/ViewPort)
@@ -87,6 +88,9 @@ target_link_libraries(${PROJECT_NAME} PRIVATE lib-quadtree)
 
 target_include_directories(${PROJECT_NAME} PRIVATE ${LIB_DIR}/Body/include)
 target_link_libraries(${PROJECT_NAME} PRIVATE body)
+
+target_include_directories(${PROJECT_NAME} PRIVATE ${LIB_DIR}/Exit/include)
+target_link_libraries(${PROJECT_NAME} PRIVATE exit)
 
 target_include_directories(${PROJECT_NAME} PRIVATE ${LIB_DIR}/CLArgs/include)
 target_link_libraries(${PROJECT_NAME} PRIVATE lib-clargs)

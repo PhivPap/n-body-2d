@@ -42,7 +42,7 @@ Config::Config(const fs::path &path) {
         pixel_scale = graphics.at("pixel_scale");
     }
     catch (const std::exception &e) {
-        Log::error(e.what());
+        Log::error("{}", e.what());
         throw std::runtime_error("Failed to parse config: `" + path.string() + "`");
     }
 

@@ -42,7 +42,6 @@ StopWatch StopWatch::operator/(double d) const {
     return res;
 }
 
-
 void StopWatch::resume() {
     if (state == State::RUNNING) {
         Log::warning("StopWatch::resume() called on running StopWatch");

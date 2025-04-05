@@ -5,7 +5,14 @@
 #include "Simulation/Simulation.hpp"
 
 class Controller {
+private:
+    Config &cfg;
+    Simulation &sim;
+    Graphics &graphics;
+
+    void handle_events(sf::RenderWindow &window);
+
 public:
-    Controller(const Config &cfg, Simulation &sim, Graphics &graphics);
+    Controller(Config &cfg, Simulation &sim, Graphics &graphics);
     void run();
 };
