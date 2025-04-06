@@ -3,7 +3,7 @@
         "universe_infile": "../universe-db/solar-system-plus.csv",
         "universe_outfile":  "../universe-db/universe-unit-test-output.csv",
         "echo_config": true,
-	    "echo_bodies": true
+	    "echo_bodies": false
     },
     "Simulation": {
         "timestep": 5,

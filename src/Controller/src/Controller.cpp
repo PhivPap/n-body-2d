@@ -7,17 +7,16 @@
 #include "Exit/Exit.hpp"
 #include "Logger/Logger.hpp"
 
+volatile bool Controller::sigint_flag = false;
 
 Controller::Controller(Config &cfg, Simulation &sim, Graphics &graphics) : 
-        cfg(cfg), sim(sim), graphics(graphics) {
-
-}
+        cfg(cfg), sim(sim), graphics(graphics) {}
 
 void Controller::handle_events(sf::RenderWindow &window) {
     while (const std::optional event = window.pollEvent()) {
         if (event->is<sf::Event::Closed>()) {
-            Log::info("Exit app");
-            exit_app = true;
+            window.close();
+            Log::info("Closed window");
         }
         else if (const auto *resized = event->getIf<sf::Event::Resized>()) {
             graphics.resize_view(sf::Vector2f(resized->size));
@@ -42,11 +41,10 @@ void Controller::run() {
     StopWatch sw;
     sim.start();
     sf::RenderWindow &window = graphics.get_window();
-    while (window.isOpen() && !exit_app) {
+    while (!sim.is_done() && !sigint_flag && window.isOpen()) {
         handle_events(window);
         graphics.draw_frame();
     }
-    window.close();
-    sim.join();
+    sim.stop();
     Log::debug("Sim done: [{}]", sw);
 }
