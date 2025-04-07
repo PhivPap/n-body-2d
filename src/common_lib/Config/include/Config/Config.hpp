@@ -15,7 +15,7 @@ public:
 
     double timestep;
     uint64_t iterations;
-    enum class Algorithm {BARNES_HUT, BRUTE_FORCE};
+    enum class Algorithm {BARNES_HUT, NAIVE};
     Algorithm algorithm;
 
     bool graphics_enabled;

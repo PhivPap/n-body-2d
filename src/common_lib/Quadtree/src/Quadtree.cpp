@@ -43,7 +43,14 @@ Quadtree::Quadtree(const std::vector<Body> &bodies):  boundaries(get_universe_bo
 // subtree constructor
 Quadtree::Quadtree(const sf::Rect<double> &boundaries): boundaries(boundaries), total_mass(0) {}
 
-Quadtree::~Quadtree() {}
+Quadtree::~Quadtree() {
+    if (bodies.size() > 1) {
+        delete top_left;
+        delete top_right;
+        delete bottom_left;
+        delete bottom_right;
+    }
+}
 
 void Quadtree::fill_tree_recursive() {
     if (bodies.size() == 0) {

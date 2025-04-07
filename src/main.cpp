@@ -30,16 +30,27 @@ void sigint_handler(int signum) {
     Controller::sigint_flag = true;
 }
 
+std::unique_ptr<Simulation> create_sim(const Config &cfg, std::vector<Body> &bodies) {
+    if (cfg.algorithm == Config::Algorithm::NAIVE) {
+        return std::make_unique<NaiveSim>(cfg, bodies);
+    }
+    else if (cfg.algorithm == Config::Algorithm::BARNES_HUT) {
+        return std::make_unique<BarnesHutSim>(cfg, bodies);
+    }
+    assert(false);
+    return nullptr;
+}
+
 int main(int argc, const char *argv[]) {
     try {
         const CLArgs clargs(argc, argv);
         Config cfg(clargs.config);
         std::vector<Body> bodies = IO::parse_csv(cfg.universe_infile.string(), cfg.echo_bodies);
-
-        NaiveSim sim(cfg, bodies);
+    
+        std::unique_ptr<Simulation> sim = create_sim(cfg, bodies);
         Graphics graphics(cfg, bodies);
-        Controller controller(cfg, sim, graphics);
-
+        Controller controller(cfg, *sim.get(), graphics);
+    
         signal(SIGINT, sigint_handler);
         
         controller.run();

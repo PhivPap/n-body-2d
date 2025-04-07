@@ -8,10 +8,12 @@
 #include "Body/Body.hpp"
 #include "Constants/Constants.hpp"
 #include "StopWatch/StopWatch.hpp"
+#include "Quadtree/Quadtree.hpp"
 
 
 class Simulation {
 protected:
+    enum class State { STOPPED, RUNNING, PAUSED, TERMINATED } state;
     const Config &cfg;
     std::vector<Body> &bodies;
     volatile bool done = false;
@@ -31,17 +33,33 @@ private:
     void simulate();
     void update_positions();
     void update_velocities();
-    static double euclidean_distance(const sf::Vector2<double> &pos_a, 
-            const sf::Vector2<double> &pos_b);
     static sf::Vector2<double> gravitational_force(const Body &body_a, const Body &body_b);
+    
 public:
     NaiveSim(const Config &cfg, std::vector<Body> &bodies);
+    static double euclidean_distance(const sf::Vector2<double> &pos_a, 
+        const sf::Vector2<double> &pos_b);
     virtual ~NaiveSim();
     virtual void start();
     virtual void pause();
     virtual void stop();
 };
 
-// class BarnesHutSim : public Simulation {
+class BarnesHutSim : public Simulation {
+private:
+    std::thread sim_thread;
+    // Quadtree quadtree;
 
-// };
+    void simulate();
+    void update_positions();
+    void update_velocities(const Quadtree &quadtree);
+    void update_velocity(Body &body, const Quadtree *node);
+    sf::Vector2<double> body_to_quad_force(const Body &body, const Quadtree *node);
+
+public:
+    BarnesHutSim(const Config &cfg, std::vector<Body> &bodies);
+    virtual ~BarnesHutSim();
+    virtual void start();
+    virtual void pause();
+    virtual void stop();
+};

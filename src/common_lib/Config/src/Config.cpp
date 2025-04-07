@@ -73,8 +73,8 @@ std::string Config::enum_to_string(Algorithm algorithm) {
         case Algorithm::BARNES_HUT:
             return "Barnes Hut";
             break;
-        case Algorithm::BRUTE_FORCE:
-            return "Brute force";
+        case Algorithm::NAIVE:
+            return "Naive";
             break;
         default:
             return "Invalid";
