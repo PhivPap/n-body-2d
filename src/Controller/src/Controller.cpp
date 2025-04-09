@@ -4,7 +4,6 @@
 #include <unistd.h>
 #include <string.h>
 
-#include "Exit/Exit.hpp"
 #include "Logger/Logger.hpp"
 
 volatile bool Controller::sigint_flag = false;

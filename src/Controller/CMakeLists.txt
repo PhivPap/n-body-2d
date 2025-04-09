@@ -11,9 +11,6 @@ target_link_libraries(${PROJECT_NAME} PRIVATE simulation)
 target_include_directories(${PROJECT_NAME} PRIVATE ${SRC_DIR}/Graphics/include)
 target_link_libraries(${PROJECT_NAME} PRIVATE graphics)
 
-target_include_directories(${PROJECT_NAME} PRIVATE ${LIB_DIR}/Exit/include)
-target_link_libraries(${PROJECT_NAME} PRIVATE exit)
-
 target_include_directories(${PROJECT_NAME} PRIVATE ${LIB_DIR}/Logger/include)
 target_link_libraries(${PROJECT_NAME} PRIVATE logger)
 

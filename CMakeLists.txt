@@ -42,12 +42,9 @@ set(SFML_BUILD_EXAMPLES OFF CACHE BOOL "Disable SFML examples" FORCE)
 add_subdirectory(${LIB_DIR}/Logger)
 add_subdirectory(${LIB_DIR}/Config)
 add_subdirectory(${LIB_DIR}/InputOutput)
-add_subdirectory(${LIB_DIR}/Quadtree)
 add_subdirectory(${LIB_DIR}/Body)
-add_subdirectory(${LIB_DIR}/Exit)
 add_subdirectory(${LIB_DIR}/CLArgs)
 add_subdirectory(${LIB_DIR}/StopWatch)
-add_subdirectory(${LIB_DIR}/ViewPort)
 add_subdirectory(${LIB_DIR}/Constants)
 add_subdirectory(${SRC_DIR}/Simulation)
 add_subdirectory(${SRC_DIR}/Graphics)
@@ -73,7 +70,6 @@ target_link_libraries(${PROJECT_NAME} PRIVATE graphics)
 target_include_directories(${PROJECT_NAME} PRIVATE ${SRC_DIR}/Controller/include)
 target_link_libraries(${PROJECT_NAME} PRIVATE controller)
 
-
 target_include_directories(${PROJECT_NAME} PRIVATE ${LIB_DIR}/Logger/include)
 target_link_libraries(${PROJECT_NAME} PRIVATE logger)
 
@@ -83,23 +79,14 @@ target_link_libraries(${PROJECT_NAME} PRIVATE lib-input-output)
 target_include_directories(${PROJECT_NAME} PRIVATE ${LIB_DIR}/Config/include)
 target_link_libraries(${PROJECT_NAME} PRIVATE lib-config)
 
-target_include_directories(${PROJECT_NAME} PRIVATE ${LIB_DIR}/Quadtree/include)
-target_link_libraries(${PROJECT_NAME} PRIVATE lib-quadtree)
-
 target_include_directories(${PROJECT_NAME} PRIVATE ${LIB_DIR}/Body/include)
 target_link_libraries(${PROJECT_NAME} PRIVATE body)
-
-target_include_directories(${PROJECT_NAME} PRIVATE ${LIB_DIR}/Exit/include)
-target_link_libraries(${PROJECT_NAME} PRIVATE exit)
 
 target_include_directories(${PROJECT_NAME} PRIVATE ${LIB_DIR}/CLArgs/include)
 target_link_libraries(${PROJECT_NAME} PRIVATE lib-clargs)
 
 target_include_directories(${PROJECT_NAME} PRIVATE ${LIB_DIR}/StopWatch/include)
 target_link_libraries(${PROJECT_NAME} PRIVATE lib-stopwatch)
-
-target_include_directories(${PROJECT_NAME} PRIVATE ${LIB_DIR}/ViewPort/include)
-target_link_libraries(${PROJECT_NAME} PRIVATE lib-viewport)
 
 target_include_directories(${PROJECT_NAME} PRIVATE ${LIB_DIR}/Constants/include)
 target_link_libraries(${PROJECT_NAME} PRIVATE constants)

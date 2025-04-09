@@ -1,5 +1,10 @@
 project(graphics)
 
+set(LOCAL_LIB_DIR "${CMAKE_CURRENT_SOURCE_DIR}/lib")
+
+# Add local lib directories
+add_subdirectory(${LOCAL_LIB_DIR}/ViewPort)
+
 # Add library
 add_library(${PROJECT_NAME} ${CMAKE_CURRENT_LIST_DIR}/src/Graphics.cpp)
 target_include_directories(${PROJECT_NAME} PRIVATE ${CMAKE_CURRENT_LIST_DIR}/include)
@@ -20,7 +25,7 @@ target_link_libraries(${PROJECT_NAME} PRIVATE lib-stopwatch)
 target_include_directories(${PROJECT_NAME} PRIVATE ${LIB_DIR}/Constants/include)
 target_link_libraries(${PROJECT_NAME} PRIVATE constants)
 
-target_include_directories(${PROJECT_NAME} PUBLIC ${LIB_DIR}/ViewPort/include)
+target_include_directories(${PROJECT_NAME} PUBLIC ${LOCAL_LIB_DIR}/ViewPort/include)
 target_link_libraries(${PROJECT_NAME} PRIVATE lib-viewport)
 
 target_include_directories(${PROJECT_NAME} PRIVATE ${THIRD_PARTY_DIR}/SMFL/include)

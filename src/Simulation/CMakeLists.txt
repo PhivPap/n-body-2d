@@ -1,5 +1,10 @@
 project(simulation)
 
+set(LOCAL_LIB_DIR "${CMAKE_CURRENT_SOURCE_DIR}/lib")
+
+# Add local lib directories
+add_subdirectory(${LOCAL_LIB_DIR}/Quadtree)
+
 # Add library
 add_library(${PROJECT_NAME} ${CMAKE_CURRENT_LIST_DIR}/src/Simulation.cpp)
 target_include_directories(${PROJECT_NAME} PRIVATE ${CMAKE_CURRENT_LIST_DIR}/include)
@@ -8,16 +13,13 @@ target_include_directories(${PROJECT_NAME} PRIVATE ${CMAKE_CURRENT_LIST_DIR}/inc
 target_include_directories(${PROJECT_NAME} PRIVATE ${LIB_DIR}/Logger/include)
 target_link_libraries(${PROJECT_NAME} PRIVATE logger)
 
-target_include_directories(${PROJECT_NAME} PRIVATE ${LIB_DIR}/Exit/include)
-target_link_libraries(${PROJECT_NAME} PRIVATE exit)
-
 target_include_directories(${PROJECT_NAME} PRIVATE ${LIB_DIR}/Config/include)
 target_link_libraries(${PROJECT_NAME} PRIVATE lib-config)
 
 target_include_directories(${PROJECT_NAME} PRIVATE ${LIB_DIR}/Body/include)
 target_link_libraries(${PROJECT_NAME} PRIVATE body)
 
-target_include_directories(${PROJECT_NAME} PUBLIC ${LIB_DIR}/Quadtree/include)
+target_include_directories(${PROJECT_NAME} PUBLIC ${LOCAL_LIB_DIR}/Quadtree/include)
 target_link_libraries(${PROJECT_NAME} PRIVATE lib-quadtree)
 
 target_include_directories(${PROJECT_NAME} PRIVATE ${LIB_DIR}/StopWatch/include)
