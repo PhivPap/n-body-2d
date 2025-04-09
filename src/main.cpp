@@ -3,30 +3,22 @@
 #include <utility>
 #include <unistd.h>
 
-#include "SFML/Window.hpp"
-#include "SFML/Graphics.hpp"
-
 #include "Config/Config.hpp"
 #include "InputOutput/InputOutput.hpp"
 #include "Logger/Logger.hpp"
-#include "Constants/Constants.hpp"
 #include "Body/Body.hpp"
 #include "CLArgs/CLArgs.hpp"
-#include "StopWatch/StopWatch.hpp"
-#include "ViewPort/ViewPort.hpp"
-#include "Exit/Exit.hpp"
-
 #include "Simulation/Simulation.hpp"
 #include "Graphics/Graphics.hpp"
 #include "Controller/Controller.hpp"
 
-#define IGNORED_UNUSED_VALUE(expr) if (expr) {}
+#define IGNORE_UNUSED_VALUE(expr) if (expr) {}
 
 // Signal handler can only use signal-safe code
 void sigint_handler(int signum) {
     assert(signum == SIGINT);
     constexpr std::string_view txt1 = "\nInterrupted (SIGINT)\n";
-    IGNORED_UNUSED_VALUE(write(STDERR_FILENO, txt1.data(), txt1.size()));
+    IGNORE_UNUSED_VALUE(write(STDERR_FILENO, txt1.data(), txt1.size()));
     Controller::sigint_flag = true;
 }
 

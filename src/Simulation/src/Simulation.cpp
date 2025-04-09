@@ -1,50 +1,90 @@
 #include "Simulation/Simulation.hpp"
 
-#include "Exit/Exit.hpp"
 #include "Logger/Logger.hpp"
-#include "Quadtree/Quadtree.hpp"
+#include "Constants/Constants.hpp"
 
 
 Simulation::Simulation(const Config &cfg, std::vector<Body> &bodies) : 
-        cfg(cfg), bodies(bodies) {}
+        cfg(cfg), bodies(bodies), sim_thread(&Simulation::simulate, this) {}
 
-Simulation::~Simulation() {}
+Simulation::~Simulation() {
+    if (state != State::TERMINATED) {
+        terminate();
+    }
+    sim_thread.join();
+}
 
-bool Simulation::is_done() {
-    return done;
+void Simulation::simulate() {
+    std::unique_lock<std::mutex> state_lock(state_mtx, std::defer_lock);
+    uint64_t i;
+    for (i = 0; i < cfg.iterations; i++) {
+        state_lock.lock();
+        state_cv.wait(state_lock, [&]() {return state != State::PAUSED;});
+        state_lock.unlock();
+        if (state == State::TERMINATED) {
+            Log::info("Sim terminated");
+            break;
+        }
+        iteration();
+    }
+    sw.pause();
+    state_lock.lock();
+    if (state != State::TERMINATED) {
+        Log::info("Sim complete");
+        state = State::TERMINATED;
+    }
+    state_lock.unlock();
+    Log::debug("Iterations: {}/{}", i, cfg.iterations);
+    Log::debug("Iterations per second: {}", i / sw.elapsed());
+}
+
+void Simulation::run() {
+    {
+        std::lock_guard state_lock(state_mtx);
+        if (state != State::PAUSED) {
+            Log::warning("Cannot start run, it's not paused");
+            return;
+        }
+        state = State::RUNNING;
+        sw.resume();
+    }
+    state_cv.notify_one();
+    Log::info("Sim running");
+}
+
+void Simulation::pause() {
+    {
+        std::lock_guard state_lock(state_mtx);
+        if (state != State::RUNNING) {
+            Log::warning("Cannot pause simulation, it's not running");
+            return;
+        }
+        state = State::PAUSED;
+        sw.pause();
+    }
+    Log::info("Sim paused");
+}
+
+void Simulation::terminate() {
+    {
+        std::lock_guard state_lock(state_mtx);
+        state = State::TERMINATED;
+    }
+    state_cv.notify_one();
+}
+
+bool Simulation::done() {
+    return state == State::TERMINATED;
 }
 
 NaiveSim::NaiveSim(const Config &cfg, std::vector<Body> &bodies) : 
         Simulation(cfg, bodies) {}
 
-NaiveSim::~NaiveSim() {
-    done = true;
-    sim_thread.join();
-}
+NaiveSim::~NaiveSim() {}
 
-void NaiveSim::start() {
-    sim_thread = std::thread(&NaiveSim::simulate, this);
-}
-
-void NaiveSim::pause() {
-    Log::warning("Unimplemented");
-}
-
-void NaiveSim::stop() {
-    done = true;
-    sim_thread.join();
-}
-
-void NaiveSim::simulate() {
-    StopWatch sw;
-    uint64_t i;
-    for (i = 0; (i < cfg.iterations) && !done; i++) {
-        update_positions();
-        update_velocities();
-    }
-    done = true;
-    Log::debug("Iterations: {}/{}", i, cfg.iterations);
-    Log::debug("Iterations per second: {}", i / sw.elapsed());
+void NaiveSim::iteration() {
+    update_positions();
+    update_velocities();
 }
 
 void NaiveSim::update_positions() {
@@ -87,38 +127,23 @@ sf::Vector2<double> NaiveSim::gravitational_force(const Body &body_a, const Body
     };
 }
 
-BarnesHutSim::BarnesHutSim(const Config &cfg, std::vector<Body> &bodies) : Simulation(cfg, bodies) {}
+BarnesHutSim::BarnesHutSim(const Config &cfg, std::vector<Body> &bodies) : Simulation(cfg, bodies)
+{}
 
 BarnesHutSim::~BarnesHutSim() {}
 
-void BarnesHutSim::start() {
-    sim_thread = std::thread(&BarnesHutSim::simulate, this);
-}
-
-void BarnesHutSim::pause() {
-    Log::warning("Unimplemented");
-}
-
-void BarnesHutSim::stop() {
-    done = true;
-    sim_thread.join();
-}
-
-void BarnesHutSim::simulate() {
-    StopWatch sw;
-    uint64_t i;
-    for (i = 0; i < cfg.iterations && !done; i++) {
-        Quadtree quadtree(bodies);
-        update_velocities(quadtree);
-        update_positions();
-    }
-    done = true;
-    Log::debug("Iterations: {}/{}", i, cfg.iterations);
-    Log::debug("Iterations per second: {}", i / sw.elapsed());
+void BarnesHutSim::iteration() {
+    Quadtree quadtree(bodies);
+    update_velocities(quadtree);
+    update_positions();
 }
 
 void BarnesHutSim::update_positions() {
-    for (Body &body : bodies) {
+    Body* _bodies = bodies.data();
+    const uint32_t total_bodies = bodies.size();
+
+    for (uint32_t i = 0; i < total_bodies; i++) {
+        Body &body = _bodies[i];
         body.pos += body.vel * cfg.timestep;
     }
 }
@@ -147,7 +172,6 @@ void BarnesHutSim::update_velocity(Body &body, const Quadtree *node) {
         update_velocity(body, node->bottom_right);
     }
 }
-
 
 sf::Vector2<double> BarnesHutSim::body_to_quad_force(const Body &body, const Quadtree *node) {
     const double distance = NaiveSim::euclidean_distance(body.pos, node->center_of_mass);

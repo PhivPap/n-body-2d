@@ -39,12 +39,12 @@ void Controller::handle_events(sf::RenderWindow &window) {
 
 void Controller::run() {
     StopWatch sw;
-    sim.start();
+    sim.run();
     sf::RenderWindow &window = graphics.get_window();
-    while (!sim.is_done() && !sigint_flag && window.isOpen()) {
+    while (!sim.done() && !sigint_flag && window.isOpen()) {
         handle_events(window);
         graphics.draw_frame();
     }
-    sim.stop();
+    sim.terminate();
     Log::debug("Sim done: [{}]", sw);
 }

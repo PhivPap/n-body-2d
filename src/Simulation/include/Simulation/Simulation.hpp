@@ -2,64 +2,62 @@
 
 #include <vector>
 #include <thread>
-
+#include <mutex>
+#include <condition_variable>
 
 #include "Config/Config.hpp"
 #include "Body/Body.hpp"
-#include "Constants/Constants.hpp"
 #include "StopWatch/StopWatch.hpp"
 #include "Quadtree/Quadtree.hpp"
 
 
 class Simulation {
+private:
+    enum class State : uint8_t { PAUSED, RUNNING, TERMINATED };
+    State state {State::PAUSED};
+    StopWatch sw {StopWatch::State::PAUSED};
+    std::thread sim_thread;
+    std::mutex state_mtx;
+    std::condition_variable state_cv;
+
+    void simulate();
 protected:
-    enum class State { STOPPED, RUNNING, PAUSED, TERMINATED } state;
     const Config &cfg;
     std::vector<Body> &bodies;
-    volatile bool done = false;
+
+    virtual void iteration() = 0;
 public:
     Simulation(const Config &cfg, std::vector<Body> &bodies);
     virtual ~Simulation();
-    bool is_done();
-    virtual void start() = 0;
-    virtual void pause() = 0;
-    virtual void stop() = 0;
+    void run();
+    void pause();
+    void terminate();
+    bool done();
 };
 
 class NaiveSim : public Simulation {
 private:
-    std::thread sim_thread;
-
-    void simulate();
     void update_positions();
     void update_velocities();
     static sf::Vector2<double> gravitational_force(const Body &body_a, const Body &body_b);
+    virtual void iteration();
     
 public:
     NaiveSim(const Config &cfg, std::vector<Body> &bodies);
+    virtual ~NaiveSim();
     static double euclidean_distance(const sf::Vector2<double> &pos_a, 
         const sf::Vector2<double> &pos_b);
-    virtual ~NaiveSim();
-    virtual void start();
-    virtual void pause();
-    virtual void stop();
 };
 
 class BarnesHutSim : public Simulation {
 private:
-    std::thread sim_thread;
-    // Quadtree quadtree;
-
-    void simulate();
     void update_positions();
     void update_velocities(const Quadtree &quadtree);
     void update_velocity(Body &body, const Quadtree *node);
     sf::Vector2<double> body_to_quad_force(const Body &body, const Quadtree *node);
+    virtual void iteration();
 
 public:
     BarnesHutSim(const Config &cfg, std::vector<Body> &bodies);
     virtual ~BarnesHutSim();
-    virtual void start();
-    virtual void pause();
-    virtual void stop();
 };
