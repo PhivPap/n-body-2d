@@ -49,7 +49,7 @@ CLArgs::CLArgs(int argc, const char *argv[]) {
         config = parse_config_path(argparser);
     } 
     catch (const std::exception &e) {
-        Log::error(e.what());
+        Log::error("{}", e.what());
         std::cout << argparser << std::endl;
         throw std::runtime_error("Command line argument parsing failed");
     }
