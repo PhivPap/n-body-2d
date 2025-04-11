@@ -13,7 +13,7 @@
 
 class Simulation {
 private:
-    enum class State : uint8_t { PAUSED, RUNNING, TERMINATED };
+    enum class State : uint8_t { PAUSED, RUNNING, COMPLETED, TERMINATED };
     State state {State::PAUSED};
     StopWatch sw {StopWatch::State::PAUSED};
     std::thread sim_thread;
@@ -32,7 +32,7 @@ public:
     void run();
     void pause();
     void terminate();
-    bool done();
+    bool completed();
 };
 
 class NaiveSim : public Simulation {

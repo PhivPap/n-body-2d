@@ -8,11 +8,8 @@ Simulation::Simulation(const Config &cfg, std::vector<Body> &bodies) :
         cfg(cfg), bodies(bodies), sim_thread(&Simulation::simulate, this) {}
 
 Simulation::~Simulation() {
-    if (state != State::TERMINATED) {
         terminate();
     }
-    sim_thread.join();
-}
 
 void Simulation::simulate() {
     std::unique_lock<std::mutex> state_lock(state_mtx, std::defer_lock);
@@ -30,8 +27,8 @@ void Simulation::simulate() {
     sw.pause();
     state_lock.lock();
     if (state != State::TERMINATED) {
-        Log::info("Sim complete");
-        state = State::TERMINATED;
+        Log::info("Sim completed");
+        state = State::COMPLETED;
     }
     state_lock.unlock();
     Log::debug("Iterations: {}/{}", i, cfg.iterations);
@@ -68,19 +65,25 @@ void Simulation::pause() {
 void Simulation::terminate() {
     {
         std::lock_guard state_lock(state_mtx);
+        if (state == State::TERMINATED) {
+            return;
+        }
         state = State::TERMINATED;
     }
     state_cv.notify_one();
+    sim_thread.join();
 }
 
-bool Simulation::done() {
-    return state == State::TERMINATED;
+bool Simulation::completed() {
+    return state == State::COMPLETED;
 }
 
 NaiveSim::NaiveSim(const Config &cfg, std::vector<Body> &bodies) : 
         Simulation(cfg, bodies) {}
 
-NaiveSim::~NaiveSim() {}
+NaiveSim::~NaiveSim() {
+    terminate();
+}
 
 void NaiveSim::iteration() {
     update_positions();
@@ -130,7 +133,9 @@ sf::Vector2<double> NaiveSim::gravitational_force(const Body &body_a, const Body
 BarnesHutSim::BarnesHutSim(const Config &cfg, std::vector<Body> &bodies) : Simulation(cfg, bodies)
 {}
 
-BarnesHutSim::~BarnesHutSim() {}
+BarnesHutSim::~BarnesHutSim() {
+    terminate();
+}
 
 void BarnesHutSim::iteration() {
     Quadtree quadtree(bodies);
