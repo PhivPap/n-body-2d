@@ -8,7 +8,8 @@
     "Simulation": {
         "timestep": 5,
         "iterations": 1e8,
-        "algorithm": "barnes-hut"
+        "algorithm": "barnes-hut",
+        "threads": 4
     },
     "Graphics": {
         "enabled": true,

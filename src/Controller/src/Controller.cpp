@@ -40,7 +40,11 @@ void Controller::run() {
     StopWatch sw;
     sim.run();
     sf::RenderWindow &window = graphics.get_window();
-    while (!sim.completed() && !sigint_flag && window.isOpen()) {
+    while (!sim.completed()) {
+        if (sigint_flag || !window.isOpen()) {
+            sim.terminate();
+            break;
+        }
         handle_events(window);
         graphics.draw_frame();
     }

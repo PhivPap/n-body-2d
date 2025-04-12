@@ -4,6 +4,7 @@
 #include <thread>
 #include <mutex>
 #include <condition_variable>
+#include <barrier>
 
 #include "Config/Config.hpp"
 #include "Body/Body.hpp"
@@ -51,8 +52,17 @@ public:
 
 class BarnesHutSim : public Simulation {
 private:
-    void update_positions();
-    void update_velocities(const Quadtree &quadtree);
+    std::unique_ptr<Quadtree> quadtree = nullptr;
+    std::vector<std::jthread> workers;
+    const uint64_t worker_chunk;
+    const uint64_t master_offset;
+    std::barrier<> sync_point;
+    volatile bool worker_quit = false;
+
+
+    void worker_task(uint32_t worker_id);
+    void update_positions(uint64_t begin_idx, uint64_t end_idx);
+    void update_velocities(uint64_t begin_idx, uint64_t end_idx);
     void update_velocity(Body &body, const Quadtree *node);
     sf::Vector2<double> body_to_quad_force(const Body &body, const Quadtree *node);
     virtual void iteration();

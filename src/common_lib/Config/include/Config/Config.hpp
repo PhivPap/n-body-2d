@@ -17,6 +17,7 @@ public:
     uint64_t iterations;
     enum class Algorithm {BARNES_HUT, NAIVE};
     Algorithm algorithm;
+    uint32_t threads;
 
     bool graphics_enabled;
     sf::Vector2<uint32_t> resolution;

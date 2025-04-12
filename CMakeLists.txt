@@ -4,28 +4,24 @@ cmake_minimum_required(VERSION 3.14)
 project(n-body-2d)
 
 # Set the C++ standard
-set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_BUILD_TYPE Release)
+
+# g++/clang++ optimization flags
+include(CheckIPOSupported)
+check_ipo_supported(RESULT ipo_supported OUTPUT ipo_output)
+if(ipo_supported)
+    set(CMAKE_CXX_FLAGS "-O3 -flto -march=native -ffast-math")
+    set(CMAKE_INTERPROCEDURAL_OPTIMIZATION TRUE)
+else()
+    set(CMAKE_CXX_FLAGS "-O3 -march=native -ffast-math")
+    message(WARNING "LTO is not supported: ${ipo_output}")
+endif()
 
 # Warn debug builds may fail
 if(CMAKE_BUILD_TYPE STREQUAL "Debug")
-    message(WARNING "Debug builds break from csv lib")
-endif()
-
-# Optimization vs debug symbols option
-option(OPT "Enable max optimization" OFF)
-if (OPT) 
-    set(CMAKE_BUILD_TYPE Release)
-    set(CMAKE_CXX_FLAGS "-O3")
-    include(CheckIPOSupported)
-    check_ipo_supported(RESULT ipo_supported OUTPUT ipo_output)
-    if(ipo_supported)
-        set(CMAKE_INTERPROCEDURAL_OPTIMIZATION TRUE)
-    else()
-        message(WARNING "LTO is not supported: ${ipo_output}")
-    endif()
-else ()
-    set(CMAKE_CXX_FLAGS "-g")
+    message(WARNING "Debug builds may break csv lib")
 endif()
 
 # Project folders
@@ -46,6 +42,7 @@ add_subdirectory(${LIB_DIR}/Body)
 add_subdirectory(${LIB_DIR}/CLArgs)
 add_subdirectory(${LIB_DIR}/StopWatch)
 add_subdirectory(${LIB_DIR}/Constants)
+
 add_subdirectory(${SRC_DIR}/Simulation)
 add_subdirectory(${SRC_DIR}/Graphics)
 add_subdirectory(${SRC_DIR}/Controller)

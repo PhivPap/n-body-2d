@@ -30,6 +30,7 @@ Config::Config(const fs::path &path) {
         timestep = sim.at("timestep");
         iterations = sim.at("iterations");
         algorithm = string_to_enum(sim.at("algorithm"));
+        threads = sim.at("threads");
 
         const auto graphics = json_cfg.at("Graphics");
         graphics_enabled = graphics.at("enabled");
@@ -90,6 +91,7 @@ void Config::print() {
     fmt::println("  timestep:         {}", timestep);
     fmt::println("  iterations:       {}", iterations);
     fmt::println("  algorithm:        `{}`", enum_to_string(algorithm));
+    fmt::println("  threads:          {}", threads);
     fmt::println("  graphics_enabled: {}", graphics_enabled);
     fmt::println("  resolution:       {}x{}", resolution.x, resolution.y);
     fmt::println("  vsync:            {}", vsync_enabled);
@@ -163,6 +165,10 @@ bool Config::validate() {
         fail = true;
         Log::error("Config::algorithm must be one of allowed values [{}, {}]",
                 Constants::ALLOWED_ALGORITHMS[0], Constants::ALLOWED_ALGORITHMS[1]);
+    }
+    if (threads == 0) {
+        fail = true;
+        Log::error("Config::threads {} must be >= 0", threads);
     }
     try {
         universe_infile = resolve_infile_path(universe_infile);

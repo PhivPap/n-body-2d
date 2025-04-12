@@ -8,8 +8,8 @@ Simulation::Simulation(const Config &cfg, std::vector<Body> &bodies) :
         cfg(cfg), bodies(bodies), sim_thread(&Simulation::simulate, this) {}
 
 Simulation::~Simulation() {
-        terminate();
-    }
+    terminate();
+}
 
 void Simulation::simulate() {
     std::unique_lock<std::mutex> state_lock(state_mtx, std::defer_lock);
@@ -24,8 +24,8 @@ void Simulation::simulate() {
         }
         iteration();
     }
-    sw.pause();
     state_lock.lock();
+    sw.pause();
     if (state != State::TERMINATED) {
         Log::info("Sim completed");
         state = State::COMPLETED;
@@ -56,7 +56,7 @@ void Simulation::pause() {
             Log::warning("Cannot pause simulation, it's not running");
             return;
         }
-        state = State::PAUSED;
+        state = State::PAUSED; 
         sw.pause();
     }
     Log::info("Sim paused");
@@ -130,32 +130,62 @@ sf::Vector2<double> NaiveSim::gravitational_force(const Body &body_a, const Body
     };
 }
 
-BarnesHutSim::BarnesHutSim(const Config &cfg, std::vector<Body> &bodies) : Simulation(cfg, bodies)
-{}
+BarnesHutSim::BarnesHutSim(const Config &cfg, std::vector<Body> &bodies) : 
+        Simulation(cfg, bodies), worker_chunk(bodies.size() / cfg.threads), 
+        master_offset(worker_chunk * (cfg.threads - 1)), sync_point(cfg.threads) {
+    assert(cfg.threads > 1);
+    if (cfg.threads > bodies.size()) {
+        Log::warning("Handle this..."); // ...
+        throw std::runtime_error("...");
+    }
+    workers.reserve(cfg.threads - 1);
+    for (uint32_t i = 0; i < cfg.threads - 1; i++) {
+        workers.emplace_back(&BarnesHutSim::worker_task, this, i);
+    }
+}
 
 BarnesHutSim::~BarnesHutSim() {
     terminate();
+    worker_quit = true;
+    sync_point.arrive();
+}
+
+void BarnesHutSim::worker_task(uint32_t worker_id) {
+    const uint64_t begin_idx = worker_id * worker_chunk;
+    const uint64_t end_idx =  begin_idx + worker_chunk;
+    while (true) {
+        sync_point.arrive_and_wait();
+        if (worker_quit) {
+            return;
+        }
+        update_velocities(begin_idx, end_idx);
+        update_positions(begin_idx, end_idx);
+        sync_point.arrive_and_wait();
+    }
 }
 
 void BarnesHutSim::iteration() {
-    Quadtree quadtree(bodies);
-    update_velocities(quadtree);
-    update_positions();
+    quadtree = std::make_unique<Quadtree>(bodies);
+    sync_point.arrive_and_wait();
+    update_velocities(master_offset, bodies.size());
+    update_positions(master_offset, bodies.size());
+    sync_point.arrive_and_wait();
 }
 
-void BarnesHutSim::update_positions() {
+void BarnesHutSim::update_positions(uint64_t begin_idx, uint64_t end_idx) {
     Body* _bodies = bodies.data();
     const uint32_t total_bodies = bodies.size();
 
-    for (uint32_t i = 0; i < total_bodies; i++) {
-        Body &body = _bodies[i];
+    for (uint64_t idx = begin_idx; idx < end_idx; idx++) {
+        Body &body = _bodies[idx];
         body.pos += body.vel * cfg.timestep;
     }
 }
 
-void BarnesHutSim::update_velocities(const Quadtree &quadtree) {
-    for (Body &body : bodies) {
-        update_velocity(body, &quadtree);
+void BarnesHutSim::update_velocities(uint64_t begin_idx, uint64_t end_idx) {
+    const auto _bodies = bodies.data();
+    for (uint64_t idx = begin_idx; idx < end_idx; idx++) {
+        update_velocity(_bodies[idx], quadtree.get());
     }
 }
 
@@ -166,7 +196,6 @@ void BarnesHutSim::update_velocity(Body &body, const Quadtree *node) {
 
     const double distance = NaiveSim::euclidean_distance(body.pos, node->center_of_mass);
     if (node->bodies.size() == 1 || node->boundaries.size.x / distance < Constants::THETA) {
-        const Body *other_body = node->bodies.front();
         const sf::Vector2<double> F = body_to_quad_force(body, node);
         body.vel += F / body.mass * cfg.timestep;
     }
