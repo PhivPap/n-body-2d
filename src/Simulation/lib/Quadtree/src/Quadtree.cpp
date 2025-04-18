@@ -3,6 +3,7 @@
 #include <limits>
 
 #include "Body/Body.hpp"
+#include "Logger/Logger.hpp"
 
 
 sf::Rect<double> get_universe_boundaries(const std::vector<Body> &bodies) {
@@ -30,84 +31,113 @@ sf::Rect<double> get_universe_boundaries(const std::vector<Body> &bodies) {
     return {{min_x, min_y}, {max_x - min_x, max_y - min_y}};
 }
 
-// root constructor
-Quadtree::Quadtree(const std::vector<Body> &bodies):  boundaries(get_universe_boundaries(bodies)), total_mass(0) {
-    // insert bodies into root node
-    for (const Body &body: bodies) {
-        this->bodies.push_back(&body);
-        total_mass += body.mass;
-    }
-    fill_tree_recursive();
+Quad::Quad(sf::Rect<double> &&boundaries) : boundaries(boundaries) {}
+
+bool Quad::is_leaf() const {
+    return top_left_idx == 0;
 }
 
-// subtree constructor
-Quadtree::Quadtree(const sf::Rect<double> &boundaries): boundaries(boundaries), total_mass(0) {}
+Quadtree::Quadtree() {}
 
-Quadtree::~Quadtree() {
-    if (bodies.size() > 1) {
-        delete top_left;
-        delete top_right;
-        delete bottom_left;
-        delete bottom_right;
-    }
-}
+Quadtree::~Quadtree() {}
 
-void Quadtree::fill_tree_recursive() {
-    if (bodies.size() == 0) {
+void Quadtree::fill_tree_recursive(uint32_t quad_idx) {
+    Quad *quad = &quads[quad_idx];
+    if (quad->body_count == 0) {
         return;
     }
-    else if (bodies.size() == 1) {
-        center_of_mass = bodies[0]->pos;
+    else if (quad->body_count == 1) {
+        quad->center_of_mass = quad->bodies.front()->pos;
+        quad->total_mass = quad->bodies.front()->mass;
+        quad->bodies.clear();
         return;
     }
 
     // set boundaries for child nodes
-    const auto center = boundaries.getCenter();
-    const auto top_left_pos = boundaries.position;
-    const auto half_size = boundaries.size / 2.0;
-    top_left = new Quadtree({top_left_pos, half_size});
-    top_right = new Quadtree({{center.x, top_left_pos.y}, half_size});
-    bottom_left = new Quadtree({{top_left_pos.x, center.y}, half_size});
-    bottom_right = new Quadtree({center, half_size});
+    const auto center = quad->boundaries.getCenter();
+    const auto top_left_pos = quad->boundaries.position;
+    const auto half_size = quad->boundaries.size / 2.0;
+    const uint32_t top_left_idx = quads.size();
 
-    // insert bodies positioned within the region
-    for (const Body *body : bodies) {
-        const auto body_coords = body->pos;
-    
-        if (body_coords.x < center.x) {
-            if (body_coords.y < center.y) {
-                top_left->insert(body);
+    quad->top_left_idx = top_left_idx;
+    // Stmts below invalidate quad references by appending to the vector
+    quads.emplace_back(Quad{{top_left_pos, half_size}});
+    quads.emplace_back(Quad{{{center.x, top_left_pos.y}, half_size}});
+    quads.emplace_back(Quad{{{top_left_pos.x, center.y}, half_size}});
+    quads.emplace_back(Quad{{center, half_size}});
+
+    quad = &quads[quad_idx];
+    Quad *top_left = &quads[top_left_idx];
+    Quad *top_right = top_left + 1;
+    Quad *bottom_left = top_left + 2;
+    Quad *bottom_right = top_left + 3;
+
+    auto top_left_head = top_left->bodies.before_begin();
+    auto top_right_head = top_right->bodies.before_begin();
+    auto bottom_left_head = bottom_left->bodies.before_begin();
+    auto bottom_right_head = bottom_right->bodies.before_begin();
+
+    while (!quad->bodies.empty()) {
+        auto &body = quad->bodies.front();
+        if (body->pos.x < center.x) {
+            if (body->pos.y < center.y) {
+                top_left->bodies.splice_after(top_left_head, quad->bodies, quad->bodies.before_begin());
+                top_left->body_count++;
             }
             else {
-                bottom_left->insert(body);
+                bottom_left->bodies.splice_after(bottom_left_head, quad->bodies, quad->bodies.before_begin());
+                bottom_left->body_count++;
             }
         }
         else {
-            if (body_coords.y < center.y) {
-                top_right->insert(body);
+            if (body->pos.y < center.y) {
+                top_right->bodies.splice_after(top_right_head, quad->bodies, quad->bodies.before_begin());
+                top_right->body_count++;
             }
             else {
-                bottom_right->insert(body);
+                bottom_right->bodies.splice_after(bottom_right_head, quad->bodies, quad->bodies.before_begin());
+                bottom_right->body_count++;
             }
         }
     }
 
-    top_left->fill_tree_recursive();
-    top_right->fill_tree_recursive();
-    bottom_left->fill_tree_recursive();
-    bottom_right->fill_tree_recursive();
+    // Stmts below invalidate quad references by appending to the vector
+    fill_tree_recursive(top_left_idx);
+    fill_tree_recursive(top_left_idx + 1);
+    fill_tree_recursive(top_left_idx + 2);
+    fill_tree_recursive(top_left_idx + 3);
 
-    set_center_of_mass();
+    quad = &quads[quad_idx];
+    top_left = &quads[top_left_idx];
+    top_right = top_left + 1;
+    bottom_left = top_left + 2;
+    bottom_right = top_left + 3;
+
+    quad->total_mass = top_left->total_mass + top_right->total_mass +
+            bottom_left->total_mass + bottom_right->total_mass;
+
+    quad->center_of_mass =
+            (top_left->center_of_mass     * top_left->total_mass + 
+            bottom_right->center_of_mass * bottom_right->total_mass +
+            bottom_left->center_of_mass  * bottom_left->total_mass + 
+            top_right->center_of_mass    * top_right->total_mass) 
+            / quad->total_mass;
 }
 
-void Quadtree::insert(const Body *body) {
-    bodies.push_back(body);
-    total_mass += body->mass;
-}
+void Quadtree::build_tree(const std::vector<Body> &bodies) {
+    // After the first tree, we always expect the new one to be similar to the previous.
+    // This will hopefully be enough to avoid resizes during the tree gen.
+    quads.reserve(quads.size() * 1.1);
+    quads.clear();
 
-void Quadtree::set_center_of_mass() {
-    center_of_mass =
-        (top_left->center_of_mass * top_left->total_mass + bottom_right->center_of_mass * bottom_right->total_mass +
-         bottom_left->center_of_mass * bottom_left->total_mass + top_right->center_of_mass * top_right->total_mass) /
-        total_mass;
+    // insert & init root
+    quads.emplace_back(get_universe_boundaries(bodies));
+    Quad& root = quads.back();
+    for (const Body& body : bodies) {
+        root.bodies.push_front(&body);
+        root.total_mass += body.mass;
+    }
+    root.body_count = bodies.size();
+
+    fill_tree_recursive(0);
 }

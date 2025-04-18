@@ -52,19 +52,23 @@ public:
 
 class BarnesHutSim : public Simulation {
 private:
-    std::unique_ptr<Quadtree> quadtree = nullptr;
+    Quadtree qtree;
     std::vector<std::jthread> workers;
     const uint64_t worker_chunk;
     const uint64_t master_offset;
     std::barrier<> sync_point;
     volatile bool worker_quit = false;
 
+    StopWatch sw_tree{StopWatch::State::PAUSED};
+    StopWatch sw_vel{StopWatch::State::PAUSED};
+    StopWatch sw_pos{StopWatch::State::PAUSED};
+
 
     void worker_task(uint32_t worker_id);
     void update_positions(uint64_t begin_idx, uint64_t end_idx);
     void update_velocities(uint64_t begin_idx, uint64_t end_idx);
-    void update_velocity(Body &body, const Quadtree *node);
-    sf::Vector2<double> body_to_quad_force(const Body &body, const Quadtree *node);
+    void update_velocity(Body &body);
+    sf::Vector2<double> body_to_quad_force(const Body &body, const Quad &quad);
     virtual void iteration();
 
 public:

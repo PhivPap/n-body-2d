@@ -1,5 +1,7 @@
 #include "Simulation/Simulation.hpp"
 
+#include <stack>
+
 #include "Logger/Logger.hpp"
 #include "Constants/Constants.hpp"
 
@@ -148,6 +150,11 @@ BarnesHutSim::~BarnesHutSim() {
     terminate();
     worker_quit = true;
     sync_point.arrive();
+
+    StopWatch sw_total = sw_tree + sw_vel + sw_pos;
+    Log::debug("Tree: [{}] ({})", sw_tree, sw_tree / sw_total);
+    Log::debug("Vel:  [{}] ({})", sw_vel, sw_vel / sw_total);
+    Log::debug("Pos:  [{}] ({})", sw_pos, sw_pos / sw_total);
 }
 
 void BarnesHutSim::worker_task(uint32_t worker_id) {
@@ -165,10 +172,20 @@ void BarnesHutSim::worker_task(uint32_t worker_id) {
 }
 
 void BarnesHutSim::iteration() {
-    quadtree = std::make_unique<Quadtree>(bodies);
+    sw_tree.resume();
+    qtree.build_tree(bodies);
+    sw_tree.pause();
+
     sync_point.arrive_and_wait();
+
+    sw_vel.resume();
     update_velocities(master_offset, bodies.size());
+    sw_vel.pause();
+
+    sw_pos.resume();
     update_positions(master_offset, bodies.size());
+    sw_pos.pause();
+
     sync_point.arrive_and_wait();
 }
 
@@ -183,37 +200,51 @@ void BarnesHutSim::update_positions(uint64_t begin_idx, uint64_t end_idx) {
 }
 
 void BarnesHutSim::update_velocities(uint64_t begin_idx, uint64_t end_idx) {
-    const auto _bodies = bodies.data();
     for (uint64_t idx = begin_idx; idx < end_idx; idx++) {
-        update_velocity(_bodies[idx], quadtree.get());
+        update_velocity(bodies[idx]);
     }
 }
 
-void BarnesHutSim::update_velocity(Body &body, const Quadtree *node) {
-    if (node->bodies.empty() || (node->bodies.size() == 1 && node->center_of_mass == body.pos)) {
-        return;
+// iterative DFS
+void BarnesHutSim::update_velocity(Body &body) {
+    std::vector<uint32_t> quad_idx_stack;
+    quad_idx_stack.reserve(2000);
+    quad_idx_stack.push_back(0);
+
+    sf::Vector2<double> F = {0.0, 0.0};
+    
+    while (!quad_idx_stack.empty()) {
+        const Quad &quad = qtree.quads[quad_idx_stack.back()];
+        quad_idx_stack.pop_back();
+        if (quad.is_leaf()) {
+            if (quad.total_mass != 0 && quad.center_of_mass != body.pos) {
+                F += body_to_quad_force(body, quad);
+            }
+        }
+        else {
+            const double distance = NaiveSim::euclidean_distance(body.pos, quad.center_of_mass);
+            if (quad.boundaries.size.x / distance < Constants::THETA) {
+                F += body_to_quad_force(body, quad);
+            }
+            else {
+                quad_idx_stack.push_back(quad.top_left_idx + 3);
+                quad_idx_stack.push_back(quad.top_left_idx + 2);
+                quad_idx_stack.push_back(quad.top_left_idx + 1);
+                quad_idx_stack.push_back(quad.top_left_idx);
+            }
+        }
     }
 
-    const double distance = NaiveSim::euclidean_distance(body.pos, node->center_of_mass);
-    if (node->bodies.size() == 1 || node->boundaries.size.x / distance < Constants::THETA) {
-        const sf::Vector2<double> F = body_to_quad_force(body, node);
-        body.vel += F / body.mass * cfg.timestep;
-    }
-    else {
-        update_velocity(body, node->top_left);
-        update_velocity(body, node->top_right);
-        update_velocity(body, node->bottom_left);
-        update_velocity(body, node->bottom_right);
-    }
+    body.vel += F / body.mass * cfg.timestep;
 }
 
-sf::Vector2<double> BarnesHutSim::body_to_quad_force(const Body &body, const Quadtree *node) {
-    const double distance = NaiveSim::euclidean_distance(body.pos, node->center_of_mass);
-    const double force_amplitude = Constants::G * body.mass * node->total_mass / 
+sf::Vector2<double> BarnesHutSim::body_to_quad_force(const Body &body, const Quad &quad) {
+    const double distance = NaiveSim::euclidean_distance(body.pos, quad.center_of_mass);
+    const double force_amplitude = Constants::G * body.mass * quad.total_mass / 
         (distance * distance + Constants::e);
 
     return {
-        force_amplitude * (node->center_of_mass.x - body.pos.x) / distance,
-        force_amplitude * (node->center_of_mass.y - body.pos.y) / distance
+        force_amplitude * (quad.center_of_mass.x - body.pos.x) / distance,
+        force_amplitude * (quad.center_of_mass.y - body.pos.y) / distance
     };
 }
