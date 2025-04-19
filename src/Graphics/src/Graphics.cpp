@@ -5,9 +5,14 @@
 
 Graphics::Graphics(const Config &cfg, const std::vector<Body> &bodies) :
         bodies(bodies), window(sf::VideoMode(cfg.resolution), "N-Body Sim"), 
-        vp(sf::Vector2f(cfg.resolution), cfg.pixel_scale) {
+        vp(sf::Vector2f(cfg.resolution), cfg.pixel_scale), 
+        body_vertex_array(sf::PrimitiveType::Points, bodies.size()) {
     window.setFramerateLimit(cfg.fps);
     window.setVerticalSyncEnabled(cfg.vsync_enabled);
+
+    for (uint64_t i = 0; i < bodies.size(); i++) {
+        body_vertex_array[i].color = Constants::BODY_COLOR;
+    }
 }
 
 sf::RenderWindow &Graphics::get_window() {
@@ -66,15 +71,11 @@ void Graphics::draw_grid() {
 }
 
 void Graphics::draw_bodies() {
-    sf::CircleShape shape(1.f, 12);
-    shape.setFillColor(Constants::BODY_COLOR);
-    for (const Body& b: bodies) {
-        const auto pos_on_vp = vp.body_on_viewport(b.pos);
-        if (pos_on_vp) {
-            shape.setPosition(static_cast<sf::Vector2f>(*pos_on_vp));
-            window.draw(shape); 
-        }
+    const uint64_t vertex_count = body_vertex_array.getVertexCount();
+    for (uint64_t i = 0; i < vertex_count; i++) {
+        body_vertex_array[i].position = vp.body_on_viewport(bodies[i].pos);
     }
+    window.draw(body_vertex_array);
 }
 
 void Graphics::resize_view(sf::Vector2f new_size) {

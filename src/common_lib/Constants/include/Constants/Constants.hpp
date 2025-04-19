@@ -17,7 +17,7 @@ namespace Constants {
     const char* const ALLOWED_ALGORITHMS[] = { "barnes-hut", "naive" };
     constexpr double ZOOM_FACTOR = 0.9;
     constexpr double GRID_SPACING_FACTOR = 4;
-    constexpr sf::Color BODY_COLOR(255, 255, 255, 180);
+    constexpr sf::Color BODY_COLOR(255, 255, 255, 120);
     constexpr sf::Color BG_COLOR(0, 0, 0);
     constexpr sf::Color GRID_COLOR(255, 255, 255, 64);
     constexpr uint8_t FPS_CALC_BUFFER_LEN = 10;

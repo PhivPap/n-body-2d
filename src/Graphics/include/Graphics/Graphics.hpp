@@ -13,6 +13,7 @@ private:
     RLCaller rl_5_sec {std::chrono::seconds{5}};
     FPSCounter fps_counter;
     const std::vector<Body> &bodies;
+    sf::VertexArray body_vertex_array;
     sf::RenderWindow window;
     ViewPort vp;
     bool grid_enabled = true;
