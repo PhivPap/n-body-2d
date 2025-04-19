@@ -5,9 +5,13 @@
 #include "Config/Config.hpp"
 #include "Body/Body.hpp"
 #include "ViewPort/ViewPort.hpp"
+#include "RLCaller/RLCaller.hpp"
+#include "FPSCounter/FPSCounter.hpp"
 
 class Graphics {
 private:
+    RLCaller rl_5_sec {std::chrono::seconds{5}};
+    FPSCounter fps_counter;
     const std::vector<Body> &bodies;
     sf::RenderWindow window;
     ViewPort vp;

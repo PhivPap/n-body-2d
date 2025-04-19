@@ -123,7 +123,11 @@ void Graphics::draw_frame() {
     window.clear(Constants::BG_COLOR);
     pan_if_view_grabbed();
     if (grid_enabled)
-        draw_grid();
+        draw_grid();    
     draw_bodies();
     window.display();
+    fps_counter.register_frame();
+    rl_5_sec.try_call([&]() {
+        Log::debug("FPS: {}", fps_counter.get_fps());
+    });
 }   

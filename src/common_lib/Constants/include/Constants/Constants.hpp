@@ -20,6 +20,7 @@ namespace Constants {
     constexpr sf::Color BODY_COLOR(255, 255, 255, 180);
     constexpr sf::Color BG_COLOR(0, 0, 0);
     constexpr sf::Color GRID_COLOR(255, 255, 255, 64);
+    constexpr uint8_t FPS_CALC_BUFFER_LEN = 10;
 
     constexpr double e = 1e38;
     constexpr double THETA = 0.5;
