@@ -14,6 +14,7 @@ public:
     uint32_t body_count = 0;
     const sf::Rect<double> boundaries;
     std::forward_list<const Body*> bodies;
+    sf::Vector2<double> momentum;
     sf::Vector2<double> center_of_mass;
     double total_mass = 0;
 

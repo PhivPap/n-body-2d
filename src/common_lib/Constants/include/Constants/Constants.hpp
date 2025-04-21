@@ -20,10 +20,10 @@ namespace Constants {
     constexpr sf::Color BODY_COLOR(255, 255, 255, 120);
     constexpr sf::Color BG_COLOR(0, 0, 0);
     constexpr sf::Color GRID_COLOR(255, 255, 255, 64);
-    constexpr uint8_t FPS_CALC_BUFFER_LEN = 10;
+    constexpr uint8_t FPS_CALC_BUFFER_LEN = 60;
 
-    constexpr double e = 1e38;
-    constexpr double THETA = 0.5;
+    constexpr double SOFTENING_FACTOR = 8;
+    constexpr double THETA = 0.7;
 
     static_assert(ZOOM_FACTOR > 0.0 && ZOOM_FACTOR < 1.0);
     static_assert(GRID_SPACING_FACTOR >= 2.0);

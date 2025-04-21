@@ -5,6 +5,20 @@
 #include "Logger/Logger.hpp"
 #include "Constants/Constants.hpp"
 
+static inline constexpr double distance(const sf::Vector2<double> &pos_a, const sf::Vector2<double> &pos_b) {
+    const sf::Vector2<double> diff = pos_a - pos_b;
+    return std::sqrt(diff.x * diff.x + diff.y * diff.y);
+}
+
+static constexpr double distance_squared(const sf::Vector2<double> &pos_a, const sf::Vector2<double> &pos_b) {
+    const sf::Vector2<double> diff = pos_a - pos_b;
+    return diff.x * diff.x + diff.y * diff.y;
+}
+
+static constexpr double softening_squared(const sf::Vector2<double> &vel_a, const sf::Vector2<double> &vel_b, double timestep) {
+    return Constants::SOFTENING_FACTOR * timestep * timestep * 
+            (vel_a - vel_b).lengthSquared();
+}
 
 Simulation::Simulation(const Config &cfg, std::vector<Body> &bodies) : 
         cfg(cfg), bodies(bodies), sim_thread(&Simulation::simulate, this) {}
@@ -105,7 +119,6 @@ void NaiveSim::update_velocities() {
     for (uint64_t i = 0; i < total_bodies - 1; i++) {
         Body &body_a = _bodies[i];
         sf::Vector2<double> force_sum = {0.0, 0.0};
-        double Fx_sum = 0, Fy_sum = 0;
         for (uint64_t j = i + 1; j < total_bodies; j++) {
             Body &body_b = _bodies[j];
             const sf::Vector2<double> force = gravitational_force(body_a, body_b);
@@ -116,19 +129,15 @@ void NaiveSim::update_velocities() {
     }
 }
 
-double NaiveSim::euclidean_distance(const sf::Vector2<double> &pos_a, 
-        const sf::Vector2<double> &pos_b) {
-    const sf::Vector2<double> diff = pos_a - pos_b;
-    return std::sqrt(diff.x * diff.x + diff.y * diff.y);
-}
-
 sf::Vector2<double> NaiveSim::gravitational_force(const Body &body_a, const Body &body_b) {
-    const double distance = euclidean_distance(body_a.pos, body_b.pos);
+    const double dist = distance(body_a.pos, body_b.pos);
+    const double epsilon_squared = 
+            softening_squared(body_a.vel, body_b.vel, cfg.timestep);
     const double force_amplitude = Constants::G * body_a.mass * body_b.mass / 
-            (distance * distance + Constants::e);
+            (dist * dist + epsilon_squared);
     return {
-        force_amplitude * (body_b.pos.x - body_a.pos.x) / distance,
-        force_amplitude * (body_b.pos.y - body_a.pos.y) / distance
+        force_amplitude * (body_b.pos.x - body_a.pos.x) / dist,
+        force_amplitude * (body_b.pos.y - body_a.pos.y) / dist
     };
 }
 
@@ -222,8 +231,8 @@ void BarnesHutSim::update_velocity(Body &body) {
             }
         }
         else {
-            const double distance = NaiveSim::euclidean_distance(body.pos, quad.center_of_mass);
-            if (quad.boundaries.size.x / distance < Constants::THETA) {
+            const double dist_squared = distance_squared(body.pos, quad.center_of_mass);
+            if (quad.boundaries.size.lengthSquared() / dist_squared < Constants::THETA) {
                 F += body_to_quad_force(body, quad);
             }
             else {
@@ -239,12 +248,14 @@ void BarnesHutSim::update_velocity(Body &body) {
 }
 
 sf::Vector2<double> BarnesHutSim::body_to_quad_force(const Body &body, const Quad &quad) {
-    const double distance = NaiveSim::euclidean_distance(body.pos, quad.center_of_mass);
+    const double dist = distance(body.pos, quad.center_of_mass);
+    const double epsilon_squared = 
+            softening_squared(body.vel, quad.momentum / quad.total_mass, cfg.timestep);
     const double force_amplitude = Constants::G * body.mass * quad.total_mass / 
-        (distance * distance + Constants::e);
+        (dist * dist + epsilon_squared);
 
     return {
-        force_amplitude * (quad.center_of_mass.x - body.pos.x) / distance,
-        force_amplitude * (quad.center_of_mass.y - body.pos.y) / distance
+        force_amplitude * (quad.center_of_mass.x - body.pos.x) / dist,
+        force_amplitude * (quad.center_of_mass.y - body.pos.y) / dist
     };
 }
