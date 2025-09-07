@@ -18,6 +18,7 @@ namespace Constants {
     constexpr double ZOOM_FACTOR = 0.9;
     constexpr double GRID_SPACING_FACTOR = 4;
     constexpr sf::Color BODY_COLOR(255, 255, 255, 120);
+    constexpr uint8_t BODY_PIXEL_DIAMETER = 1;
     constexpr sf::Color BG_COLOR(0, 0, 0);
     constexpr sf::Color GRID_COLOR(255, 255, 255, 64);
     constexpr uint8_t FPS_CALC_BUFFER_LEN = 60;
@@ -27,4 +28,5 @@ namespace Constants {
 
     static_assert(ZOOM_FACTOR > 0.0 && ZOOM_FACTOR < 1.0);
     static_assert(GRID_SPACING_FACTOR >= 2.0);
+    static_assert(BODY_PIXEL_DIAMETER >= 1 && BODY_PIXEL_DIAMETER <= 50);
 }

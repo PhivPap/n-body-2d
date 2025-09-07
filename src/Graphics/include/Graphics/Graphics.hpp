@@ -18,6 +18,7 @@ private:
     ViewPort vp;
     bool grid_enabled = true;
     std::optional<sf::Vector2i> opt_view_grabbed_pos = std::nullopt;
+    sf::Shader body_shader;
 
     void pan_if_view_grabbed();
     void draw_grid();

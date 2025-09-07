@@ -21,7 +21,7 @@ public:
     template <typename F, typename... ArgPack,
             typename Ret = decltype(std::declval<F>()(std::declval<ArgPack>()...)),
             std::enable_if_t<!std::is_void_v<Ret>, bool> = true>
-    auto block_call(F &&func, ArgPack &&...args) -> std::optional<decltype(func(std::forward<ArgPack>(args)...))> {
+    auto block_call(F &&func, ArgPack &&...args) -> decltype(func(std::forward<ArgPack>(args)...)) {
         auto now = std::chrono::high_resolution_clock::now();
         const auto elapsed = now - last_call;
         if (elapsed < min_interval) {
@@ -29,7 +29,7 @@ public:
             now = std::chrono::high_resolution_clock::now();
         }
         last_call = now;
-        return std::invoke(func, args...);
+        return func(args...);
     }
 
     // For void functions
@@ -44,19 +44,18 @@ public:
             now = std::chrono::high_resolution_clock::now();
         }
         last_call = now;
-        std::invoke(func, args...);
+        func(args...);
     }
 
     // For non void functions
     template <typename F, typename... ArgPack,
             typename Ret = decltype(std::declval<F>()(std::declval<ArgPack>()...)),
             std::enable_if_t<!std::is_void_v<Ret>, bool> = true>
-    auto try_call(F&& func, ArgPack&&... args)
-        -> std::optional<Ret> {
+    std::optional<Ret> try_call(F&& func, ArgPack&&... args) {
         const auto now = std::chrono::high_resolution_clock::now();
         if (now - last_call >= min_interval) {
             last_call = now;
-            return {std::invoke(func, args...)};
+            return func(args...);
         }
         return std::nullopt;
     }
@@ -69,7 +68,7 @@ public:
         const auto now = std::chrono::high_resolution_clock::now();
         if (now - last_call >= min_interval) {
             last_call = now;
-            std::invoke(func, args...);
+            func(args...);
             return true;
         }
         return false;
