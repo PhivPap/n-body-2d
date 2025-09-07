@@ -21,99 +21,79 @@ static constexpr double softening_squared(const sf::Vector2<double> &vel_a, cons
 }
 
 Simulation::Simulation(const Config &cfg, std::vector<Body> &bodies) : 
-        cfg(cfg), bodies(bodies), sim_thread(&Simulation::simulate, this) {}
+        cfg(cfg), bodies(bodies), iteration(0) {}
 
-Simulation::~Simulation() {
-    terminate();
-}
+Simulation::~Simulation() {}
 
-void Simulation::simulate() {
-    std::unique_lock<std::mutex> state_lock(state_mtx, std::defer_lock);
-    uint64_t i;
-    for (i = 0; i < cfg.iterations; i++) {
-        state_lock.lock();
-        state_cv.wait(state_lock, [&]() {return state != State::PAUSED;});
-        state_lock.unlock();
-        if (state == State::TERMINATED) {
-            Log::info("Sim terminated");
-            break;
-        }
-        iteration();
-    }
-    state_lock.lock();
-    sw.pause();
-    if (state != State::TERMINATED) {
-        Log::info("Sim completed");
-        state = State::COMPLETED;
-    }
-    state_lock.unlock();
-    Log::debug("Iterations: {}/{}", i, cfg.iterations);
-    Log::debug("Iterations per second: {}", i / sw.elapsed());
+bool Simulation::is_finished() const {
+    return finished;
 }
 
 void Simulation::run() {
-    {
-        std::lock_guard state_lock(state_mtx);
-        if (state != State::PAUSED) {
-            Log::warning("Cannot start run, it's not paused");
-            return;
-        }
-        state = State::RUNNING;
-        sw.resume();
+    std::lock_guard state_lock(state_mtx);
+    if (state != State::PAUSED) {
+        Log::warning("Cannot run simulation, it is not paused");
+        return;
     }
-    state_cv.notify_one();
-    Log::info("Sim running");
+    state = State::RUNNING;
+    on_run();
+    sw.resume();
 }
 
 void Simulation::pause() {
-    {
-        std::lock_guard state_lock(state_mtx);
-        if (state != State::RUNNING) {
-            Log::warning("Cannot pause simulation, it's not running");
-            return;
-        }
-        state = State::PAUSED; 
-        sw.pause();
+    std::lock_guard state_lock(state_mtx);
+    if (state != State::RUNNING) {
+        Log::warning("Cannot pause simulation, it is not running");
+        return;
     }
-    Log::info("Sim paused");
+    state = State::PAUSED;
+    on_pause();
+    sw.pause();
 }
 
-void Simulation::terminate() {
-    {
-        std::lock_guard state_lock(state_mtx);
-        if (state == State::TERMINATED) {
-            return;
-        }
-        state = State::TERMINATED;
+void Simulation::set_finished() {
+    finished = true;
+    Log::info("Simulation finshed");
+}
+
+AllPairsSim::AllPairsSim(const Config &cfg, std::vector<Body> &bodies) : 
+        Simulation(cfg, bodies) {}
+
+AllPairsSim::~AllPairsSim() {
+    if (sim_thread.joinable()) {
+        on_pause();
     }
-    state_cv.notify_one();
+}
+
+void AllPairsSim::on_run() {
+    stop = false;
+    sim_thread = std::thread(&AllPairsSim::simulate, this);
+}
+
+void AllPairsSim::on_pause() {
+    stop = true;
     sim_thread.join();
 }
 
-bool Simulation::completed() {
-    return state == State::COMPLETED;
+void AllPairsSim::simulate() {
+    while (iteration < cfg.iterations) {
+        if (stop) 
+            return;
+        update_positions();
+        update_velocities();
+        iteration++;
+    }
+    set_finished();
 }
 
-NaiveSim::NaiveSim(const Config &cfg, std::vector<Body> &bodies) : 
-        Simulation(cfg, bodies) {}
-
-NaiveSim::~NaiveSim() {
-    terminate();
-}
-
-void NaiveSim::iteration() {
-    update_positions();
-    update_velocities();
-}
-
-void NaiveSim::update_positions() {
+void AllPairsSim::update_positions() {
     for (Body &body : bodies) {
         body.pos += body.vel * cfg.timestep;
     }
 }
 
 // This algorithm only iterates each pair once calculating the forces both ways
-void NaiveSim::update_velocities() {
+void AllPairsSim::update_velocities() {
     Body* _bodies = bodies.data();
     const uint64_t total_bodies = bodies.size();
     for (uint64_t i = 0; i < total_bodies - 1; i++) {
@@ -129,7 +109,7 @@ void NaiveSim::update_velocities() {
     }
 }
 
-sf::Vector2<double> NaiveSim::gravitational_force(const Body &body_a, const Body &body_b) {
+sf::Vector2<double> AllPairsSim::gravitational_force(const Body &body_a, const Body &body_b) {
     const double dist = distance(body_a.pos, body_b.pos);
     const double epsilon_squared = 
             softening_squared(body_a.vel, body_b.vel);
@@ -141,24 +121,22 @@ sf::Vector2<double> NaiveSim::gravitational_force(const Body &body_a, const Body
     };
 }
 
+
 BarnesHutSim::BarnesHutSim(const Config &cfg, std::vector<Body> &bodies) : 
         Simulation(cfg, bodies), worker_chunk(bodies.size() / cfg.threads), 
         master_offset(worker_chunk * (cfg.threads - 1)), sync_point(cfg.threads) {
-    assert(cfg.threads > 1);
-    if (cfg.threads > bodies.size()) {
-        Log::warning("Handle this..."); // ...
-        throw std::runtime_error("...");
-    }
+
+    if (cfg.threads == 0)
+        throw std::runtime_error("Thread count 0 is invalid");
+    if (cfg.threads > bodies.size())
+        throw std::runtime_error("Threads must be less than the number of bodies");
     workers.reserve(cfg.threads - 1);
-    for (uint32_t i = 0; i < cfg.threads - 1; i++) {
-        workers.emplace_back(&BarnesHutSim::worker_task, this, i);
-    }
 }
 
 BarnesHutSim::~BarnesHutSim() {
-    terminate();
-    worker_quit = true;
-    sync_point.arrive();
+    if (master.joinable()) {
+        on_pause();
+    }
 
     StopWatch sw_total = sw_tree + sw_vel + sw_pos;
     Log::debug("Tree: [{}] ({})", sw_tree, sw_tree / sw_total);
@@ -166,36 +144,60 @@ BarnesHutSim::~BarnesHutSim() {
     Log::debug("Pos:  [{}] ({})", sw_pos, sw_pos / sw_total);
 }
 
+void BarnesHutSim::on_run() {
+    stop = false;
+    worker_stop = false;
+    master = std::thread(&BarnesHutSim::simulate, this);
+    for (uint32_t i = 0; i < cfg.threads - 1; i++) {
+        workers.emplace_back(&BarnesHutSim::worker_task, this, i);
+    }
+}
+
+void BarnesHutSim::on_pause() {
+    stop = true;
+    master.join();
+    worker_stop = true;
+    std::ignore = sync_point.arrive();
+    for (auto &worker : workers) {
+        worker.join();
+    }
+    workers.clear();
+}
+
+void BarnesHutSim::simulate() {
+    while (iteration < cfg.iterations) {
+        if (stop) 
+            return;
+        sw_tree.resume();
+        qtree.build_tree(bodies);
+        sw_tree.pause();
+
+        sync_point.arrive_and_wait();
+
+        sw_vel.resume();
+        update_velocities(master_offset, bodies.size());
+        sw_vel.pause();
+
+        sw_pos.resume();
+        update_positions(master_offset, bodies.size());
+        sw_pos.pause();
+
+        sync_point.arrive_and_wait();
+    }
+    set_finished();
+}
+
 void BarnesHutSim::worker_task(uint32_t worker_id) {
     const uint64_t begin_idx = worker_id * worker_chunk;
     const uint64_t end_idx =  begin_idx + worker_chunk;
     while (true) {
         sync_point.arrive_and_wait();
-        if (worker_quit) {
+        if (worker_stop)
             return;
-        }
         update_velocities(begin_idx, end_idx);
         update_positions(begin_idx, end_idx);
         sync_point.arrive_and_wait();
     }
-}
-
-void BarnesHutSim::iteration() {
-    sw_tree.resume();
-    qtree.build_tree(bodies);
-    sw_tree.pause();
-
-    sync_point.arrive_and_wait();
-
-    sw_vel.resume();
-    update_velocities(master_offset, bodies.size());
-    sw_vel.pause();
-
-    sw_pos.resume();
-    update_positions(master_offset, bodies.size());
-    sw_pos.pause();
-
-    sync_point.arrive_and_wait();
 }
 
 void BarnesHutSim::update_positions(uint64_t begin_idx, uint64_t end_idx) {
@@ -253,9 +255,5 @@ sf::Vector2<double> BarnesHutSim::body_to_quad_force(const Body &body, const Qua
             softening_squared(body.vel, quad.momentum / quad.total_mass);
     const double force_amplitude = Constants::G * body.mass * quad.total_mass / 
         (dist * dist + epsilon_squared);
-
-    return {
-        force_amplitude * (quad.center_of_mass.x - body.pos.x) / dist,
-        force_amplitude * (quad.center_of_mass.y - body.pos.y) / dist
-    };
+    return ((quad.center_of_mass - body.pos) / dist) * force_amplitude;
 }

@@ -12,19 +12,17 @@
 #include "Graphics/Graphics.hpp"
 #include "Controller/Controller.hpp"
 
-#define IGNORE_UNUSED_VALUE(expr) if (expr) {}
-
 // Signal handler can only use signal-safe code
 void sigint_handler(int signum) {
     assert(signum == SIGINT);
     constexpr std::string_view txt1 = "\nInterrupted (SIGINT)\n";
-    IGNORE_UNUSED_VALUE(write(STDERR_FILENO, txt1.data(), txt1.size()));
+    std::ignore = write(STDERR_FILENO, txt1.data(), txt1.size());
     Controller::sigint_flag = true;
 }
 
 std::unique_ptr<Simulation> create_sim(const Config &cfg, std::vector<Body> &bodies) {
     if (cfg.algorithm == Config::Algorithm::NAIVE) {
-        return std::make_unique<NaiveSim>(cfg, bodies);
+        return std::make_unique<AllPairsSim>(cfg, bodies);
     }
     else if (cfg.algorithm == Config::Algorithm::BARNES_HUT) {
         return std::make_unique<BarnesHutSim>(cfg, bodies);

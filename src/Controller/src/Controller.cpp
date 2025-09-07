@@ -40,9 +40,9 @@ void Controller::run() {
     StopWatch sw;
     sim.run();
     sf::RenderWindow &window = graphics.get_window();
-    while (!sim.completed()) {
+    while (!sim.is_finished()) {
         if (sigint_flag || !window.isOpen()) {
-            sim.terminate();
+            sim.pause();
             break;
         }
         handle_events(window);
