@@ -15,9 +15,9 @@ static constexpr double distance_squared(const sf::Vector2<double> &pos_a, const
     return diff.x * diff.x + diff.y * diff.y;
 }
 
-static constexpr double softening_squared(const sf::Vector2<double> &vel_a, const sf::Vector2<double> &vel_b, double timestep) {
-    return Constants::SOFTENING_FACTOR * timestep * timestep * 
-            (vel_a - vel_b).lengthSquared();
+static constexpr double softening_squared(const sf::Vector2<double> &vel_a, const sf::Vector2<double> &vel_b) {
+    return Constants::SOFTENING_FACTOR * (vel_a - vel_b).lengthSquared();
+    // return 1e36;
 }
 
 Simulation::Simulation(const Config &cfg, std::vector<Body> &bodies) : 
@@ -132,7 +132,7 @@ void NaiveSim::update_velocities() {
 sf::Vector2<double> NaiveSim::gravitational_force(const Body &body_a, const Body &body_b) {
     const double dist = distance(body_a.pos, body_b.pos);
     const double epsilon_squared = 
-            softening_squared(body_a.vel, body_b.vel, cfg.timestep);
+            softening_squared(body_a.vel, body_b.vel);
     const double force_amplitude = Constants::G * body_a.mass * body_b.mass / 
             (dist * dist + epsilon_squared);
     return {
@@ -250,7 +250,7 @@ void BarnesHutSim::update_velocity(Body &body) {
 sf::Vector2<double> BarnesHutSim::body_to_quad_force(const Body &body, const Quad &quad) {
     const double dist = distance(body.pos, quad.center_of_mass);
     const double epsilon_squared = 
-            softening_squared(body.vel, quad.momentum / quad.total_mass, cfg.timestep);
+            softening_squared(body.vel, quad.momentum / quad.total_mass);
     const double force_amplitude = Constants::G * body.mass * quad.total_mass / 
         (dist * dist + epsilon_squared);
 

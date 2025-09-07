@@ -2,6 +2,7 @@
 
 #include "Logger/Logger.hpp"
 #include "Constants/Constants.hpp"
+#include <GL/gl.h>
 
 Graphics::Graphics(const Config &cfg, const std::vector<Body> &bodies) :
         bodies(bodies), window(sf::VideoMode(cfg.resolution), "N-Body Sim"), 
@@ -10,9 +11,11 @@ Graphics::Graphics(const Config &cfg, const std::vector<Body> &bodies) :
     window.setFramerateLimit(cfg.fps);
     window.setVerticalSyncEnabled(cfg.vsync_enabled);
 
-    for (uint64_t i = 0; i < bodies.size(); i++) {
+    for (uint64_t i = 0; i < body_vertex_array.getVertexCount(); i++) {
         body_vertex_array[i].color = Constants::BODY_COLOR;
     }
+
+    glEnable(GL_PROGRAM_POINT_SIZE);
 }
 
 sf::RenderWindow &Graphics::get_window() {
@@ -71,11 +74,65 @@ void Graphics::draw_grid() {
 }
 
 void Graphics::draw_bodies() {
+
+    // In your rendering code:
+    // sf::RenderStates states;
+    // states.shader = &shader; // Optional if you have a custom shader
+
+    // Set point size in vertex shader:
+    const std::string vertexShader = R"glsl(
+#version 130
+
+void main()
+{
+    gl_Position = gl_ModelViewProjectionMatrix * gl_Vertex;
+    gl_PointSize = 1.0;  // Adjust point size as needed
+    gl_FrontColor = gl_Color;  // Preserves the alpha channel
+}
+    )glsl";
+
+//     // Fragment shader:
+    const std::string fragmentShader = R"glsl(
+#version 130
+
+void main()
+{
+    // vec2 coord = gl_PointCoord - vec2(0.5);
+    // float dist = length(coord);
+    
+    // // Smooth alpha falloff at edges
+    // float alpha = smoothstep(0.5, 0.4, dist) * gl_Color.a;
+    
+    // // Early discard if completely transparent
+    // if (alpha <= 0.0) discard;
+    
+    // // Output color with transparency
+    // gl_FragColor = vec4(gl_Color.rgb, alpha);
+    gl_FragColor = gl_Color;
+}
+    )glsl";
+
+//     const std::string fragmentShader = R"glsl(
+// void main() {
+//     vec2 coord = gl_PointCoord - vec2(0.5);
+//     float distance = length(coord);
+//     float radius = 0.5;
+//     float smoothing = 0.1;
+    
+//     float alpha = 1.0 - smoothstep(radius - smoothing, radius + smoothing, distance);
+//     gl_FragColor = gl_Color * alpha;
+// }
+//     )glsl";
+
+    sf::Shader shader;
+    shader.loadFromMemory(vertexShader, fragmentShader);
+
+
     const uint64_t vertex_count = body_vertex_array.getVertexCount();
-    for (uint64_t i = 0; i < vertex_count; i++) {
+    for (uint64_t i = 0; i < bodies.size(); i++) {
         body_vertex_array[i].position = vp.body_on_viewport(bodies[i].pos);
     }
-    window.draw(body_vertex_array);
+    window.draw(body_vertex_array, sf::RenderStates(&shader));
 }
 
 void Graphics::resize_view(sf::Vector2f new_size) {

@@ -22,7 +22,7 @@ namespace Constants {
     constexpr sf::Color GRID_COLOR(255, 255, 255, 64);
     constexpr uint8_t FPS_CALC_BUFFER_LEN = 60;
 
-    constexpr double SOFTENING_FACTOR = 8;
+    constexpr double SOFTENING_FACTOR = 1e25;
     constexpr double THETA = 0.7;
 
     static_assert(ZOOM_FACTOR > 0.0 && ZOOM_FACTOR < 1.0);
