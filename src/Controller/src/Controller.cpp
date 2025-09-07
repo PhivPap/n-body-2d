@@ -33,6 +33,16 @@ void Controller::handle_events(sf::RenderWindow &window) {
                 graphics.release_view();
             }
         }
+        else if (const auto *key_pressed = event->getIf<sf::Event::KeyPressed>()) {
+            if (key_pressed->scancode == sf::Keyboard::Scan::Escape) {
+                if (sim.get_state() == Simulation::State::PAUSED) {
+                    sim.run();
+                }
+                else {
+                    sim.pause();
+                }
+            }
+        }
     }
 }
 

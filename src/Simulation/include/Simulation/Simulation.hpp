@@ -18,6 +18,7 @@ public:
     Simulation(const Config &cfg, std::vector<Body> &bodies);
     virtual ~Simulation();
 
+    State get_state();
     bool is_finished() const;
     void run();
     void pause();

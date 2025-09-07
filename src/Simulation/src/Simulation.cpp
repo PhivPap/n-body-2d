@@ -25,6 +25,11 @@ Simulation::Simulation(const Config &cfg, std::vector<Body> &bodies) :
 
 Simulation::~Simulation() {}
 
+Simulation::State Simulation::get_state() {
+    std::lock_guard state_lock(state_mtx);
+    return state;
+}
+
 bool Simulation::is_finished() const {
     return finished;
 }
