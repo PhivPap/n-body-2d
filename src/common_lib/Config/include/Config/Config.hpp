@@ -18,6 +18,7 @@ public:
     enum class Algorithm {BARNES_HUT, NAIVE};
     Algorithm algorithm;
     uint16_t threads;
+    float stats_update_hz;
 
     bool graphics_enabled;
     sf::Vector2<uint16_t> resolution;

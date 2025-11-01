@@ -31,6 +31,7 @@ Config::Config(const fs::path &path) {
         iterations = sim.at("iterations");
         algorithm = string_to_enum(sim.at("algorithm"));
         threads = sim.at("threads");
+        stats_update_hz = sim.at("stats_update_hz");
 
         const auto graphics = json_cfg.at("Graphics");
         graphics_enabled = graphics.at("enabled");
@@ -92,6 +93,7 @@ void Config::print() {
     fmt::println("  iterations:       {}", iterations);
     fmt::println("  algorithm:        `{}`", enum_to_string(algorithm));
     fmt::println("  threads:          {}", threads);
+    fmt::println("  stats_update_hz:  {}", stats_update_hz);
     fmt::println("  graphics_enabled: {}", graphics_enabled);
     fmt::println("  resolution:       {}x{}", resolution.x, resolution.y);
     fmt::println("  vsync:            {}", vsync_enabled);
@@ -178,6 +180,11 @@ bool Config::validate() {
         fail = true;
         Log::error("Config::threads {} not within allowed range {}", threads, 
                 fmt_range(Constants::THREADS_RANGE));
+    }
+    if (!in_range(stats_update_hz, Constants::STATS_UPDATE_HZ_RANGE)) {
+        fail = true;
+        Log::error("Config::stats_update_hz {} not within allowed range {}", stats_update_hz,
+                fmt_range(Constants::STATS_UPDATE_HZ_RANGE));
     }
     try {
         universe_infile = resolve_infile_path(universe_infile);

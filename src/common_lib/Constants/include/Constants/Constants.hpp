@@ -15,6 +15,7 @@ namespace Constants {
     constexpr std::pair<double, double> PIXEL_RES_RANGE = {1e-12, 8.8e50};
     const char* const ALLOWED_ALGORITHMS[] = { "barnes-hut", "naive" };
     constexpr std::pair<uint16_t, uint16_t> THREADS_RANGE = {1, 256};
+    constexpr std::pair<float, float> STATS_UPDATE_HZ_RANGE = {0.1f, 1000.0f};
     constexpr double ZOOM_FACTOR = 0.9;
     constexpr double GRID_SPACING_FACTOR = 4;
     constexpr sf::Color BODY_COLOR(255, 255, 255, 120);
