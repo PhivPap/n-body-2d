@@ -6,15 +6,15 @@
 
 namespace Constants {
     constexpr double G = 6.67430e-11;                       // (m^3 * kg^-1 * s^-2)
-    constexpr double MIN_TIMESTEP = 1e-12;                  // picosecond (s)
-    constexpr double MAX_TIMESTEP = 31'556'952'000'000'000; // billion years (s)
-    constexpr uint16_t MAX_WINDOW_WIDTH = 7680;             // 8k width
-    constexpr uint16_t MAX_WINDOW_HEIGHT = 4320;            // 8k height
-    constexpr uint16_t MIN_FPS = 1;
-    constexpr uint16_t MAX_FPS = 512;
-    constexpr double MIN_PIXEL_RES = 1e-12;                 // picometer (m)
-    constexpr double MAX_PIXEL_RES = 8.8e50;                // observable universe diameter (m)
+    // [picosecond (s), billion years (s)]
+    constexpr std::pair<double, double> TIMESTEP_RANGE = {1e-12, 31'556'952'000'000'000};
+    constexpr std::pair<uint16_t, uint16_t> WINDOW_WIDTH_RANGE = {240, 7680};
+    constexpr std::pair<uint16_t, uint16_t> WINDOW_HEIGHT_RANGE = {135, 4320};
+    constexpr std::pair<uint16_t, uint16_t> FPS_RANGE = {1, 512};
+    // [picometer (m), observable universe diameter (m)]
+    constexpr std::pair<double, double> PIXEL_RES_RANGE = {1e-12, 8.8e50};
     const char* const ALLOWED_ALGORITHMS[] = { "barnes-hut", "naive" };
+    constexpr std::pair<uint16_t, uint16_t> THREADS_RANGE = {1, 256};
     constexpr double ZOOM_FACTOR = 0.9;
     constexpr double GRID_SPACING_FACTOR = 4;
     constexpr sf::Color BODY_COLOR(255, 255, 255, 120);

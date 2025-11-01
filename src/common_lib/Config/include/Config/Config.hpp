@@ -17,12 +17,12 @@ public:
     uint64_t iterations;
     enum class Algorithm {BARNES_HUT, NAIVE};
     Algorithm algorithm;
-    uint32_t threads;
+    uint16_t threads;
 
     bool graphics_enabled;
-    sf::Vector2<uint32_t> resolution;
+    sf::Vector2<uint16_t> resolution;
     bool vsync_enabled;
-    uint32_t fps;
+    uint16_t fps;
     double pixel_scale;
 
     Config() = delete;

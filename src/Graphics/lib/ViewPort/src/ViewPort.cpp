@@ -21,7 +21,7 @@ void ViewPort::compute_rect_size() {
 void ViewPort::zoom(Zoom direction, sf::Vector2f cursor_pos) {
     if (direction == Zoom::IN) {
         const double new_pixel_res = pixel_scale * Constants::ZOOM_FACTOR;
-        if (new_pixel_res < Constants::MIN_PIXEL_RES) {
+        if (new_pixel_res < Constants::PIXEL_RES_RANGE.first) {
             Log::warning("Reached max zoom, cannot zoom in");
             return;
         }
@@ -32,7 +32,7 @@ void ViewPort::zoom(Zoom direction, sf::Vector2f cursor_pos) {
     }
     else {
         const double new_pixel_res = pixel_scale / Constants::ZOOM_FACTOR;
-        if (new_pixel_res > Constants::MAX_PIXEL_RES) {
+        if (new_pixel_res > Constants::PIXEL_RES_RANGE.second) {
             Log::warning("Reached min zoom, cannot zoom out");
             return;
         }

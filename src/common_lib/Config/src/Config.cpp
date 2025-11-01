@@ -138,37 +138,46 @@ static fs::path resolve_outfile_path(const fs::path &outfile) {
 }
 
 bool Config::validate() {
+    constexpr auto in_range = []<typename T>(const T& value, const std::pair<T, T>& range) {
+        return value >= range.first && value <= range.second;
+    };
+
+    constexpr auto fmt_range = []<typename T>(const std::pair<T, T>& range) {
+        return fmt::format("[{}, {}]", range.first, range.second);
+    };
+
     bool fail = false;
-    if (timestep < Constants::MIN_TIMESTEP || timestep > Constants::MAX_TIMESTEP) {
+    if (!in_range(timestep, Constants::TIMESTEP_RANGE)) {
         fail = true;
-        Log::error("Config::timestep {} not within allowed range [{}, {}]", timestep, 
-                Constants::MIN_TIMESTEP, Constants::MAX_TIMESTEP);
+        Log::error("Config::timestep {} not within allowed range {}", timestep, 
+                fmt_range(Constants::TIMESTEP_RANGE));
     }
-    if (resolution.x > Constants::MAX_WINDOW_WIDTH || 
-            resolution.y > Constants::MAX_WINDOW_HEIGHT) {
+    if (!in_range(resolution.x, Constants::WINDOW_WIDTH_RANGE) || 
+            !in_range(resolution.y, Constants::WINDOW_HEIGHT_RANGE)) {
         fail = true;
         Log::error("Config::resolution {}x{} not within allowed range {}x{}", resolution.x,
-                resolution.y, Constants::MAX_WINDOW_WIDTH, Constants::MAX_WINDOW_HEIGHT);
+                resolution.y, fmt_range(Constants::WINDOW_WIDTH_RANGE), 
+                fmt_range(Constants::WINDOW_HEIGHT_RANGE));
     }
-    if (fps < Constants::MIN_FPS || fps > Constants::MAX_FPS) {
+    if (!in_range(fps, Constants::FPS_RANGE)) {
         fail = true;
-        Log::error("Config::fps {} not within allowed range [{}, {}]", fps, 
-                Constants::MIN_FPS, Constants::MAX_FPS);
+        Log::error("Config::fps {} not within allowed range {}", fps, 
+                fmt_range(Constants::FPS_RANGE));
     }
-    if (pixel_scale < Constants::MIN_PIXEL_RES ||
-            pixel_scale > Constants::MAX_PIXEL_RES) {
+    if (!in_range(pixel_scale, Constants::PIXEL_RES_RANGE)) {
         fail = true;
-        Log::error("Config::pixel_scale {} not within allowed range [{}, {}]", 
-                pixel_scale, Constants::MIN_PIXEL_RES, Constants::MAX_PIXEL_RES);
+        Log::error("Config::pixel_scale {} not within allowed range {}", pixel_scale, 
+                fmt_range(Constants::PIXEL_RES_RANGE));
     }
     if (algorithm == static_cast<Config::Algorithm>(-1)) {
         fail = true;
         Log::error("Config::algorithm must be one of allowed values [{}, {}]",
                 Constants::ALLOWED_ALGORITHMS[0], Constants::ALLOWED_ALGORITHMS[1]);
     }
-    if (threads == 0) {
+    if (!in_range(threads, Constants::THREADS_RANGE)) {
         fail = true;
-        Log::error("Config::threads {} must be >= 0", threads);
+        Log::error("Config::threads {} not within allowed range {}", threads, 
+                fmt_range(Constants::THREADS_RANGE));
     }
     try {
         universe_infile = resolve_infile_path(universe_infile);

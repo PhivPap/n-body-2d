@@ -28,7 +28,7 @@ void main() {
 )glsl";
 
 Graphics::Graphics(const Config &cfg, const std::vector<Body> &bodies) :
-        bodies(bodies), window(sf::VideoMode(cfg.resolution), "N-Body Sim"), 
+        bodies(bodies), window(sf::VideoMode(sf::Vector2u(cfg.resolution)), "N-Body Sim"), 
         vp(sf::Vector2f(cfg.resolution), cfg.pixel_scale), 
         body_vertex_array(sf::PrimitiveType::Points, bodies.size()) {
     window.setFramerateLimit(cfg.fps);
