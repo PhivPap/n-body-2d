@@ -20,26 +20,26 @@ void ViewPort::compute_rect_size() {
 
 void ViewPort::zoom(Zoom direction, sf::Vector2f cursor_pos) {
     if (direction == Zoom::IN) {
-        const double new_pixel_res = pixel_scale * Constants::ZOOM_FACTOR;
-        if (new_pixel_res < Constants::PIXEL_RES_RANGE.first) {
+        const double new_pixel_res = pixel_scale * Constants::Graphics::ZOOM_FACTOR;
+        if (new_pixel_res < Constants::Graphics::PIXEL_RES_RANGE.first) {
             Log::warning("Reached max zoom, cannot zoom in");
             return;
         }
         pixel_scale = new_pixel_res;
         rect.position += sf::Vector2<double>(cursor_pos.componentWiseDiv(window_res))
-                .componentWiseMul(rect.size) * (1 - Constants::ZOOM_FACTOR);
+                .componentWiseMul(rect.size) * (1 - Constants::Graphics::ZOOM_FACTOR);
         compute_rect_size();
     }
     else {
-        const double new_pixel_res = pixel_scale / Constants::ZOOM_FACTOR;
-        if (new_pixel_res > Constants::PIXEL_RES_RANGE.second) {
+        const double new_pixel_res = pixel_scale / Constants::Graphics::ZOOM_FACTOR;
+        if (new_pixel_res > Constants::Graphics::PIXEL_RES_RANGE.second) {
             Log::warning("Reached min zoom, cannot zoom out");
             return;
         }
         pixel_scale = new_pixel_res;
         compute_rect_size();
         rect.position -= sf::Vector2<double>(cursor_pos.componentWiseDiv(window_res))
-                .componentWiseMul(rect.size) * (1 - Constants::ZOOM_FACTOR);
+                .componentWiseMul(rect.size) * (1 - Constants::Graphics::ZOOM_FACTOR);
     }
 }
 

@@ -24,7 +24,7 @@ private:
     void draw_grid();
     void draw_bodies();
 public:
-    Graphics(const Config &cfg, const std::vector<Body> &bodies);
+    Graphics(const Config::Graphics &graphics_cfg, const std::vector<Body> &bodies);
     sf::RenderWindow &get_window();
     void resize_view(sf::Vector2f new_size);
     void zoom_view(double delta);

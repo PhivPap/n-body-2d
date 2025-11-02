@@ -27,20 +27,21 @@ void main() {
 }
 )glsl";
 
-Graphics::Graphics(const Config &cfg, const std::vector<Body> &bodies) :
-        bodies(bodies), window(sf::VideoMode(sf::Vector2u(cfg.resolution)), "N-Body Sim"), 
-        vp(sf::Vector2f(cfg.resolution), cfg.pixel_scale), 
+Graphics::Graphics(const Config::Graphics &graphics_cfg, const std::vector<Body> &bodies) :
+        bodies(bodies), window(sf::VideoMode(sf::Vector2u(graphics_cfg.resolution)), "N-Body Sim"), 
+        vp(sf::Vector2f(graphics_cfg.resolution), graphics_cfg.pixel_scale), 
         body_vertex_array(sf::PrimitiveType::Points, bodies.size()) {
-    window.setFramerateLimit(cfg.fps);
-    window.setVerticalSyncEnabled(cfg.vsync_enabled);
+    window.setFramerateLimit(graphics_cfg.fps);
+    window.setVerticalSyncEnabled(graphics_cfg.vsync_enabled);
 
     for (uint64_t i = 0; i < body_vertex_array.getVertexCount(); i++) {
-        body_vertex_array[i].color = Constants::BODY_COLOR;
+        body_vertex_array[i].color = Constants::Graphics::BODY_COLOR;
     }
 
     glEnable(GL_PROGRAM_POINT_SIZE);
     body_shader.loadFromMemory(body_vertex_shader, body_fragment_shader);
-    body_shader.setUniform("pointDiameter", static_cast<float>(Constants::BODY_PIXEL_DIAMETER));
+    body_shader.setUniform("pointDiameter", 
+            static_cast<float>(Constants::Graphics::BODY_PIXEL_DIAMETER));
 }
 
 sf::RenderWindow &Graphics::get_window() {
@@ -65,10 +66,10 @@ void Graphics::draw_grid() {
     const sf::Vector2f res = vp.get_window_res();
 
     auto hline = sf::RectangleShape({res.x, 1});
-    hline.setFillColor(Constants::GRID_COLOR);
+    hline.setFillColor(Constants::Graphics::GRID_COLOR);
 
     auto vline = sf::RectangleShape({1, res.y});
-    vline.setFillColor(Constants::GRID_COLOR);
+    vline.setFillColor(Constants::Graphics::GRID_COLOR);
 
     const double min_dim = std::min(rect.size.x, rect.size.y);
 
@@ -76,8 +77,8 @@ void Graphics::draw_grid() {
         return std::log(num) / std::log(base);
     };
 
-    const double spacing = std::pow(Constants::GRID_SPACING_FACTOR, 
-            std::floor(log(min_dim, Constants::GRID_SPACING_FACTOR)) - 1);
+    const double spacing = std::pow(Constants::Graphics::GRID_SPACING_FACTOR, 
+            std::floor(log(min_dim, Constants::Graphics::GRID_SPACING_FACTOR)) - 1);
     
     const double x2 = rect.size.x + rect.position.x;
     double x = ceil(rect.position.x / spacing) * spacing;
@@ -149,7 +150,7 @@ void Graphics::set_grid(bool enabled) {
 }
 
 void Graphics::draw_frame() {
-    window.clear(Constants::BG_COLOR);
+    window.clear(Constants::Graphics::BG_COLOR);
     pan_if_view_grabbed();
     if (grid_enabled)
         draw_grid();    

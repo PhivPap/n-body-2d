@@ -1,21 +1,23 @@
 {
    "IO": {
-        "universe_infile": "../universe-db/solar-system-plus.csv",
+        "universe_infile": "../universe-db/100k-spiral_galaxy.csv",
         "universe_outfile":  "../universe-db/universe-unit-test-output.csv",
         "echo_config": true,
 	    "echo_bodies": false
     },
     "Simulation": {
-        "timestep": 5,
-        "iterations": 1e8,
+        "timestep": 1e12,
+        "iterations": 1e4,
         "algorithm": "barnes-hut",
-        "threads": 4
+        "threads": 19,
+        "stats_update_hz": 5
     },
     "Graphics": {
         "enabled": true,
         "resolution": [1280, 720],
-        "fps": 60,
+        "fps": 100,
 	    "vsync": true,
-        "pixel_scale": 1e8
+        "pixel_scale": 1e11,
+        "grid_enabled": false
     }
 }

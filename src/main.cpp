@@ -20,12 +20,13 @@ void sigint_handler(int signum) {
     Controller::sigint_flag = true;
 }
 
-std::unique_ptr<Simulation> create_sim(const Config &cfg, std::vector<Body> &bodies) {
-    if (cfg.algorithm == Config::Algorithm::NAIVE) {
-        return std::make_unique<AllPairsSim>(cfg, bodies);
+std::unique_ptr<Simulation> create_sim(const Config::Simulation &sim_cfg, 
+        std::vector<Body> &bodies) {
+    if (sim_cfg.algorithm == Config::Simulation::Algorithm::NAIVE) {
+        return std::make_unique<AllPairsSim>(sim_cfg, bodies);
     }
-    else if (cfg.algorithm == Config::Algorithm::BARNES_HUT) {
-        return std::make_unique<BarnesHutSim>(cfg, bodies);
+    else if (sim_cfg.algorithm == Config::Simulation::Algorithm::BARNES_HUT) {
+        return std::make_unique<BarnesHutSim>(sim_cfg, bodies);
     }
     assert(false);
     return nullptr;
@@ -35,17 +36,18 @@ int main(int argc, const char *argv[]) {
     try {
         const CLArgs clargs(argc, argv);
         Config cfg(clargs.config);
-        std::vector<Body> bodies = IO::parse_csv(cfg.universe_infile.string(), cfg.echo_bodies);
+        std::vector<Body> bodies = IO::parse_csv(cfg.io.universe_infile.string(), 
+                cfg.io.echo_bodies);
     
-        std::unique_ptr<Simulation> sim = create_sim(cfg, bodies);
-        Graphics graphics(cfg, bodies);
+        std::unique_ptr<Simulation> sim = create_sim(cfg.sim, bodies);
+        Graphics graphics(cfg.graphics, bodies);
         Controller controller(cfg, *sim.get(), graphics);
     
         signal(SIGINT, sigint_handler);
         
         controller.run();
 
-        IO::write_csv(cfg.universe_outfile.string(), bodies);
+        IO::write_csv(cfg.io.universe_outfile.string(), bodies);
     }
     catch (const std::exception &e) {
         Log::error("{}", e.what());

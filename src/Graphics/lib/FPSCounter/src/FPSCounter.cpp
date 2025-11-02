@@ -4,7 +4,7 @@
 
 void FPSCounter::register_frame() {
     frame_timestamps.push_back(sw.elapsed<std::chrono::seconds, 6>());
-    if (frame_timestamps.size() > Constants::FPS_CALC_BUFFER_LEN) {
+    if (frame_timestamps.size() > Constants::Graphics::FPS_CALC_BUFFER_LEN) {
         frame_timestamps.pop_front();
     }
 }

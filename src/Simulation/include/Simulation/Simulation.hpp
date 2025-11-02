@@ -23,7 +23,7 @@ public:
         std::string msg;
     };
 
-    Simulation(const Config &cfg, std::vector<Body> &bodies);
+    Simulation(const Config::Simulation &sim_cfg, std::vector<Body> &bodies);
     virtual ~Simulation();
 
     State get_state();
@@ -38,7 +38,7 @@ protected:
     virtual void on_run() = 0;
     virtual void on_pause() = 0;
 
-    const Config &cfg;
+    const Config::Simulation &sim_cfg;
     std::vector<Body> &bodies;
     uint64_t iteration;
     std::atomic<bool> finished{false};
@@ -66,7 +66,7 @@ private:
 
     std::thread sim_thread;
 public:
-    AllPairsSim(const Config &cfg, std::vector<Body> &bodies);
+    AllPairsSim(const Config::Simulation &sim_cfg, std::vector<Body> &bodies);
     ~AllPairsSim() override;
 };
 
@@ -94,6 +94,6 @@ private:
     sf::Vector2<double> body_to_quad_force(const Body &body, const Quad &quad);
 
 public:
-    BarnesHutSim(const Config &cfg, std::vector<Body> &bodies);
+    BarnesHutSim(const Config::Simulation &sim_cfg, std::vector<Body> &bodies);
     virtual ~BarnesHutSim();
 };

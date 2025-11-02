@@ -14,34 +14,42 @@
 
 using json = nlohmann::json;
 
+
 Config::Config(const fs::path &path) {
     const StopWatch sw;
     bool echo_config = false;
     try {
         const json json_cfg = json::parse(std::ifstream(path.c_str()));
 
-        const auto io = json_cfg.at("IO");
-        universe_infile = fs::path(io.at("universe_infile"));
-        universe_outfile = fs::path(io.at("universe_outfile"));
-        echo_config = io.at("echo_config");
-        echo_bodies = io.at("echo_bodies");
-
-        const auto sim = json_cfg.at("Simulation");
-        timestep = sim.at("timestep");
-        iterations = sim.at("iterations");
-        algorithm = string_to_enum(sim.at("algorithm"));
-        threads = sim.at("threads");
-        stats_update_hz = sim.at("stats_update_hz");
-
-        const auto graphics = json_cfg.at("Graphics");
-        graphics_enabled = graphics.at("enabled");
-        resolution = {
-            graphics.at("resolution").at(0),
-            graphics.at("resolution").at(1)
+        const auto j_io = json_cfg.at("IO");
+        echo_config = j_io.at("echo_config");
+        io = IO {
+            .universe_infile = fs::path(j_io.at("universe_infile")),
+            .universe_outfile = fs::path(j_io.at("universe_outfile")),
+            .echo_bodies = j_io.at("echo_bodies")
         };
-        vsync_enabled = graphics.at("vsync");
-        fps = graphics.at("fps");
-        pixel_scale = graphics.at("pixel_scale");
+
+        const auto j_sim = json_cfg.at("Simulation");
+        sim = Simulation {
+            .timestep = j_sim.at("timestep"),
+            .iterations = j_sim.at("iterations"),
+            .algorithm = string_to_enum(j_sim.at("algorithm")),
+            .threads = j_sim.at("threads"),
+            .stats_update_hz = j_sim.at("stats_update_hz")
+        };
+
+        const auto j_graphics = json_cfg.at("Graphics");
+        graphics = Graphics {
+            .enabled = j_graphics.at("enabled"),
+            .resolution = {
+                j_graphics.at("resolution").at(0),
+                j_graphics.at("resolution").at(1)
+            },
+            .vsync_enabled = j_graphics.at("vsync"),
+            .fps = j_graphics.at("fps"),
+            .pixel_scale = j_graphics.at("pixel_scale"),
+            .grid_enabled = j_graphics.at("grid_enabled")
+        };
     }
     catch (const std::exception &e) {
         Log::error("{}", e.what());
@@ -59,46 +67,29 @@ Config::Config(const fs::path &path) {
     Log::debug("Parsed configuration from `{}`: [{}]", path.c_str(), sw);
 }
 
-Config::Algorithm Config::string_to_enum(std::string str) {
-    for (unsigned short i = 0; const char *s : Constants::ALLOWED_ALGORITHMS) {
-        if (str == s) {
-            return static_cast<Config::Algorithm>(i);
+Config::Simulation::Algorithm Config::string_to_enum(const std::string& str_alg) {
+    for (unsigned short i = 0; const char *s : Constants::Simulation::ALLOWED_ALGORITHMS) {
+        if (str_alg == s) {
+            return static_cast<Config::Simulation::Algorithm>(i);
         }
         i++;
     }
-    return static_cast<Config::Algorithm>(-1);
+    return static_cast<Config::Simulation::Algorithm>(-1);
 }
 
-std::string Config::enum_to_string(Algorithm algorithm) {
-    switch (algorithm)
-        {
-        case Algorithm::BARNES_HUT:
-            return "Barnes Hut";
-            break;
-        case Algorithm::NAIVE:
-            return "Naive";
-            break;
-        default:
-            return "Invalid";
+std::string Config::enum_to_string(Simulation::Algorithm alg) {
+    switch (alg) {
+    case Simulation::Algorithm::BARNES_HUT:
+        return "Barnes Hut";
+    case Simulation::Algorithm::NAIVE:
+        return "Naive";
     }
+    assert(false);
+    return "Invalid";
 }
-
 
 void Config::print() {
-    // const auto c = fmt::color::medium_purple;
-    fmt::println("Configuration:");
-    fmt::println("  universe_infile:  `{}`", universe_infile.string());
-    fmt::println("  universe_outfile: `{}`", universe_outfile.string());
-    fmt::println("  timestep:         {}", timestep);
-    fmt::println("  iterations:       {}", iterations);
-    fmt::println("  algorithm:        `{}`", enum_to_string(algorithm));
-    fmt::println("  threads:          {}", threads);
-    fmt::println("  stats_update_hz:  {}", stats_update_hz);
-    fmt::println("  graphics_enabled: {}", graphics_enabled);
-    fmt::println("  resolution:       {}x{}", resolution.x, resolution.y);
-    fmt::println("  vsync:            {}", vsync_enabled);
-    fmt::println("  fps:              {}", fps);
-    fmt::println("  pixel_scale: {}", pixel_scale);
+    fmt::println("Configuration:{}{}{}", io.to_string(), sim.to_string(), graphics.to_string());
 }
 
 static fs::path resolve_infile_path(const fs::path &infile) {
@@ -140,66 +131,126 @@ static fs::path resolve_outfile_path(const fs::path &outfile) {
 }
 
 bool Config::validate() {
-    constexpr auto in_range = []<typename T>(const T& value, const std::pair<T, T>& range) {
-        return value >= range.first && value <= range.second;
+    constexpr auto symbol = [](bool ok) constexpr {
+        return ok ? "✅" : "❌";
     };
 
-    constexpr auto fmt_range = []<typename T>(const std::pair<T, T>& range) {
-        return fmt::format("[{}, {}]", range.first, range.second);
-    };
+    const bool io_cfg_ok = io.validate();
+    const bool sim_cfg_ok = sim.validate();
+    const bool graphics_cfg_ok = graphics.validate();
+    
+    Log::info("IO Configuration: {}", symbol(io_cfg_ok));
+    Log::info("Simulation Configuration: {}", symbol(sim_cfg_ok));
+    Log::info("Graphics Configuration: {}", symbol(graphics_cfg_ok));
 
+    return io_cfg_ok && sim_cfg_ok && graphics_cfg_ok;
+}
+
+template <typename T>
+bool in_range(const T& value, const std::pair<T, T>& range) {
+    return value >= range.first && value <= range.second;
+};
+
+template <typename T>
+struct fmt::formatter<Range<T>> {
+    constexpr auto parse(format_parse_context& ctx) {
+        return ctx.begin();
+    }
+    template <typename FormatContext>
+    auto format(const Range<T>& r, FormatContext& ctx) const -> decltype(ctx.out()) {
+        return fmt::format_to(ctx.out(), "[{}, {}]", r.first, r.second);
+    }
+};
+
+std::string Config::IO::to_string() const {
+    constexpr const char * fmt_str = R"(
+  IO:
+    universe_infile:  `{}`
+    universe_outfile: `{}`
+    echo_bodies:      {})";
+    return fmt::format(fmt_str, universe_infile.string(), universe_outfile.string(), echo_bodies);
+}
+
+bool Config::IO::validate() {
     bool fail = false;
-    if (!in_range(timestep, Constants::TIMESTEP_RANGE)) {
-        fail = true;
-        Log::error("Config::timestep {} not within allowed range {}", timestep, 
-                fmt_range(Constants::TIMESTEP_RANGE));
-    }
-    if (!in_range(resolution.x, Constants::WINDOW_WIDTH_RANGE) || 
-            !in_range(resolution.y, Constants::WINDOW_HEIGHT_RANGE)) {
-        fail = true;
-        Log::error("Config::resolution {}x{} not within allowed range {}x{}", resolution.x,
-                resolution.y, fmt_range(Constants::WINDOW_WIDTH_RANGE), 
-                fmt_range(Constants::WINDOW_HEIGHT_RANGE));
-    }
-    if (!in_range(fps, Constants::FPS_RANGE)) {
-        fail = true;
-        Log::error("Config::fps {} not within allowed range {}", fps, 
-                fmt_range(Constants::FPS_RANGE));
-    }
-    if (!in_range(pixel_scale, Constants::PIXEL_RES_RANGE)) {
-        fail = true;
-        Log::error("Config::pixel_scale {} not within allowed range {}", pixel_scale, 
-                fmt_range(Constants::PIXEL_RES_RANGE));
-    }
-    if (algorithm == static_cast<Config::Algorithm>(-1)) {
-        fail = true;
-        Log::error("Config::algorithm must be one of allowed values [{}, {}]",
-                Constants::ALLOWED_ALGORITHMS[0], Constants::ALLOWED_ALGORITHMS[1]);
-    }
-    if (!in_range(threads, Constants::THREADS_RANGE)) {
-        fail = true;
-        Log::error("Config::threads {} not within allowed range {}", threads, 
-                fmt_range(Constants::THREADS_RANGE));
-    }
-    if (!in_range(stats_update_hz, Constants::STATS_UPDATE_HZ_RANGE)) {
-        fail = true;
-        Log::error("Config::stats_update_hz {} not within allowed range {}", stats_update_hz,
-                fmt_range(Constants::STATS_UPDATE_HZ_RANGE));
-    }
     try {
         universe_infile = resolve_infile_path(universe_infile);
     }
     catch (const std::exception &e) {
         fail = true;
-        Log::error("Config::universe_infile: {}", e.what());
+        Log::error("Config::IO::universe_infile: {}", e.what());
     }
     try {
         universe_outfile = resolve_outfile_path(universe_outfile);
     }
     catch (const std::exception &e) {
         fail = true;
-        Log::error("Config::universe_outfile: {}", e.what());
+        Log::error("Config::IO::universe_outfile: {}", e.what());
     }
+    return !fail;
+}
 
+std::string Config::Simulation::to_string() const {
+    constexpr const char * fmt_str = R"(
+  Simulation:
+    timestep:         {}
+    iterations:       {}
+    algorithm:        `{}`
+    threads:          {}
+    stats_update_hz:  {})";
+    return fmt::format(fmt_str, timestep, iterations, enum_to_string(algorithm), threads, 
+            stats_update_hz);
+}
+
+bool Config::Simulation::validate() const {
+    using namespace Constants::Simulation;
+    bool fail = false;
+    if (fail |= !in_range(timestep, TIMESTEP_RANGE)) {
+        Log::error("Config::Simulation::timestep {} not within allowed range {}", timestep, 
+                TIMESTEP_RANGE);
+    }
+    if (fail |= algorithm == static_cast<Config::Simulation::Algorithm>(-1)) {
+        Log::error("Config::Simulation::algorithm must be one of allowed values [{}, {}]",
+                ALLOWED_ALGORITHMS[0], ALLOWED_ALGORITHMS[1]);
+    }
+    if (fail |= !in_range(threads, THREADS_RANGE)) {
+        Log::error("Config::Simulation::threads {} not within allowed range {}", threads, 
+                THREADS_RANGE);
+    }
+    if (fail |= !in_range(stats_update_hz, STATS_UPDATE_HZ_RANGE)) {
+        Log::error("Config::Simulation::stats_update_hz {} not within allowed range {}", 
+                stats_update_hz, STATS_UPDATE_HZ_RANGE);
+    }
+    return !fail;
+}
+
+std::string Config::Graphics::to_string() const {
+    constexpr const char * fmt_str = R"(
+  Graphics:
+    enabled:          {}
+    resolution:       {}x{}
+    vsync_enabled:    {}
+    fps:              {}
+    pixel_scale:      {}
+    grid_enabled:     {})";
+    return fmt::format(fmt_str, enabled, resolution.x, resolution.y, vsync_enabled, fps, 
+            pixel_scale, grid_enabled);
+}
+
+bool Config::Graphics::validate() const {
+    using namespace Constants::Graphics;
+    bool fail = false;
+    if (fail |= !in_range(resolution.x, WINDOW_WIDTH_RANGE) || 
+            !in_range(resolution.y, WINDOW_HEIGHT_RANGE)) {
+        Log::error("Config::Graphics::resolution {}x{} not within allowed range {}x{}", resolution.x,
+                resolution.y, WINDOW_WIDTH_RANGE, WINDOW_HEIGHT_RANGE);
+    }
+    if (fail |= !in_range(fps, FPS_RANGE)) {
+        Log::error("Config::Graphics::fps {} not within allowed range {}", fps, FPS_RANGE);
+    }
+    if (fail |= !in_range(pixel_scale, PIXEL_RES_RANGE)) {
+        Log::error("Config::Graphics::pixel_scale {} not within allowed range {}", pixel_scale, 
+                PIXEL_RES_RANGE);
+    }
     return !fail;
 }
