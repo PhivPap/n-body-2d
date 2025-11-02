@@ -10,21 +10,31 @@
 #include "Body/Body.hpp"
 #include "StopWatch/StopWatch.hpp"
 #include "Quadtree/Quadtree.hpp"
+#include "RLCaller/RLCaller.hpp"
 
 class Simulation {
 public:
     enum class State : bool { PAUSED, RUNNING };
 
+    struct Stats {
+        uint64_t iteration;
+        double real_elapsed_s;
+        double simulated_elapsed_s;
+        std::string msg;
+    };
+
     Simulation(const Config &cfg, std::vector<Body> &bodies);
     virtual ~Simulation();
 
     State get_state();
+    Stats get_stats();
     bool is_finished() const;
     void run();
     void pause();
 
 protected:
-    void set_finished();
+    bool should_stop();
+    void post_iteration();
     virtual void on_run() = 0;
     virtual void on_pause() = 0;
 
@@ -32,11 +42,17 @@ protected:
     std::vector<Body> &bodies;
     uint64_t iteration;
     std::atomic<bool> finished{false};
+    std::atomic<bool> stop;
     
 private:
+    void update_stats();
+
     std::mutex state_mtx;
+    std::mutex stats_mtx;
     State state{State::PAUSED};
+    Stats stats;
     StopWatch sw {StopWatch::State::PAUSED};
+    RLCaller stats_update_rate_limiter;
 };
 
 class AllPairsSim : public Simulation {
@@ -49,7 +65,6 @@ private:
     sf::Vector2<double> gravitational_force(const Body &body_a, const Body &body_b);
 
     std::thread sim_thread;
-    std::atomic<bool> stop;
 public:
     AllPairsSim(const Config &cfg, std::vector<Body> &bodies);
     ~AllPairsSim() override;
@@ -63,7 +78,6 @@ private:
     const uint64_t worker_chunk;
     const uint64_t master_offset;
     std::barrier<> sync_point;
-    std::atomic<bool> stop;
     std::atomic<bool> worker_stop;
     StopWatch sw_tree{StopWatch::State::PAUSED};
     StopWatch sw_vel{StopWatch::State::PAUSED};

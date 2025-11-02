@@ -21,13 +21,20 @@ static constexpr double softening_squared(const sf::Vector2<double> &vel_a, cons
 }
 
 Simulation::Simulation(const Config &cfg, std::vector<Body> &bodies) : 
-        cfg(cfg), bodies(bodies), iteration(0) {}
+        cfg(cfg), bodies(bodies), iteration(0), 
+        stats_update_rate_limiter(
+                std::chrono::microseconds(static_cast<uint64_t>(1'000'000 / cfg.stats_update_hz))) {}
 
 Simulation::~Simulation() {}
 
 Simulation::State Simulation::get_state() {
     std::lock_guard state_lock(state_mtx);
     return state;
+}
+
+Simulation::Stats Simulation::get_stats() {
+    std::lock_guard stats_lock(stats_mtx);
+    return stats;
 }
 
 bool Simulation::is_finished() const {
@@ -56,9 +63,26 @@ void Simulation::pause() {
     sw.pause();
 }
 
-void Simulation::set_finished() {
+bool Simulation::should_stop() {
+    if (iteration >= cfg.iterations) {
     finished = true;
     Log::info("Simulation finshed");
+        return true;
+    }
+    return stop;
+}
+
+void Simulation::post_iteration() {
+    stats_update_rate_limiter.try_call(std::bind(&Simulation::update_stats, this));
+    iteration++;
+}
+
+void Simulation::update_stats() {
+    const auto elapsed_s = sw.elapsed();
+    std::lock_guard stats_lock(stats_mtx);
+    stats.iteration = iteration;
+    stats.real_elapsed_s = elapsed_s;
+    stats.simulated_elapsed_s = -1;
 }
 
 AllPairsSim::AllPairsSim(const Config &cfg, std::vector<Body> &bodies) : 
@@ -81,14 +105,11 @@ void AllPairsSim::on_pause() {
 }
 
 void AllPairsSim::simulate() {
-    while (iteration < cfg.iterations) {
-        if (stop) 
-            return;
+    while (!should_stop()) {
         update_positions();
         update_velocities();
-        iteration++;
+        post_iteration();
     }
-    set_finished();
 }
 
 void AllPairsSim::update_positions() {
@@ -125,7 +146,6 @@ sf::Vector2<double> AllPairsSim::gravitational_force(const Body &body_a, const B
         force_amplitude * (body_b.pos.y - body_a.pos.y) / dist
     };
 }
-
 
 BarnesHutSim::BarnesHutSim(const Config &cfg, std::vector<Body> &bodies) : 
         Simulation(cfg, bodies), worker_chunk(bodies.size() / cfg.threads), 
@@ -170,9 +190,7 @@ void BarnesHutSim::on_pause() {
 }
 
 void BarnesHutSim::simulate() {
-    while (iteration < cfg.iterations) {
-        if (stop) 
-            return;
+    while (!should_stop()) {
         sw_tree.resume();
         qtree.build_tree(bodies);
         sw_tree.pause();
@@ -188,8 +206,8 @@ void BarnesHutSim::simulate() {
         sw_pos.pause();
 
         sync_point.arrive_and_wait();
+        post_iteration();
     }
-    set_finished();
 }
 
 void BarnesHutSim::worker_task(uint32_t worker_id) {

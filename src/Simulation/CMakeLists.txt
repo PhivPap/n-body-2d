@@ -19,6 +19,8 @@ target_link_libraries(${PROJECT_NAME} PRIVATE lib-config)
 target_include_directories(${PROJECT_NAME} PRIVATE ${LIB_DIR}/Body/include)
 target_link_libraries(${PROJECT_NAME} PRIVATE body)
 
+target_include_directories(${PROJECT_NAME} PUBLIC ${LIB_DIR}/RLCaller/include)
+
 target_include_directories(${PROJECT_NAME} PUBLIC ${LOCAL_LIB_DIR}/Quadtree/include)
 target_link_libraries(${PROJECT_NAME} PRIVATE lib-quadtree)
 
