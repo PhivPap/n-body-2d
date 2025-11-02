@@ -16,7 +16,7 @@ private:
     sf::VertexArray body_vertex_array;
     sf::RenderWindow window;
     ViewPort vp;
-    bool grid_enabled = true;
+    bool grid_enabled;
     std::optional<sf::Vector2i> opt_view_grabbed_pos = std::nullopt;
     sf::Shader body_shader;
 

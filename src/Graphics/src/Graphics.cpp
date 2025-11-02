@@ -30,7 +30,8 @@ void main() {
 Graphics::Graphics(const Config::Graphics &graphics_cfg, const std::vector<Body> &bodies) :
         bodies(bodies), window(sf::VideoMode(sf::Vector2u(graphics_cfg.resolution)), "N-Body Sim"), 
         vp(sf::Vector2f(graphics_cfg.resolution), graphics_cfg.pixel_scale), 
-        body_vertex_array(sf::PrimitiveType::Points, bodies.size()) {
+        body_vertex_array(sf::PrimitiveType::Points, bodies.size()), 
+        grid_enabled(graphics_cfg.grid_enabled) {
     window.setFramerateLimit(graphics_cfg.fps);
     window.setVerticalSyncEnabled(graphics_cfg.vsync_enabled);
 
@@ -152,7 +153,7 @@ void Graphics::set_grid(bool enabled) {
 void Graphics::draw_frame() {
     window.clear(Constants::Graphics::BG_COLOR);
     pan_if_view_grabbed();
-    if (grid_enabled)
+    if ( grid_enabled)
         draw_grid();    
     draw_bodies();
     window.display();
