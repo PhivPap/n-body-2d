@@ -34,8 +34,7 @@ Config::Config(const fs::path &path) {
             .timestep = j_sim.at("timestep"),
             .iterations = j_sim.at("iterations"),
             .algorithm = string_to_enum(j_sim.at("algorithm")),
-            .threads = j_sim.at("threads"),
-            .stats_update_hz = j_sim.at("stats_update_hz")
+            .threads = j_sim.at("threads")
         };
 
         const auto j_graphics = json_cfg.at("Graphics");
@@ -163,7 +162,7 @@ struct fmt::formatter<Range<T>> {
 };
 
 std::string Config::IO::to_string() const {
-    constexpr const char * fmt_str = R"(
+    constexpr const char *fmt_str = R"(
   IO:
     universe_infile:  `{}`
     universe_outfile: `{}`
@@ -191,15 +190,13 @@ bool Config::IO::validate() {
 }
 
 std::string Config::Simulation::to_string() const {
-    constexpr const char * fmt_str = R"(
+    constexpr const char *fmt_str = R"(
   Simulation:
     timestep:         {}
     iterations:       {}
     algorithm:        `{}`
-    threads:          {}
-    stats_update_hz:  {})";
-    return fmt::format(fmt_str, timestep, iterations, enum_to_string(algorithm), threads, 
-            stats_update_hz);
+    threads:          {})";
+    return fmt::format(fmt_str, timestep, iterations, enum_to_string(algorithm), threads);
 }
 
 bool Config::Simulation::validate() const {
@@ -217,15 +214,11 @@ bool Config::Simulation::validate() const {
         Log::error("Config::Simulation::threads {} not within allowed range {}", threads, 
                 THREADS_RANGE);
     }
-    if (fail |= !in_range(stats_update_hz, STATS_UPDATE_HZ_RANGE)) {
-        Log::error("Config::Simulation::stats_update_hz {} not within allowed range {}", 
-                stats_update_hz, STATS_UPDATE_HZ_RANGE);
-    }
     return !fail;
 }
 
 std::string Config::Graphics::to_string() const {
-    constexpr const char * fmt_str = R"(
+    constexpr const char *fmt_str = R"(
   Graphics:
     enabled:          {}
     resolution:       {}x{}

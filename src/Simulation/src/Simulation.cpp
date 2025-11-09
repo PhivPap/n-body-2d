@@ -21,9 +21,7 @@ static constexpr double softening_squared(const sf::Vector2<double> &vel_a, cons
 }
 
 Simulation::Simulation(const Config::Simulation &sim_cfg, std::vector<Body> &bodies) : 
-        sim_cfg(sim_cfg), bodies(bodies), iteration(0), 
-        stats_update_rate_limiter(
-                std::chrono::microseconds(static_cast<uint64_t>(1'000'000 / sim_cfg.stats_update_hz))) {}
+        sim_cfg(sim_cfg), bodies(bodies), iteration(0) {}
 
 Simulation::~Simulation() {}
 
@@ -78,11 +76,18 @@ void Simulation::post_iteration() {
 }
 
 void Simulation::update_stats() {
-    const auto elapsed_s = sw.elapsed();
+    const auto elapsed_s = sw.elapsed<std::chrono::seconds, 6>();
     std::lock_guard stats_lock(stats_mtx);
-    stats.iteration = iteration;
-    stats.real_elapsed_s = elapsed_s;
-    stats.simulated_elapsed_s = -1;
+    const auto iter_delta = iteration - stats.iteration;
+    const auto dt = elapsed_s - stats.real_elapsed_s;
+    ips_calculator.register_value(iter_delta / dt);
+
+    stats = Stats {
+        .iteration = iteration,
+        .ips = ips_calculator.get_mean<float>(),
+        .real_elapsed_s = elapsed_s,
+        .simulated_elapsed_s = -1
+    };
 }
 
 AllPairsSim::AllPairsSim(const Config::Simulation &sim_cfg, std::vector<Body> &bodies) : 

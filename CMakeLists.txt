@@ -42,6 +42,7 @@ add_subdirectory(${LIB_DIR}/Body)
 add_subdirectory(${LIB_DIR}/CLArgs)
 add_subdirectory(${LIB_DIR}/StopWatch)
 add_subdirectory(${LIB_DIR}/Constants)
+add_subdirectory(${LIB_DIR}/BufferedMeanCalculator)
 
 add_subdirectory(${SRC_DIR}/Simulation)
 add_subdirectory(${SRC_DIR}/Graphics)

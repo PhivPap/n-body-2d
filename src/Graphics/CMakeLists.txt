@@ -4,7 +4,7 @@ set(LOCAL_LIB_DIR "${CMAKE_CURRENT_SOURCE_DIR}/lib")
 
 # Add local lib directories
 add_subdirectory(${LOCAL_LIB_DIR}/ViewPort)
-add_subdirectory(${LOCAL_LIB_DIR}/FPSCounter)
+add_subdirectory(${LOCAL_LIB_DIR}/Panel)
 
 # Add library
 add_library(${PROJECT_NAME} ${CMAKE_CURRENT_LIST_DIR}/src/Graphics.cpp)
@@ -32,8 +32,10 @@ target_include_directories(${PROJECT_NAME} PUBLIC ${LIB_DIR}/RLCaller/include)
 target_include_directories(${PROJECT_NAME} PUBLIC ${LOCAL_LIB_DIR}/ViewPort/include)
 target_link_libraries(${PROJECT_NAME} PRIVATE lib-viewport)
 
-target_include_directories(${PROJECT_NAME} PUBLIC ${LOCAL_LIB_DIR}/FPSCounter/include)
-target_link_libraries(${PROJECT_NAME} PRIVATE lib-fpscounter)
+target_include_directories(${PROJECT_NAME} PUBLIC ${LIB_DIR}/BufferedMeanCalculator/include)
+
+target_include_directories(${PROJECT_NAME} PUBLIC ${LOCAL_LIB_DIR}/Panel/include)
+target_link_libraries(${PROJECT_NAME} PRIVATE lib-panel)
 
 target_include_directories(${PROJECT_NAME} PRIVATE ${THIRD_PARTY_DIR}/SMFL/include)
 target_link_libraries(${PROJECT_NAME} PRIVATE sfml-graphics sfml-window sfml-system)

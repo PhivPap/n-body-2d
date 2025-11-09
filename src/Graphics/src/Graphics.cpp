@@ -45,8 +45,16 @@ Graphics::Graphics(const Config::Graphics &graphics_cfg, const std::vector<Body>
             static_cast<float>(Constants::Graphics::BODY_PIXEL_DIAMETER));
 }
 
+Graphics::Stats Graphics::get_stats() const {
+    return stats;
+}
+
 sf::RenderWindow &Graphics::get_window() {
     return window;
+}
+
+Panel &Graphics::get_panel() {
+    return panel;
 }
 
 void Graphics::pan_if_view_grabbed() {
@@ -108,6 +116,20 @@ void Graphics::draw_bodies() {
     window.draw(body_vertex_array, sf::RenderStates(&body_shader));
 }
 
+void Graphics::update_stats() {
+    const auto now = sw.elapsed<std::chrono::seconds, 6>();
+    const auto frame_delta = frame - stats.frame;
+    const auto dt = now - stats.timestamp_s;
+    fps_calculator.register_value(frame_delta / dt);
+    stats = Stats {
+        .timestamp_s = now,
+        .frame = frame,
+        .fps = fps_calculator.get_mean<float>(),
+        .viewport_m = vp.get_rect().size,
+        .viewport_px = sf::Vector2<uint32_t>{vp.get_window_res()}
+    };
+}
+
 void Graphics::resize_view(sf::Vector2f new_size) {
     vp.resize(new_size);
     window.setView(sf::View(sf::Rect<float>{{0.f, 0.f}, new_size}));
@@ -153,12 +175,12 @@ void Graphics::set_grid(bool enabled) {
 void Graphics::draw_frame() {
     window.clear(Constants::Graphics::BG_COLOR);
     pan_if_view_grabbed();
-    if ( grid_enabled)
+    if (grid_enabled) {
         draw_grid();    
+    }
     draw_bodies();
+    window.draw(panel);
     window.display();
-    fps_counter.register_frame();
-    rl_5_sec.try_call([&]() {
-        Log::debug("FPS: {}", fps_counter.get_fps());
-    });
+    frame++;
+    stats_update_rate_limiter.try_call(std::bind(&Graphics::update_stats, this));
 }   

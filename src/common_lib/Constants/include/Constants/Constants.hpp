@@ -14,7 +14,6 @@ namespace Constants {
         constexpr Range<double> TIMESTEP_RANGE = {1e-12, 31'556'952'000'000'000};
         const char* const ALLOWED_ALGORITHMS[] = { "barnes-hut", "naive" };
         constexpr Range<uint16_t> THREADS_RANGE = {1, 256};
-        constexpr Range<float> STATS_UPDATE_HZ_RANGE = {0.1f, 1000.0f};
         constexpr double SOFTENING_FACTOR = 1e25;
         constexpr double THETA = 0.7;
     }
@@ -24,7 +23,7 @@ namespace Constants {
         constexpr Range<uint16_t> FPS_RANGE = {1, 512};
         // [picometer (m), observable universe diameter (m)]
         constexpr Range<double> PIXEL_RES_RANGE = {1e-12, 8.8e50};
-        constexpr double ZOOM_FACTOR = 0.9;
+        constexpr double ZOOM_FACTOR = 0.99;
         constexpr double GRID_SPACING_FACTOR = 4;
         constexpr sf::Color BODY_COLOR(255, 255, 255, 120);
         constexpr uint8_t BODY_PIXEL_DIAMETER = 1;

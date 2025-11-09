@@ -30,5 +30,8 @@ target_link_libraries(${PROJECT_NAME} PRIVATE lib-stopwatch)
 target_include_directories(${PROJECT_NAME} PRIVATE ${LIB_DIR}/Constants/include)
 target_link_libraries(${PROJECT_NAME} PRIVATE constants)
 
+target_include_directories(${PROJECT_NAME} PUBLIC ${LIB_DIR}/BufferedMeanCalculator/include)
+# target_link_libraries(${PROJECT_NAME} PRIVATE lib-buffered-mean-calculator)
+
 target_include_directories(${PROJECT_NAME} PRIVATE ${THIRD_PARTY_DIR}/SMFL/include)
 target_link_libraries(${PROJECT_NAME} PRIVATE sfml-graphics sfml-window sfml-system)

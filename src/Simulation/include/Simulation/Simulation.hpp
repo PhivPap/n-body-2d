@@ -11,6 +11,7 @@
 #include "StopWatch/StopWatch.hpp"
 #include "Quadtree/Quadtree.hpp"
 #include "RLCaller/RLCaller.hpp"
+#include "BufferedMeanCalculator/BufferedMeanCalculator.hpp"
 
 class Simulation {
 public:
@@ -18,9 +19,9 @@ public:
 
     struct Stats {
         uint64_t iteration;
+        float ips;
         double real_elapsed_s;
         double simulated_elapsed_s;
-        std::string msg;
     };
 
     Simulation(const Config::Simulation &sim_cfg, std::vector<Body> &bodies);
@@ -43,16 +44,17 @@ protected:
     uint64_t iteration;
     std::atomic<bool> finished{false};
     std::atomic<bool> stop;
-    
+    BufferedMeanCalculator<float, 60> ips_calculator;
+
 private:
     void update_stats();
 
     std::mutex state_mtx;
     std::mutex stats_mtx;
     State state{State::PAUSED};
-    Stats stats;
+    Stats stats{};
     StopWatch sw {StopWatch::State::PAUSED};
-    RLCaller stats_update_rate_limiter;
+    RLCaller stats_update_rate_limiter{std::chrono::milliseconds(50)};
 };
 
 class AllPairsSim : public Simulation {

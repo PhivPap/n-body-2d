@@ -23,7 +23,7 @@ public:
         uint64_t iterations;
         enum class Algorithm {BARNES_HUT, NAIVE} algorithm;
         uint16_t threads;
-        float stats_update_hz;
+        // float stats_update_hz;
 
         bool validate() const;
         std::string to_string() const;
@@ -36,6 +36,7 @@ public:
         uint16_t fps;
         double pixel_scale;
         bool grid_enabled;
+        bool show_panel = true;
 
         bool validate() const;
         std::string to_string() const;
