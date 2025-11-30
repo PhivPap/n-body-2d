@@ -4,8 +4,6 @@
 #include <thread>
 #include <functional>
 
-#include "Logger/Logger.hpp"
-
 // use std::bind() if you want to call a member function
 class RLCaller {
 private:
@@ -74,4 +72,3 @@ public:
         return false;
     }
 };
-

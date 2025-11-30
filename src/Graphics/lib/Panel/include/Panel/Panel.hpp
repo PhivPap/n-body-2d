@@ -23,7 +23,6 @@ public:
         double elapsed_s;
         double simulated_time_s;
 
-        static constexpr uint8_t desc_len = 10; 
         std::string fmt_timestep() const;
         std::string fmt_algorithm() const;
         std::string fmt_theta() const;
@@ -39,6 +38,7 @@ public:
         std::string fmt_fps() const;
         std::string fmt_elapsed() const;
         std::string fmt_sim_time() const;
+        std::string fmt_sim_rate() const;
         std::string to_string();
     };
 

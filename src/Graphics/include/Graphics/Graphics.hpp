@@ -9,6 +9,7 @@
 #include "BufferedMeanCalculator/BufferedMeanCalculator.hpp"
 #include "Panel/Panel.hpp"
 #include "StopWatch/StopWatch.hpp"
+#include "Constants/Constants.hpp"
 
 class Graphics {
 public:
@@ -40,12 +41,12 @@ private:
     ViewPort vp;
     uint64_t frame = 0;
     bool grid_enabled;
-    std::optional<sf::Vector2i> opt_view_grabbed_pos = std::nullopt;
-    sf::Shader body_shader;
-    Panel panel{{340, 480}};
-    BufferedMeanCalculator<float, 60> fps_calculator;
+    std::optional<sf::Vector2i> opt_view_grabbed_pos{};
+    sf::Shader body_shader{};
+    Panel panel{Constants::Graphics::PANEL_RES};
+    BufferedMeanCalculator<float, 60> fps_calculator{};
     Stats stats{};
-    RLCaller stats_update_rate_limiter{std::chrono::milliseconds(50)};
+    RLCaller stats_update_rate_limiter{Constants::Graphics::STATS_UPDATE_TIMER};
 
     void pan_if_view_grabbed();
     void draw_grid();

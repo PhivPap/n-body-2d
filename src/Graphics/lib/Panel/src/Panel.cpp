@@ -9,12 +9,10 @@ const sf::Font ubuntu_font{"../UbuntuMono-R.ttf"};
 
 Panel::Panel(sf::Vector2u size) : texture(size), sprite(texture.getTexture()), text(ubuntu_font), 
         visible(true) {
-    text.setFillColor(sf::Color::White);
-    text.setPosition({10.0f, 10.0f});
-    text.setCharacterSize(18);
-    text.setOutlineColor(sf::Color::White);
+    text.setPosition({5.0f, 10.0f});
+    text.setCharacterSize(16);
     text.setLineSpacing(1.4f);
-    texture.setSmooth(true);
+    texture.setSmooth(false);
     sprite.setScale({1.0f, -1.0f});
     sprite.setPosition({0.0f, size.y});
 }
@@ -33,6 +31,44 @@ void Panel::update_displayed_data(DisplayedData &&displayed_data) {
     }
 }
 
+enum class Time : uint8_t {
+    ns, us, ms, s, m, h, day, year
+};
+
+template <Time time>
+constexpr double seconds_to(double sec) {
+    if constexpr (time == Time::ns) {
+        return sec * 1e+9;
+    }
+    else if constexpr (time == Time::us) {
+        return sec * 1e+6;
+    }
+    else if constexpr (time == Time::ms) {
+        return sec * 1e+3;
+    }
+    else if constexpr (time == Time::s) {
+        return sec * 1;
+    }
+    else if constexpr (time == Time::m) {
+        return sec / 60;
+    }
+    else if constexpr (time == Time::h) {
+        return sec / (60 * 60);
+    }
+    else if constexpr (time == Time::day) {
+        return sec / (60 * 60 * 24);
+    }
+    else {
+        static_assert(time == Time::year);
+        return sec / (60 * 60 * 24 * 365.2425);
+    }
+}
+
+template <Time time>
+constexpr double seconds_from(double sec) {
+    return sec / seconds_to<time>(1.0);
+}
+
 static std::string seconds_to_readable_time(double sec) {
     int sign = 1;
     if (sec < 0) {
@@ -40,21 +76,58 @@ static std::string seconds_to_readable_time(double sec) {
         sec = -sec;
     }
 
-    if (sec < 1e-6)
-        return fmt::format("{:.3f}ns", sign * sec * 1e+9);
-    else if (sec < 1e-3)
-        return fmt::format("{:.3f}us", sign * sec * 1e+6);
-    else if (sec < 1)
-        return fmt::format("{:.3f}ms", sign * sec * 1e+3);
-    else if (sec < 60)
-        return fmt::format("{:.3f}s", sign * sec);
-    else if (sec < 60 * 60)
-        return fmt::format("{:.3f}m", sign * sec / 60);
-    else if (sec < 60 * 60 * 24)
-        return fmt::format("{:.3f}h", sign * sec / (60 * 60));
-    else if (sec < 60 * 60 * 24 * 365.2425)
-        return fmt::format("{:.3f}days", sign * sec / (60 * 60 * 24));
-    return fmt::format("{:.3f}years", sign * sec / (60 * 60 * 24 * 365.2425));
+    if (sec < seconds_from<Time::us>(1))
+        return fmt::format("{:.3f}ns", sign * seconds_to<Time::ns>(sec));
+    else if (sec < seconds_from<Time::ms>(1))
+        return fmt::format("{:.3f}us", sign * seconds_to<Time::us>(sec));
+    else if (sec < seconds_from<Time::s>(1))
+        return fmt::format("{:.3f}ms", sign * seconds_to<Time::ms>(sec));
+    else if (sec < seconds_from<Time::m>(1))
+        return fmt::format("{:.3f}s", sign * seconds_to<Time::s>(sec));
+    else if (sec < seconds_from<Time::h>(1))
+        return fmt::format("{:.3f}m", sign * seconds_to<Time::m>(sec));
+    else if (sec < seconds_from<Time::day>(1))
+        return fmt::format("{:.3f}h", sign * seconds_to<Time::h>(sec));
+    else if (sec < seconds_from<Time::year>(1))
+        return fmt::format("{:.3f}days", sign * seconds_to<Time::day>(sec));
+    else if (sec < seconds_from<Time::year>(1e+5))
+        return fmt::format("{:.3f}years", sign * seconds_to<Time::year>(sec));
+    return fmt::format("{:.3g}years", sign * seconds_to<Time::year>(sec));
+}
+
+enum class Dist : uint8_t {
+    nm, um, mm, m, km, AU, LY
+};
+
+template <Dist dist>
+constexpr double meters_to(double meters) {
+    if constexpr (dist == Dist::nm) {
+        return meters * 1e+9;
+    }
+    else if constexpr (dist == Dist::um) {
+        return meters * 1e+6;
+    }
+    else if constexpr (dist == Dist::mm) {
+        return meters * 1e+3;
+    }
+    else if constexpr (dist == Dist::m) {
+        return meters * 1;
+    }
+    else if constexpr (dist == Dist::km) {
+        return meters / 1e+3;
+    }
+    else if constexpr (dist == Dist::AU) {
+        return meters / 149'597'870'700;
+    }
+    else {
+        static_assert(dist == Dist::LY);
+        return meters / 9'460'730'472'580'800;
+    }
+}
+
+template <Dist dist>
+constexpr double meters_from(double meters) {
+    return meters / meters_to<dist>(1.0);
 }
 
 static std::string meters_to_readable_distance(double meters) {
@@ -64,19 +137,21 @@ static std::string meters_to_readable_distance(double meters) {
         meters = -meters;
     }
 
-    if (meters < 1e-6) 
-        return fmt::format("{:.3f}nm", sign * meters * 1e+9);
-    else if (meters < 1e-3) 
-        return fmt::format("{:.3f}um", sign * meters * 1e+6);
-    else if (meters < 1) 
-        return fmt::format("{:.3f}mm", sign * meters * 1e+3);
-    else if (meters < 1000) 
-        return fmt::format("{:.3f}m", sign * meters);
-    else if (meters < 149'597'870'700) 
-        return fmt::format("{:.3f}km", sign * meters / 1'000);
-    else if (meters < 149'597'870'700)
-        return fmt::format("{:.3f}AU", sign * meters / 149'597'870'700);
-    return fmt::format("{:.3f}LY", sign * meters / 9'460'730'472'580'800);
+    if (meters < meters_from<Dist::um>(1)) 
+        return fmt::format("{:.3f}nm", sign * meters_to<Dist::nm>(meters));
+    else if (meters < meters_from<Dist::mm>(1)) 
+        return fmt::format("{:.3f}um", sign * meters_to<Dist::um>(meters));
+    else if (meters < meters_from<Dist::m>(1)) 
+        return fmt::format("{:.3f}mm", sign * meters_to<Dist::mm>(meters));
+    else if (meters < meters_from<Dist::km>(1)) 
+        return fmt::format("{:.3f}m", sign * meters_to<Dist::m>(meters));
+    else if (meters < meters_from<Dist::AU>(1)) 
+        return fmt::format("{:.3f}km", sign * meters_to<Dist::km>(meters));
+    else if (meters < meters_from<Dist::LY>(1))
+        return fmt::format("{:.3f}AU", sign * meters_to<Dist::AU>(meters));
+    else if (meters < meters_from<Dist::LY>(1e+5))
+        return fmt::format("{:.3f}LY", sign * meters_to<Dist::LY>(meters));
+    return fmt::format("{:.3g}LY", sign * meters_to<Dist::LY>(meters));
 }
 
 std::string Panel::DisplayedData::fmt_timestep() const {
@@ -129,7 +204,7 @@ std::string Panel::DisplayedData::fmt_frame() const {
 }
 
 std::string Panel::DisplayedData::fmt_fps() const {
-    return fmt::format("FPS:           {}", fps);
+    return fmt::format("FPS:           {:.3f}", fps);
 }
 
 std::string Panel::DisplayedData::fmt_elapsed() const {
@@ -140,35 +215,40 @@ std::string Panel::DisplayedData::fmt_sim_time() const {
     return fmt::format("Sim. Time:     {}", seconds_to_readable_time(simulated_time_s));
 }
 
+std::string Panel::DisplayedData::fmt_sim_rate() const {
+    return fmt::format("Sim. Rate:     {}/s", seconds_to_readable_time(timestep_s * iter_per_sec));
+}
+
 std::string Panel::DisplayedData::to_string() {
 constexpr const char *fmt_str = 
 R"(Configuration:
-  {}
-  {}
-  {}
-  {}
-  {}
-  {}
-  {}
-  {}
-  {}
+ {}
+ {}
+ {}
+ {}
+ {}
+ {}
+ {}
+ {}
+ {}
 
 Stats:
-  {}
-  {}
-  {}
-  {}
-  {}
-  {})";
+ {}
+ {}
+ {}
+ {}
+ {}
+ {}
+ {})";
   return fmt::format(fmt_str, fmt_timestep(), fmt_algorithm(), fmt_theta(), fmt_threads(), 
         fmt_viewport_m(), fmt_viewport_px(), fmt_vsync(), fmt_grid(), fmt_max_fps(), 
         fmt_iteration(), fmt_iter_per_sec(), fmt_frame(), fmt_fps(), fmt_elapsed(), 
-        fmt_sim_time());
+        fmt_sim_time(), fmt_sim_rate());
 }
 
 
 void Panel::bake() {
-    texture.clear(sf::Color(40, 40, 40, 128));
+    texture.clear(sf::Color(40, 40, 40, 180));
     text.setString(displayed_data.to_string());
     texture.draw(text);
 }

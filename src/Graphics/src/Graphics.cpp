@@ -28,7 +28,8 @@ void main() {
 )glsl";
 
 Graphics::Graphics(const Config::Graphics &graphics_cfg, const std::vector<Body> &bodies) :
-        bodies(bodies), window(sf::VideoMode(sf::Vector2u(graphics_cfg.resolution)), "N-Body Sim"), 
+        bodies(bodies), 
+        window(sf::VideoMode(sf::Vector2u(graphics_cfg.resolution)), "N-Body Sim"), 
         vp(sf::Vector2f(graphics_cfg.resolution), graphics_cfg.pixel_scale), 
         body_vertex_array(sf::PrimitiveType::Points, bodies.size()), 
         grid_enabled(graphics_cfg.grid_enabled) {

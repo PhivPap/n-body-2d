@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstdint>
+#include <chrono>
 
 #include "SFML/Graphics/Color.hpp"
 
@@ -16,6 +17,7 @@ namespace Constants {
         constexpr Range<uint16_t> THREADS_RANGE = {1, 256};
         constexpr double SOFTENING_FACTOR = 1e25;
         constexpr double THETA = 0.7;
+        constexpr auto STATS_UPDATE_TIMER = std::chrono::microseconds(50);
     }
     namespace Graphics {
         constexpr Range<uint16_t> WINDOW_WIDTH_RANGE = {240, 7680};
@@ -30,6 +32,9 @@ namespace Constants {
         constexpr sf::Color BG_COLOR(0, 0, 0);
         constexpr sf::Color GRID_COLOR(255, 255, 255, 64);
         constexpr uint8_t FPS_CALC_BUFFER_LEN = 60;
+        constexpr Range<float> PANEL_UPDATE_HZ_RANGE = {0.1, 30};
+        constexpr sf::Vector2u PANEL_RES = {340, 480};
+        constexpr auto STATS_UPDATE_TIMER = std::chrono::microseconds(50);
     }
 
     static_assert(Graphics::ZOOM_FACTOR > 0.0 && Graphics::ZOOM_FACTOR < 1.0);

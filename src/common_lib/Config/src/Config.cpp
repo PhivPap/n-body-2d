@@ -47,7 +47,9 @@ Config::Config(const fs::path &path) {
             .vsync_enabled = j_graphics.at("vsync"),
             .fps = j_graphics.at("fps"),
             .pixel_scale = j_graphics.at("pixel_scale"),
-            .grid_enabled = j_graphics.at("grid_enabled")
+            .grid_enabled = j_graphics.at("grid_enabled"),
+            .panel_update_hz = j_graphics.at("panel_update_hz"),
+            .show_panel = j_graphics.at("show_panel")
         };
     }
     catch (const std::exception &e) {
@@ -225,9 +227,11 @@ std::string Config::Graphics::to_string() const {
     vsync_enabled:    {}
     fps:              {}
     pixel_scale:      {}
-    grid_enabled:     {})";
+    grid_enabled:     {}
+    show_panel:       {}
+    panel_update_hz   {})";
     return fmt::format(fmt_str, enabled, resolution.x, resolution.y, vsync_enabled, fps, 
-            pixel_scale, grid_enabled);
+            pixel_scale, grid_enabled, show_panel, panel_update_hz);
 }
 
 bool Config::Graphics::validate() const {
@@ -244,6 +248,10 @@ bool Config::Graphics::validate() const {
     if (fail |= !in_range(pixel_scale, PIXEL_RES_RANGE)) {
         Log::error("Config::Graphics::pixel_scale {} not within allowed range {}", pixel_scale, 
                 PIXEL_RES_RANGE);
+    }
+    if (fail |= !in_range(panel_update_hz, PANEL_UPDATE_HZ_RANGE)) {
+        Log::error("Config::Graphics::panel_update_hz {} not within allowed range {}", 
+                panel_update_hz, PANEL_UPDATE_HZ_RANGE);
     }
     return !fail;
 }

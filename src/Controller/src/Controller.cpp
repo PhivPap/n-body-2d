@@ -11,7 +11,8 @@ volatile bool Controller::sigint_flag = false;
 
 Controller::Controller(Config &cfg, Simulation &sim, Graphics &graphics) : 
         cfg(cfg), sim(sim), graphics(graphics), 
-        stats_update_rate_limiter(std::chrono::milliseconds(500)) {}
+        stats_update_rate_limiter(std::chrono::duration<float>(1 / cfg.graphics.panel_update_hz)) 
+        {}
 
 void Controller::handle_events(sf::RenderWindow &window) {
     while (const std::optional event = window.pollEvent()) {

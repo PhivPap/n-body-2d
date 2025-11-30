@@ -7,17 +7,18 @@
     },
     "Simulation": {
         "timestep": 1e12,
-        "iterations": 1e4,
+        "iterations": 1e7,
         "algorithm": "barnes-hut",
-        "threads": 19,
-        "stats_update_hz": 5
+        "threads": 20
     },
     "Graphics": {
         "enabled": true,
         "resolution": [1280, 720],
         "fps": 100,
-	    "vsync": true,
+	    "vsync": false,
         "pixel_scale": 1e11,
-        "grid_enabled": false
+        "grid_enabled": false,
+        "show_panel": true,
+        "panel_update_hz": 1
     }
 }
