@@ -21,11 +21,14 @@ public:
     struct Simulation {
         double timestep;
         uint64_t iterations;
-        enum class Algorithm {BARNES_HUT, NAIVE} algorithm;
+        std::string simtype_str;
+        enum class SimType : uint8_t {BARNES_HUT, NAIVE} simtype;
         uint16_t threads;
 
-        bool validate() const;
+        bool parse_simtype();
+        static std::string_view simtype_to_string(SimType simtype);
         std::string to_string() const;
+        bool validate();
     } sim;
 
     struct Graphics {
@@ -47,6 +50,4 @@ public:
     void print();
 private:
     bool validate();
-    static Simulation::Algorithm string_to_enum(const std::string& str_alg);
-    static std::string enum_to_string(Simulation::Algorithm alg);
 };

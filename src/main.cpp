@@ -22,10 +22,10 @@ void sigint_handler(int signum) {
 
 std::unique_ptr<Simulation> create_sim(const Config::Simulation &sim_cfg, 
         std::vector<Body> &bodies) {
-    if (sim_cfg.algorithm == Config::Simulation::Algorithm::NAIVE) {
+    if (sim_cfg.simtype == Config::Simulation::SimType::NAIVE) {
         return std::make_unique<AllPairsSim>(sim_cfg, bodies);
     }
-    else if (sim_cfg.algorithm == Config::Simulation::Algorithm::BARNES_HUT) {
+    else if (sim_cfg.simtype == Config::Simulation::SimType::BARNES_HUT) {
         return std::make_unique<BarnesHutSim>(sim_cfg, bodies);
     }
     assert(false);

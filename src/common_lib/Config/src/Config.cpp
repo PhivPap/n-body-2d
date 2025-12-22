@@ -33,7 +33,7 @@ Config::Config(const fs::path &path) {
         sim = Simulation {
             .timestep = j_sim.at("timestep"),
             .iterations = j_sim.at("iterations"),
-            .algorithm = string_to_enum(j_sim.at("algorithm")),
+            .simtype_str = j_sim.at("algorithm"),
             .threads = j_sim.at("threads")
         };
 
@@ -66,27 +66,6 @@ Config::Config(const fs::path &path) {
     }
 
     Log::debug("Parsed configuration from `{}`: [{}]", path.c_str(), sw);
-}
-
-Config::Simulation::Algorithm Config::string_to_enum(const std::string& str_alg) {
-    for (unsigned short i = 0; const char *s : Constants::Simulation::ALLOWED_ALGORITHMS) {
-        if (str_alg == s) {
-            return static_cast<Config::Simulation::Algorithm>(i);
-        }
-        i++;
-    }
-    return static_cast<Config::Simulation::Algorithm>(-1);
-}
-
-std::string Config::enum_to_string(Simulation::Algorithm alg) {
-    switch (alg) {
-    case Simulation::Algorithm::BARNES_HUT:
-        return "Barnes Hut";
-    case Simulation::Algorithm::NAIVE:
-        return "Naive";
-    }
-    assert(false);
-    return "Invalid";
 }
 
 void Config::print() {
@@ -173,22 +152,60 @@ std::string Config::IO::to_string() const {
 }
 
 bool Config::IO::validate() {
-    bool fail = false;
+    bool ok = true;
     try {
         universe_infile = resolve_infile_path(universe_infile);
     }
     catch (const std::exception &e) {
-        fail = true;
+        ok = false;
         Log::error("Config::IO::universe_infile: {}", e.what());
     }
     try {
         universe_outfile = resolve_outfile_path(universe_outfile);
     }
     catch (const std::exception &e) {
-        fail = true;
+        ok = false;
         Log::error("Config::IO::universe_outfile: {}", e.what());
     }
-    return !fail;
+    return ok;
+}
+
+std::string_view Config::Simulation::simtype_to_string(SimType simtype) {
+    switch (simtype) {
+    case SimType::BARNES_HUT: return "Barnes-Hut";
+    case SimType::NAIVE: return "All Pairs";
+    }
+    assert(false);
+    return {};
+}
+
+bool Config::Simulation::parse_simtype() {
+    const auto to_lower = [](std::string_view sv) {
+        std::string s(sv.size(), 0);
+        for (char c : sv) {
+            s += std::tolower(c);
+        }
+        return s;
+    };
+    const auto simtype_str_lower = to_lower(simtype_str);
+    Log::debug("`{}`", simtype_str_lower);
+    
+    bool ok = true;
+    if (simtype_str_lower == to_lower(simtype_to_string(SimType::BARNES_HUT))) {
+        simtype = SimType::BARNES_HUT;
+    }
+    else if (simtype_str_lower == to_lower(simtype_to_string(SimType::NAIVE))) {
+        simtype = SimType::NAIVE;
+    }
+    else {
+        ok = false;
+    }
+
+    if (ok) {
+        simtype_str = simtype_to_string(simtype);
+    }
+
+    return ok;
 }
 
 std::string Config::Simulation::to_string() const {
@@ -198,25 +215,29 @@ std::string Config::Simulation::to_string() const {
     iterations:       {}
     algorithm:        `{}`
     threads:          {})";
-    return fmt::format(fmt_str, timestep, iterations, enum_to_string(algorithm), threads);
+    return fmt::format(fmt_str, timestep, iterations, simtype_str, threads);
 }
 
-bool Config::Simulation::validate() const {
+bool Config::Simulation::validate() {
     using namespace Constants::Simulation;
-    bool fail = false;
-    if (fail |= !in_range(timestep, TIMESTEP_RANGE)) {
+    bool ok = true;
+    if (!in_range(timestep, TIMESTEP_RANGE)) {
+        ok = false;
         Log::error("Config::Simulation::timestep {} not within allowed range {}", timestep, 
                 TIMESTEP_RANGE);
     }
-    if (fail |= algorithm == static_cast<Config::Simulation::Algorithm>(-1)) {
-        Log::error("Config::Simulation::algorithm must be one of allowed values [{}, {}]",
-                ALLOWED_ALGORITHMS[0], ALLOWED_ALGORITHMS[1]);
+    if (!parse_simtype()) {
+        ok = false;
+        Log::error("Config::Simulation::simtype `{}` is not one of the valid options `{}`, `{}`",
+                simtype_str, simtype_to_string(SimType::BARNES_HUT), 
+                simtype_to_string(SimType::NAIVE));
     }
-    if (fail |= !in_range(threads, THREADS_RANGE)) {
+    if (!in_range(threads, THREADS_RANGE)) {
+        ok = false;
         Log::error("Config::Simulation::threads {} not within allowed range {}", threads, 
                 THREADS_RANGE);
     }
-    return !fail;
+    return ok;
 }
 
 std::string Config::Graphics::to_string() const {
@@ -236,22 +257,26 @@ std::string Config::Graphics::to_string() const {
 
 bool Config::Graphics::validate() const {
     using namespace Constants::Graphics;
-    bool fail = false;
-    if (fail |= !in_range(resolution.x, WINDOW_WIDTH_RANGE) || 
-            !in_range(resolution.y, WINDOW_HEIGHT_RANGE)) {
-        Log::error("Config::Graphics::resolution {}x{} not within allowed range {}x{}", resolution.x,
-                resolution.y, WINDOW_WIDTH_RANGE, WINDOW_HEIGHT_RANGE);
+    bool ok = true;
+    if (!in_range(resolution.x, WINDOW_WIDTH_RANGE) || 
+                !in_range(resolution.y, WINDOW_HEIGHT_RANGE)) {
+        ok = false;
+        Log::error("Config::Graphics::resolution {}x{} not within allowed range {}x{}", 
+                resolution.x, resolution.y, WINDOW_WIDTH_RANGE, WINDOW_HEIGHT_RANGE);
     }
-    if (fail |= !in_range(fps, FPS_RANGE)) {
+    if (!in_range(fps, FPS_RANGE)) {
+        ok = false;
         Log::error("Config::Graphics::fps {} not within allowed range {}", fps, FPS_RANGE);
     }
-    if (fail |= !in_range(pixel_scale, PIXEL_RES_RANGE)) {
+    if (!in_range(pixel_scale, PIXEL_RES_RANGE)) {
+        ok = false;
         Log::error("Config::Graphics::pixel_scale {} not within allowed range {}", pixel_scale, 
                 PIXEL_RES_RANGE);
     }
-    if (fail |= !in_range(panel_update_hz, PANEL_UPDATE_HZ_RANGE)) {
+    if (!in_range(panel_update_hz, PANEL_UPDATE_HZ_RANGE)) {
+        ok = false;
         Log::error("Config::Graphics::panel_update_hz {} not within allowed range {}", 
                 panel_update_hz, PANEL_UPDATE_HZ_RANGE);
     }
-    return !fail;
+    return ok;
 }

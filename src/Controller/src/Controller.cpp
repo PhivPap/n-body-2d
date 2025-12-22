@@ -65,7 +65,7 @@ void Controller::update_stats() {
 
     graphics.get_panel().update_displayed_data(Panel::DisplayedData{
         .timestep_s = cfg.sim.timestep,
-        .algorithm = "???",
+        .algorithm = cfg.sim.simtype_str,
         .theta = Constants::Simulation::THETA,
         .threads = cfg.sim.threads,
         .viewport_m = graphics_stats.viewport_m,
