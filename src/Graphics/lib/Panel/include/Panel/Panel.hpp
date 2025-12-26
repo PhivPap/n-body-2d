@@ -9,6 +9,7 @@ public:
         double timestep_s;
         std::string algorithm;
         double theta;
+        double softening_factor;
         uint32_t threads;
         sf::Vector2<double> viewport_m;
         sf::Vector2<uint32_t> viewport_px;
@@ -26,6 +27,7 @@ public:
         std::string fmt_timestep() const;
         std::string fmt_algorithm() const;
         std::string fmt_theta() const;
+        std::string fmt_softening_factor() const;
         std::string fmt_threads() const;
         std::string fmt_viewport_m() const;
         std::string fmt_viewport_px() const;

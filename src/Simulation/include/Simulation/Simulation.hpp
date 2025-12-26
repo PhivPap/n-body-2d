@@ -35,6 +35,8 @@ public:
     void pause();
 
 protected:
+    static double compute_plummer_softening(const std::vector<Body> &bodies, double factor, 
+            double max_samples=Constants::Simulation::MAX_PAIRWISE_SOFTENING_COMPUTATIONS);
     bool should_stop();
     void post_iteration();
     virtual void on_run() = 0;
@@ -42,6 +44,7 @@ protected:
 
     const Config::Simulation &sim_cfg;
     std::vector<Body> &bodies;
+    const double epsilon_squared;
     uint64_t iteration = 0;
     std::atomic<bool> finished{false};
     std::atomic<bool> stop{false};

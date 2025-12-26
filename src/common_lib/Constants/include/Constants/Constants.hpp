@@ -14,10 +14,11 @@ namespace Constants {
         // [picosecond (s), billion years (s)]
         constexpr Range<double> TIMESTEP_RANGE = {1e-12, 31'556'952'000'000'000};
         const char* const ALLOWED_ALGORITHMS[] = { "barnes-hut", "naive" };
+        constexpr Range<double> SOFTENING_FACTOR_RANGE = {0.0, 0.2};
         constexpr Range<uint16_t> THREADS_RANGE = {1, 256};
-        constexpr double SOFTENING_FACTOR = 1e25;
         constexpr double THETA = 0.7;
         constexpr auto STATS_UPDATE_TIMER = std::chrono::microseconds(50);
+        constexpr uint64_t MAX_PAIRWISE_SOFTENING_COMPUTATIONS = 1'000'000;
     }
     namespace Graphics {
         constexpr Range<uint16_t> WINDOW_WIDTH_RANGE = {240, 7680};

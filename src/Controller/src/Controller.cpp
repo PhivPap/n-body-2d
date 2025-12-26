@@ -67,6 +67,7 @@ void Controller::update_stats() {
         .timestep_s = cfg.sim.timestep,
         .algorithm = cfg.sim.simtype_str,
         .theta = Constants::Simulation::THETA,
+        .softening_factor = cfg.sim.softening_factor,
         .threads = cfg.sim.threads,
         .viewport_m = graphics_stats.viewport_m,
         .viewport_px = graphics_stats.viewport_px,

@@ -1,8 +1,10 @@
 #include "Simulation/Simulation.hpp"
 
 #include <stack>
+#include <random>
 
 #include "Logger/Logger.hpp"
+#include "Logger/Distance.hpp"
 #include "Constants/Constants.hpp"
 
 static inline constexpr double distance(const sf::Vector2<double> &pos_a, const sf::Vector2<double> &pos_b) {
@@ -15,13 +17,9 @@ static constexpr double distance_squared(const sf::Vector2<double> &pos_a, const
     return diff.x * diff.x + diff.y * diff.y;
 }
 
-static constexpr double softening_squared(const sf::Vector2<double> &vel_a, const sf::Vector2<double> &vel_b) {
-    return Constants::Simulation::SOFTENING_FACTOR * (vel_a - vel_b).lengthSquared();
-    // return 1e36;
-}
-
 Simulation::Simulation(const Config::Simulation &sim_cfg, std::vector<Body> &bodies) : 
-        sim_cfg(sim_cfg), bodies(bodies) {}
+        sim_cfg(sim_cfg), bodies(bodies), 
+        epsilon_squared(std::pow(compute_plummer_softening(bodies, sim_cfg.softening_factor), 2)) {}
 
 Simulation::~Simulation() {}
 
@@ -59,6 +57,52 @@ void Simulation::pause() {
     state = State::PAUSED;
     on_pause();
     sw.pause();
+}
+
+double Simulation::compute_plummer_softening(const std::vector<Body> &bodies, double factor, 
+        double max_samples) {
+    const auto n = bodies.size();
+    if (factor == 0.0) {
+        Log::info("Plummer softening disabled (softening_factor=0)");
+        return 0.0;
+    }
+    if (n <= 1) {
+        return 0.0;
+    }
+
+    const auto compute_avg_pairwise_distance = [&bodies, n]() -> double {
+        double dist_sum = 0.0;
+        for (uint64_t i = 0; i < n; i++) {
+            for (uint64_t j = i + 1; j < n; j++) {
+                dist_sum += distance(bodies[i].pos, bodies[j].pos);
+            }
+        }
+        const auto avg_pairwise_distance = dist_sum / n;
+        Log::info("Average inter-body distance: {}", Log::Distance::from(avg_pairwise_distance));
+        return dist_sum / n;
+    };
+
+    const auto estimate_avg_pairwise_distance = [&bodies, n, samples=max_samples]() -> double {
+        std::mt19937_64 rng(std::chrono::steady_clock::now().time_since_epoch().count());
+        std::uniform_int_distribution<size_t> uniform(0, n - 1);
+        double dist_sum = 0.0;
+        for (uint64_t s = 0; s < samples; s++) {
+            const uint64_t i = uniform(rng);
+            uint64_t j = uniform(rng);
+            while (i == j) j = uniform(rng);
+            dist_sum += distance(bodies[i].pos, bodies[j].pos);
+        }
+        const auto avg_pairwise_distance = dist_sum / samples;
+        Log::info("Average inter-body distance: {} (estimated with samples={})", 
+                Log::Distance::from(avg_pairwise_distance), samples);
+        return avg_pairwise_distance;
+    };
+
+    const auto avg_distance = n * n <= max_samples ? 
+            compute_avg_pairwise_distance() : estimate_avg_pairwise_distance();
+    const auto epsilon = avg_distance * factor;
+    Log::info("Plummer softening (epsilon): {:.5g} (softening_factor={})", epsilon, factor);
+    return epsilon;
 }
 
 bool Simulation::should_stop() {
@@ -140,14 +184,9 @@ void AllPairsSim::update_velocities() {
 
 sf::Vector2<double> AllPairsSim::gravitational_force(const Body &body_a, const Body &body_b) {
     const double dist = distance(body_a.pos, body_b.pos);
-    const double epsilon_squared = 
-            softening_squared(body_a.vel, body_b.vel);
     const double force_amplitude = Constants::Simulation::G * body_a.mass * body_b.mass / 
             (dist * dist + epsilon_squared);
-    return {
-        force_amplitude * (body_b.pos.x - body_a.pos.x) / dist,
-        force_amplitude * (body_b.pos.y - body_a.pos.y) / dist
-    };
+    return force_amplitude * (body_b.pos - body_a.pos) / dist;
 }
 
 BarnesHutSim::BarnesHutSim(const Config::Simulation &sim_cfg, std::vector<Body> &bodies) : 
@@ -278,8 +317,6 @@ void BarnesHutSim::update_velocity(Body &body) {
 
 sf::Vector2<double> BarnesHutSim::body_to_quad_force(const Body &body, const Quad &quad) {
     const double dist = distance(body.pos, quad.center_of_mass);
-    const double epsilon_squared = 
-            softening_squared(body.vel, quad.momentum / quad.total_mass);
     const double force_amplitude = Constants::Simulation::G * body.mass * quad.total_mass / 
         (dist * dist + epsilon_squared);
     return ((quad.center_of_mass - body.pos) / dist) * force_amplitude;

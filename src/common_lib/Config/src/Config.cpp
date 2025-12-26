@@ -34,6 +34,7 @@ Config::Config(const fs::path &path) {
             .timestep = j_sim.at("timestep"),
             .iterations = j_sim.at("iterations"),
             .simtype_str = j_sim.at("algorithm"),
+            .softening_factor = j_sim.at("softening_factor"),
             .threads = j_sim.at("threads")
         };
 
@@ -214,8 +215,9 @@ std::string Config::Simulation::to_string() const {
     timestep:         {}
     iterations:       {}
     algorithm:        `{}`
+    softening_factor: {}
     threads:          {})";
-    return fmt::format(fmt_str, timestep, iterations, simtype_str, threads);
+    return fmt::format(fmt_str, timestep, iterations, simtype_str, softening_factor, threads);
 }
 
 bool Config::Simulation::validate() {
@@ -231,6 +233,11 @@ bool Config::Simulation::validate() {
         Log::error("Config::Simulation::simtype `{}` is not one of the valid options `{}`, `{}`",
                 simtype_str, simtype_to_string(SimType::BARNES_HUT), 
                 simtype_to_string(SimType::NAIVE));
+    }
+    if (!in_range(softening_factor, SOFTENING_FACTOR_RANGE)) {
+        ok = false;
+        Log::error("Config::Simuation::softening_factor {} not withing allowed range {}", 
+                softening_factor, SOFTENING_FACTOR_RANGE);
     }
     if (!in_range(threads, THREADS_RANGE)) {
         ok = false;
