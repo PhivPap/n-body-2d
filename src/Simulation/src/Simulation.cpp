@@ -18,7 +18,8 @@ static constexpr double distance_squared(const sf::Vector2<double> &pos_a, const
 }
 
 Simulation::Simulation(const Config::Simulation &sim_cfg, std::vector<Body> &bodies) : 
-        sim_cfg(sim_cfg), bodies(bodies), 
+        bodies(bodies), max_iterations(sim_cfg.iterations), requested_timestep(sim_cfg.timestep),
+        timestep(sim_cfg.timestep), 
         epsilon_squared(std::pow(compute_plummer_softening(bodies, sim_cfg.softening_factor), 2)) {}
 
 Simulation::~Simulation() {}
@@ -57,6 +58,10 @@ void Simulation::pause() {
     state = State::PAUSED;
     on_pause();
     sw.pause();
+}
+
+void Simulation::set_timestep(double timestep) {
+    requested_timestep.store(timestep, std::memory_order::relaxed);
 }
 
 double Simulation::compute_plummer_softening(const std::vector<Body> &bodies, double factor, 
@@ -106,7 +111,7 @@ double Simulation::compute_plummer_softening(const std::vector<Body> &bodies, do
 }
 
 bool Simulation::should_stop() {
-    if (iteration >= sim_cfg.iterations) {
+    if (iteration >= max_iterations) {
         finished = true;
         Log::info("Simulation finshed");
         return true;
@@ -116,6 +121,7 @@ bool Simulation::should_stop() {
 
 void Simulation::post_iteration() {
     stats_update_rate_limiter.try_call(std::bind(&Simulation::update_stats, this));
+    timestep = requested_timestep.load(std::memory_order::relaxed);
     iteration++;
 }
 
@@ -129,7 +135,7 @@ void Simulation::update_stats() {
     stats.iteration = iteration;
     stats.ips = ips_calculator.get_mean<float>();
     stats.real_elapsed_s = elapsed_s;
-    stats.simulated_elapsed_s += iter_delta * sim_cfg.timestep;
+    stats.simulated_elapsed_s += iter_delta * timestep;
 }
 
 AllPairsSim::AllPairsSim(const Config::Simulation &sim_cfg, std::vector<Body> &bodies) : 
@@ -161,7 +167,7 @@ void AllPairsSim::simulate() {
 
 void AllPairsSim::update_positions() {
     for (Body &body : bodies) {
-        body.pos += body.vel * sim_cfg.timestep;
+        body.pos += body.vel * timestep;
     }
 }
 
@@ -175,10 +181,10 @@ void AllPairsSim::update_velocities() {
         for (uint64_t j = i + 1; j < total_bodies; j++) {
             Body &body_b = _bodies[j];
             const sf::Vector2<double> force = gravitational_force(body_a, body_b);
-            body_b.vel -= force / body_b.mass * sim_cfg.timestep;
+            body_b.vel -= force / body_b.mass * timestep;
             force_sum += force;
         }
-        body_a.vel += force_sum / body_a.mass * sim_cfg.timestep;
+        body_a.vel += force_sum / body_a.mass * timestep;
     }
 }
 
@@ -190,9 +196,9 @@ sf::Vector2<double> AllPairsSim::gravitational_force(const Body &body_a, const B
 }
 
 BarnesHutSim::BarnesHutSim(const Config::Simulation &sim_cfg, std::vector<Body> &bodies) : 
-        Simulation(sim_cfg, bodies), worker_chunk(bodies.size() / sim_cfg.threads), 
-        master_offset(worker_chunk * (sim_cfg.threads - 1)), sync_point(sim_cfg.threads) {
-
+        Simulation(sim_cfg, bodies), n_threads(sim_cfg.threads), 
+        worker_chunk(bodies.size() / n_threads), master_offset(worker_chunk * (n_threads - 1)), 
+        sync_point(n_threads) {
     if (sim_cfg.threads == 0)
         throw std::runtime_error("Thread count 0 is invalid");
     if (sim_cfg.threads > bodies.size())
@@ -215,7 +221,7 @@ void BarnesHutSim::on_run() {
     stop = false;
     worker_stop = false;
     master = std::thread(&BarnesHutSim::simulate, this);
-    for (uint32_t i = 0; i < sim_cfg.threads - 1; i++) {
+    for (uint32_t i = 0; i < n_threads - 1; i++) {
         workers.emplace_back(&BarnesHutSim::worker_task, this, i);
     }
 }
@@ -271,7 +277,7 @@ void BarnesHutSim::update_positions(uint64_t begin_idx, uint64_t end_idx) {
 
     for (uint64_t idx = begin_idx; idx < end_idx; idx++) {
         Body &body = _bodies[idx];
-        body.pos += body.vel * sim_cfg.timestep;
+        body.pos += body.vel * timestep;
     }
 }
 
@@ -312,7 +318,7 @@ void BarnesHutSim::update_velocity(Body &body) {
         }
     }
 
-    body.vel += F / body.mass * sim_cfg.timestep;
+    body.vel += F / body.mass * timestep;
 }
 
 sf::Vector2<double> BarnesHutSim::body_to_quad_force(const Body &body, const Quad &quad) {

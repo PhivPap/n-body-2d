@@ -54,6 +54,16 @@ void Controller::handle_events(sf::RenderWindow &window) {
                 cfg.graphics.show_panel = !cfg.graphics.show_panel;
                 graphics.get_panel().set_visible(cfg.graphics.show_panel);
                 break;
+            case sf::Keyboard::Scan::Left:
+                timestep_decrease();
+                break;
+            case sf::Keyboard::Scan::Right:
+                timestep_increase();
+                break;
+            case sf::Keyboard::Scan::Up:
+                break;
+            case sf::Keyboard::Scan::Down:
+                break;
             }
         }
     }
@@ -81,6 +91,26 @@ void Controller::update_stats() {
         .elapsed_s = sim_stats.real_elapsed_s,
         .simulated_time_s = sim_stats.simulated_elapsed_s,
     });
+}
+
+void Controller::timestep_increase() {
+    auto new_timestep = cfg.sim.timestep * Constants::Simulation::TIMESTEP_CHANGE_FACTOR;
+    if (new_timestep > Constants::Simulation::TIMESTEP_RANGE.second) {
+        Log::warning("Reached maximum timestep, cannot accelerate further");
+        new_timestep = Constants::Simulation::TIMESTEP_RANGE.second;
+    }
+    cfg.sim.timestep = new_timestep;
+    sim.set_timestep(new_timestep);
+}
+
+void Controller::timestep_decrease() {
+    auto new_timestep = cfg.sim.timestep / Constants::Simulation::TIMESTEP_CHANGE_FACTOR;
+    if (new_timestep < Constants::Simulation::TIMESTEP_RANGE.first) {
+        Log::warning("Reached minimum timestep, cannot decelerate further");
+        new_timestep = Constants::Simulation::TIMESTEP_RANGE.first;
+    }
+    cfg.sim.timestep = new_timestep;
+    sim.set_timestep(new_timestep);
 }
 
 void Controller::run() {

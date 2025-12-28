@@ -19,4 +19,6 @@ private:
 
     void handle_events(sf::RenderWindow &window);
     void update_stats();
+    void timestep_increase();
+    void timestep_decrease();
 };

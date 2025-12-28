@@ -33,6 +33,7 @@ public:
     bool is_finished() const;
     void run();
     void pause();
+    void set_timestep(double timestep);
 
 protected:
     static double compute_plummer_softening(const std::vector<Body> &bodies, double factor, 
@@ -42,9 +43,11 @@ protected:
     virtual void on_run() = 0;
     virtual void on_pause() = 0;
 
-    const Config::Simulation &sim_cfg;
     std::vector<Body> &bodies;
     const double epsilon_squared;
+    const uint64_t max_iterations;
+    std::atomic<double> requested_timestep;
+    double timestep;
     uint64_t iteration = 0;
     std::atomic<bool> finished{false};
     std::atomic<bool> stop{false};
@@ -78,6 +81,7 @@ public:
 
 class BarnesHutSim : public Simulation {
 private:
+    const uint16_t n_threads;
     Quadtree qtree;
     std::thread master;
     std::vector<std::thread> workers;
