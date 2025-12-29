@@ -42,8 +42,7 @@ Graphics::Graphics(const Config::Graphics &graphics_cfg, const std::vector<Body>
 
     glEnable(GL_PROGRAM_POINT_SIZE);
     body_shader.loadFromMemory(body_vertex_shader, body_fragment_shader);
-    body_shader.setUniform("pointDiameter", 
-            static_cast<float>(Constants::Graphics::BODY_PIXEL_DIAMETER));
+    body_shader.setUniform("pointDiameter", static_cast<float>(body_diameter_pixels));
 }
 
 Graphics::Stats Graphics::get_stats() const {
@@ -167,6 +166,27 @@ void Graphics::release_view() {
         Log::warning("Failed to create default cursor");
     }
     opt_view_grabbed_pos = std::nullopt;
+}
+
+void Graphics::body_size_increase() {
+    auto new_body_diameter_pixels = body_diameter_pixels + 1;
+    if (new_body_diameter_pixels > Constants::Graphics::BODY_DIAMETER_PIXELS_RANGE.second) {
+        Log::warning("Reached maximum body size (pixels), cannot magnify further");
+        new_body_diameter_pixels = Constants::Graphics::BODY_DIAMETER_PIXELS_RANGE.second;
+    }
+    body_diameter_pixels = new_body_diameter_pixels;
+    body_shader.setUniform("pointDiameter", static_cast<float>(body_diameter_pixels));
+}
+
+void Graphics::body_size_decrease() {
+    // If decreasing further, unsigned wrap-around will be an issue 
+    auto new_body_diameter_pixels = body_diameter_pixels - 1;
+    if (new_body_diameter_pixels < Constants::Graphics::BODY_DIAMETER_PIXELS_RANGE.first) {
+        Log::warning("Reached minimum body size (pixels), cannot reduce further");
+        new_body_diameter_pixels = Constants::Graphics::BODY_DIAMETER_PIXELS_RANGE.first;
+    }
+    body_diameter_pixels = new_body_diameter_pixels;
+    body_shader.setUniform("pointDiameter", static_cast<float>(body_diameter_pixels));
 }
 
 void Graphics::set_grid(bool enabled) {

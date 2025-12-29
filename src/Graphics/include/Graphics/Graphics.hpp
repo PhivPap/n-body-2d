@@ -29,6 +29,8 @@ public:
     void zoom_view(double delta);
     void grab_view();
     void release_view();
+    void body_size_increase();
+    void body_size_decrease();
 
     void set_grid(bool enabled);
     void draw_frame();
@@ -47,6 +49,7 @@ private:
     BufferedMeanCalculator<float, 60> fps_calculator{};
     Stats stats{};
     RLCaller stats_update_rate_limiter{Constants::Graphics::STATS_UPDATE_TIMER};
+    uint8_t body_diameter_pixels = Constants::Graphics::INIT_BODY_PIXEL_DIAMETER;
 
     void pan_if_view_grabbed();
     void draw_grid();

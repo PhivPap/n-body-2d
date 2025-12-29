@@ -61,8 +61,10 @@ void Controller::handle_events(sf::RenderWindow &window) {
                 timestep_increase();
                 break;
             case sf::Keyboard::Scan::Up:
+                graphics.body_size_increase();
                 break;
             case sf::Keyboard::Scan::Down:
+                graphics.body_size_decrease();
                 break;
             }
         }
