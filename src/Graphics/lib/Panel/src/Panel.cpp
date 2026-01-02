@@ -24,6 +24,10 @@ void Panel::set_visible(bool visible) {
     }
 }
 
+Panel::WriteHandle Panel::write_handle() {
+    return WriteHandle(this);
+}
+
 void Panel::update_displayed_data(DisplayedData &&displayed_data) {
     this->displayed_data = std::move(displayed_data);
     if (visible) {

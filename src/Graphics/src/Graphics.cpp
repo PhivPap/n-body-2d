@@ -191,6 +191,7 @@ void Graphics::body_size_decrease() {
 
 void Graphics::set_grid(bool enabled) {
     grid_enabled = enabled;
+    panel.write_handle()->grid = enabled;
 }
 
 void Graphics::draw_frame() {

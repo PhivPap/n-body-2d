@@ -44,10 +44,25 @@ public:
         std::string to_string();
     };
 
+    class WriteHandle {
+    public:
+        WriteHandle() = delete;
+        WriteHandle(Panel* panel) : panel(panel) {}
+        ~WriteHandle() {panel->bake();}
+        DisplayedData *operator->() {
+            return &(panel->displayed_data);
+        }
+    private:
+        Panel* panel;
+    };
+
+    friend class WriteHandle;
+
     Panel(sf::Vector2u size);
     void set_visible(bool visible);
-    void update_displayed_data(DisplayedData &&displayed_data);
+    WriteHandle write_handle();
 private:
+    void update_displayed_data(DisplayedData &&displayed_data);
     sf::RenderTexture texture;
     sf::Sprite sprite;
     sf::Text text;
