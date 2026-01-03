@@ -41,7 +41,9 @@ Graphics::Graphics(const Config::Graphics &graphics_cfg, const Bodies &bodies) :
     }
 
     glEnable(GL_PROGRAM_POINT_SIZE);
-    body_shader.loadFromMemory(body_vertex_shader, body_fragment_shader);
+    if (!body_shader.loadFromMemory(body_vertex_shader, body_fragment_shader)) {
+        throw std::runtime_error("Failed to load shaders");
+    }
     body_shader.setUniform("pointDiameter", static_cast<float>(body_diameter_pixels));
 }
 

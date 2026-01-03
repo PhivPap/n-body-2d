@@ -14,7 +14,7 @@ Panel::Panel(sf::Vector2u size) : texture(size), sprite(texture.getTexture()), t
     text.setLineSpacing(1.4f);
     texture.setSmooth(false);
     sprite.setScale({1.0f, -1.0f});
-    sprite.setPosition({0.0f, size.y});
+    sprite.setPosition({0.0f, static_cast<float>(size.y)});
 }
 
 void Panel::set_visible(bool visible) {
