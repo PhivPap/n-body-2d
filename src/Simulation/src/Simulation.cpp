@@ -7,6 +7,7 @@
 #include "Logger/Distance.hpp"
 #include "Constants/Constants.hpp"
 
+
 static inline constexpr double distance(const sf::Vector2<double> &pos_a, const sf::Vector2<double> &pos_b) {
     const sf::Vector2<double> diff = pos_a - pos_b;
     return std::sqrt(diff.x * diff.x + diff.y * diff.y);
@@ -17,7 +18,7 @@ static constexpr double distance_squared(const sf::Vector2<double> &pos_a, const
     return diff.x * diff.x + diff.y * diff.y;
 }
 
-Simulation::Simulation(const Config::Simulation &sim_cfg, std::vector<Body> &bodies) : 
+Simulation::Simulation(const Config::Simulation &sim_cfg, Bodies &bodies) : 
         bodies(bodies), max_iterations(sim_cfg.iterations), requested_timestep(sim_cfg.timestep),
         timestep(sim_cfg.timestep), 
         epsilon_squared(std::pow(compute_plummer_softening(bodies, sim_cfg.softening_factor), 2)) {}
@@ -64,9 +65,9 @@ void Simulation::set_timestep(double timestep) {
     requested_timestep.store(timestep, std::memory_order::relaxed);
 }
 
-double Simulation::compute_plummer_softening(const std::vector<Body> &bodies, double factor, 
+double Simulation::compute_plummer_softening(const Bodies &bodies, double factor, 
         double max_samples) {
-    const auto n = bodies.size();
+    const auto n = bodies.n;
     if (factor == 0.0) {
         Log::info("Plummer softening disabled (softening_factor=0)");
         return 0.0;
@@ -79,7 +80,7 @@ double Simulation::compute_plummer_softening(const std::vector<Body> &bodies, do
         double dist_sum = 0.0;
         for (uint64_t i = 0; i < n; i++) {
             for (uint64_t j = i + 1; j < n; j++) {
-                dist_sum += distance(bodies[i].pos, bodies[j].pos);
+                dist_sum += distance(bodies.pos(i), bodies.pos(j));
             }
         }
         const auto avg_pairwise_distance = dist_sum / n;
@@ -95,7 +96,7 @@ double Simulation::compute_plummer_softening(const std::vector<Body> &bodies, do
             const uint64_t i = uniform(rng);
             uint64_t j = uniform(rng);
             while (i == j) j = uniform(rng);
-            dist_sum += distance(bodies[i].pos, bodies[j].pos);
+            dist_sum += distance(bodies.pos(i), bodies.pos(j));
         }
         const auto avg_pairwise_distance = dist_sum / samples;
         Log::info("Average inter-body distance: {} (estimated with samples={})", 
@@ -138,7 +139,7 @@ void Simulation::update_stats() {
     stats.simulated_elapsed_s += iter_delta * timestep;
 }
 
-AllPairsSim::AllPairsSim(const Config::Simulation &sim_cfg, std::vector<Body> &bodies) : 
+AllPairsSim::AllPairsSim(const Config::Simulation &sim_cfg, Bodies &bodies) : 
         Simulation(sim_cfg, bodies) {}
 
 AllPairsSim::~AllPairsSim() {
@@ -166,42 +167,40 @@ void AllPairsSim::simulate() {
 }
 
 void AllPairsSim::update_positions() {
-    for (Body &body : bodies) {
-        body.pos += body.vel * timestep;
+    for (uint64_t i = 0; i < bodies.n; i++) {
+        bodies.pos(i) += bodies.vel(i) * timestep;
     }
 }
 
 // This algorithm only iterates each pair once calculating the forces both ways
 void AllPairsSim::update_velocities() {
-    Body* _bodies = bodies.data();
-    const uint64_t total_bodies = bodies.size();
-    for (uint64_t i = 0; i < total_bodies - 1; i++) {
-        Body &body_a = _bodies[i];
+    for (uint64_t i = 0; i < bodies.n; i++) {
         sf::Vector2<double> force_sum = {0.0, 0.0};
-        for (uint64_t j = i + 1; j < total_bodies; j++) {
-            Body &body_b = _bodies[j];
-            const sf::Vector2<double> force = gravitational_force(body_a, body_b);
-            body_b.vel -= force / body_b.mass * timestep;
+        for (uint64_t j = i + 1; j < bodies.n; j++) {
+            const sf::Vector2<double> force = gravitational_force(bodies.pos(i), bodies.pos(j), 
+                    bodies.mass(i), bodies.mass(j));
+            bodies.vel(j) -= force / bodies.mass(j) * timestep;
             force_sum += force;
         }
-        body_a.vel += force_sum / body_a.mass * timestep;
+        bodies.vel(i) += force_sum / bodies.mass(i) * timestep;
     }
 }
 
-sf::Vector2<double> AllPairsSim::gravitational_force(const Body &body_a, const Body &body_b) {
-    const double dist = distance(body_a.pos, body_b.pos);
-    const double force_amplitude = Constants::Simulation::G * body_a.mass * body_b.mass / 
+sf::Vector2<double> AllPairsSim::gravitational_force(const sf::Vector2<double> &pos_a, 
+            const sf::Vector2<double> &pos_b, double mass_a, double mass_b) {
+    const double dist = distance(pos_a, pos_b);
+    const double force_amplitude = Constants::Simulation::G * mass_a * mass_b / 
             (dist * dist + epsilon_squared);
-    return force_amplitude * (body_b.pos - body_a.pos) / dist;
+    return force_amplitude * (pos_b - pos_a) / dist;
 }
 
-BarnesHutSim::BarnesHutSim(const Config::Simulation &sim_cfg, std::vector<Body> &bodies) : 
+BarnesHutSim::BarnesHutSim(const Config::Simulation &sim_cfg, Bodies &bodies) : 
         Simulation(sim_cfg, bodies), n_threads(sim_cfg.threads), 
-        worker_chunk(bodies.size() / n_threads), master_offset(worker_chunk * (n_threads - 1)), 
+        worker_chunk(bodies.n / n_threads), master_offset(worker_chunk * (n_threads - 1)), 
         sync_point(n_threads) {
     if (sim_cfg.threads == 0)
         throw std::runtime_error("Thread count 0 is invalid");
-    if (sim_cfg.threads > bodies.size())
+    if (sim_cfg.threads > bodies.n)
         throw std::runtime_error("Threads must be less than the number of bodies");
     workers.reserve(sim_cfg.threads - 1);
 }
@@ -246,11 +245,11 @@ void BarnesHutSim::simulate() {
         sync_point.arrive_and_wait();
 
         sw_vel.resume();
-        update_velocities(master_offset, bodies.size());
+        update_velocities(master_offset, bodies.n);
         sw_vel.pause();
 
         sw_pos.resume();
-        update_positions(master_offset, bodies.size());
+        update_positions(master_offset, bodies.n);
         sw_pos.pause();
 
         sync_point.arrive_and_wait();
@@ -272,23 +271,19 @@ void BarnesHutSim::worker_task(uint32_t worker_id) {
 }
 
 void BarnesHutSim::update_positions(uint64_t begin_idx, uint64_t end_idx) {
-    Body* _bodies = bodies.data();
-    const uint32_t total_bodies = bodies.size();
-
     for (uint64_t idx = begin_idx; idx < end_idx; idx++) {
-        Body &body = _bodies[idx];
-        body.pos += body.vel * timestep;
+        bodies.pos(idx) += bodies.vel(idx) * timestep;
     }
 }
 
 void BarnesHutSim::update_velocities(uint64_t begin_idx, uint64_t end_idx) {
     for (uint64_t idx = begin_idx; idx < end_idx; idx++) {
-        update_velocity(bodies[idx]);
+        update_velocity(idx);
     }
 }
 
 // iterative DFS
-void BarnesHutSim::update_velocity(Body &body) {
+void BarnesHutSim::update_velocity(uint64_t body_idx) {
     std::vector<uint32_t> quad_idx_stack;
     quad_idx_stack.reserve(2000);
     quad_idx_stack.push_back(0);
@@ -299,15 +294,16 @@ void BarnesHutSim::update_velocity(Body &body) {
         const Quad &quad = qtree.quads[quad_idx_stack.back()];
         quad_idx_stack.pop_back();
         if (quad.is_leaf()) {
-            if (quad.total_mass != 0 && quad.center_of_mass != body.pos) {
-                F += body_to_quad_force(body, quad);
+            if (quad.total_mass != 0 && quad.center_of_mass != bodies.pos(body_idx)) {
+                F += body_to_quad_force(body_idx, quad);
             }
         }
         else {
-            const double dist_squared = distance_squared(body.pos, quad.center_of_mass);
+            const double dist_squared = (bodies.pos(body_idx) - quad.center_of_mass)
+                    .lengthSquared();
             if (quad.boundaries.size.lengthSquared() / 
                     dist_squared < Constants::Simulation::THETA) {
-                F += body_to_quad_force(body, quad);
+                F += body_to_quad_force(body_idx, quad);
             }
             else {
                 quad_idx_stack.push_back(quad.top_left_idx + 3);
@@ -318,12 +314,12 @@ void BarnesHutSim::update_velocity(Body &body) {
         }
     }
 
-    body.vel += F / body.mass * timestep;
+    bodies.vel(body_idx) += F / bodies.mass(body_idx) * timestep;
 }
 
-sf::Vector2<double> BarnesHutSim::body_to_quad_force(const Body &body, const Quad &quad) {
-    const double dist = distance(body.pos, quad.center_of_mass);
-    const double force_amplitude = Constants::Simulation::G * body.mass * quad.total_mass / 
-        (dist * dist + epsilon_squared);
-    return ((quad.center_of_mass - body.pos) / dist) * force_amplitude;
+sf::Vector2<double> BarnesHutSim::body_to_quad_force(uint64_t body_idx, const Quad &quad) {
+    const double dist = distance(bodies.pos(body_idx), quad.center_of_mass);
+    const double force_amplitude = Constants::Simulation::G * bodies.mass(body_idx) * 
+            quad.total_mass / (dist * dist + epsilon_squared);
+    return ((quad.center_of_mass - bodies.pos(body_idx)) / dist) * force_amplitude;
 }

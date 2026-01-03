@@ -27,11 +27,11 @@ void main() {
 }
 )glsl";
 
-Graphics::Graphics(const Config::Graphics &graphics_cfg, const std::vector<Body> &bodies) :
+Graphics::Graphics(const Config::Graphics &graphics_cfg, const Bodies &bodies) :
         bodies(bodies), 
         window(sf::VideoMode(sf::Vector2u(graphics_cfg.resolution)), "N-Body Sim"), 
         vp(sf::Vector2f(graphics_cfg.resolution), graphics_cfg.pixel_scale), 
-        body_vertex_array(sf::PrimitiveType::Points, bodies.size()), 
+        body_vertex_array(sf::PrimitiveType::Points, bodies.n), 
         grid_enabled(graphics_cfg.grid_enabled) {
     window.setFramerateLimit(graphics_cfg.fps);
     window.setVerticalSyncEnabled(graphics_cfg.vsync_enabled);
@@ -110,8 +110,8 @@ void Graphics::draw_grid() {
 
 void Graphics::draw_bodies() {
     const uint64_t vertex_count = body_vertex_array.getVertexCount();
-    for (uint64_t i = 0; i < bodies.size(); i++) {
-        body_vertex_array[i].position = vp.body_on_viewport(bodies[i].pos);
+    for (uint64_t i = 0; i < bodies.n; i++) {
+        body_vertex_array[i].position = vp.body_on_viewport(bodies.pos(i));
     }
     window.draw(body_vertex_array, sf::RenderStates(&body_shader));
 }

@@ -21,7 +21,7 @@ public:
         sf::Vector2<uint32_t> viewport_px;
     };
 
-    Graphics(const Config::Graphics &graphics_cfg, const std::vector<Body> &bodies);
+    Graphics(const Config::Graphics &graphics_cfg, const Bodies &bodies);
     Stats get_stats() const;
     sf::RenderWindow &get_window();
     Panel &get_panel();
@@ -36,7 +36,7 @@ public:
     void draw_frame();
 
 private:
-    const std::vector<Body> &bodies;
+    const Bodies &bodies;
     StopWatch sw;
     sf::VertexArray body_vertex_array;
     sf::RenderWindow window;

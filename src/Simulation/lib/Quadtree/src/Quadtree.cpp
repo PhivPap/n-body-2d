@@ -6,28 +6,27 @@
 #include "Logger/Logger.hpp"
 
 
-sf::Rect<double> get_universe_boundaries(const std::vector<Body> &bodies) {
+sf::Rect<double> get_universe_boundaries(const Bodies &bodies) {
     double min_x = std::numeric_limits<double>::max();
     double max_x = std::numeric_limits<double>::lowest();
     double min_y = std::numeric_limits<double>::max();
     double max_y = std::numeric_limits<double>::lowest();
 
-    for (const Body &body : bodies) {
-        if (body.pos.x < min_x) {
-            min_x = body.pos.x;
+    for (uint64_t i = 0; i < bodies.n; i++) {
+        if (bodies.pos(i).x < min_x) {
+            min_x = bodies.pos(i).x;
         }
-        else if (body.pos.x > max_x) {
-            max_x = body.pos.x;
+        else if (bodies.pos(i).x > max_x) {
+            max_x = bodies.pos(i).x;
         }
 
-        if (body.pos.y < min_y) {
-            min_y = body.pos.y;
+        if (bodies.pos(i).y < min_y) {
+            min_y = bodies.pos(i).y;
         }
-        else if (body.pos.y > max_y) {
-            max_y = body.pos.y;
+        else if (bodies.pos(i).y > max_y) {
+            max_y = bodies.pos(i).y;
         }
     }
-
     return {{min_x, min_y}, {max_x - min_x, max_y - min_y}};
 }
 
@@ -47,11 +46,11 @@ void Quadtree::fill_tree_recursive(uint32_t quad_idx) {
         return;
     }
     else if (quad->body_count == 1) {
-        const Body *body = quad->bodies.front();
-        quad->center_of_mass = body->pos;
-        quad->total_mass = body->mass;
-        quad->momentum = body->vel * body->mass;
-        quad->bodies.clear();
+        const auto body_idx = quad->body_idxs.front();
+        quad->center_of_mass = bodies->pos(body_idx);
+        quad->total_mass = bodies->mass(body_idx);
+        quad->momentum = bodies->vel(body_idx) * bodies->mass(body_idx);
+        quad->body_idxs.clear();
         return;
     }
 
@@ -74,30 +73,30 @@ void Quadtree::fill_tree_recursive(uint32_t quad_idx) {
     Quad *bottom_left = top_left + 2;
     Quad *bottom_right = top_left + 3;
 
-    auto top_left_head = top_left->bodies.before_begin();
-    auto top_right_head = top_right->bodies.before_begin();
-    auto bottom_left_head = bottom_left->bodies.before_begin();
-    auto bottom_right_head = bottom_right->bodies.before_begin();
+    auto top_left_head = top_left->body_idxs.before_begin();
+    auto top_right_head = top_right->body_idxs.before_begin();
+    auto bottom_left_head = bottom_left->body_idxs.before_begin();
+    auto bottom_right_head = bottom_right->body_idxs.before_begin();
 
-    while (!quad->bodies.empty()) {
-        auto &body = quad->bodies.front();
-        if (body->pos.x < center.x) {
-            if (body->pos.y < center.y) {
-                top_left->bodies.splice_after(top_left_head, quad->bodies, quad->bodies.before_begin());
+    while (!quad->body_idxs.empty()) {
+        const auto body_idx = quad->body_idxs.front();
+        if (bodies->pos(body_idx).x < center.x) {
+            if (bodies->pos(body_idx).y < center.y) {
+                top_left->body_idxs.splice_after(top_left_head, quad->body_idxs, quad->body_idxs.before_begin());
                 top_left->body_count++;
             }
             else {
-                bottom_left->bodies.splice_after(bottom_left_head, quad->bodies, quad->bodies.before_begin());
+                bottom_left->body_idxs.splice_after(bottom_left_head, quad->body_idxs, quad->body_idxs.before_begin());
                 bottom_left->body_count++;
             }
         }
         else {
-            if (body->pos.y < center.y) {
-                top_right->bodies.splice_after(top_right_head, quad->bodies, quad->bodies.before_begin());
+            if (bodies->pos(body_idx).y < center.y) {
+                top_right->body_idxs.splice_after(top_right_head, quad->body_idxs, quad->body_idxs.before_begin());
                 top_right->body_count++;
             }
             else {
-                bottom_right->bodies.splice_after(bottom_right_head, quad->bodies, quad->bodies.before_begin());
+                bottom_right->body_idxs.splice_after(bottom_right_head, quad->body_idxs, quad->body_idxs.before_begin());
                 bottom_right->body_count++;
             }
         }
@@ -129,7 +128,9 @@ void Quadtree::fill_tree_recursive(uint32_t quad_idx) {
             bottom_left->momentum + bottom_right->momentum;
 }
 
-void Quadtree::build_tree(const std::vector<Body> &bodies) {
+void Quadtree::build_tree(const Bodies &bodies) {
+    this->bodies = &bodies;
+
     // After the first tree, we always expect the new one to be similar to the previous.
     // This will hopefully be enough to avoid resizes during the tree gen.
     quads.reserve(quads.size() * 1.1);
@@ -138,11 +139,11 @@ void Quadtree::build_tree(const std::vector<Body> &bodies) {
     // insert & init root
     quads.emplace_back(get_universe_boundaries(bodies));
     Quad& root = quads.back();
-    for (const Body& body : bodies) {
-        root.bodies.push_front(&body);
-        root.total_mass += body.mass;
+    for (uint64_t i = 0; i < bodies.n; i++) {
+        root.body_idxs.push_front(i);
+        root.total_mass += bodies.mass(i);
     }
-    root.body_count = bodies.size();
+    root.body_count = bodies.n;
 
     fill_tree_recursive(0);
 }

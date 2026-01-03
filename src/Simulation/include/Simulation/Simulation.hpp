@@ -25,7 +25,7 @@ public:
         double simulated_elapsed_s = 0;
     };
 
-    Simulation(const Config::Simulation &sim_cfg, std::vector<Body> &bodies);
+    Simulation(const Config::Simulation &sim_cfg, Bodies &bodies);
     virtual ~Simulation();
 
     State get_state();
@@ -36,14 +36,14 @@ public:
     void set_timestep(double timestep);
 
 protected:
-    static double compute_plummer_softening(const std::vector<Body> &bodies, double factor, 
+    static double compute_plummer_softening(const Bodies &bodies, double factor, 
             double max_samples=Constants::Simulation::MAX_PAIRWISE_SOFTENING_COMPUTATIONS);
     bool should_stop();
     void post_iteration();
     virtual void on_run() = 0;
     virtual void on_pause() = 0;
 
-    std::vector<Body> &bodies;
+    Bodies &bodies;
     const double epsilon_squared;
     const uint64_t max_iterations;
     std::atomic<double> requested_timestep;
@@ -71,11 +71,12 @@ private:
     void simulate();
     void update_positions();
     void update_velocities();
-    sf::Vector2<double> gravitational_force(const Body &body_a, const Body &body_b);
+    sf::Vector2<double> gravitational_force(const sf::Vector2<double> &pos_a, 
+            const sf::Vector2<double> &pos_b, double mass_a, double mass_b);
 
     std::thread sim_thread;
 public:
-    AllPairsSim(const Config::Simulation &sim_cfg, std::vector<Body> &bodies);
+    AllPairsSim(const Config::Simulation &sim_cfg, Bodies &bodies);
     ~AllPairsSim() override;
 };
 
@@ -99,11 +100,10 @@ private:
     void worker_task(uint32_t worker_id);
     void update_positions(uint64_t begin_idx, uint64_t end_idx);
     void update_velocities(uint64_t begin_idx, uint64_t end_idx);
-    void update_velocity(Body &body);
-    double compute_softening(const Body &body, const Quad &quad);
-    sf::Vector2<double> body_to_quad_force(const Body &body, const Quad &quad);
+    void update_velocity(uint64_t body_idx);
+    sf::Vector2<double> body_to_quad_force(uint64_t body_idx, const Quad &quad);
 
 public:
-    BarnesHutSim(const Config::Simulation &sim_cfg, std::vector<Body> &bodies);
+    BarnesHutSim(const Config::Simulation &sim_cfg, Bodies &bodies);
     virtual ~BarnesHutSim();
 };

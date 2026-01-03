@@ -20,8 +20,7 @@ void sigint_handler(int signum) {
     Controller::sigint_flag = true;
 }
 
-std::unique_ptr<Simulation> create_sim(const Config::Simulation &sim_cfg, 
-        std::vector<Body> &bodies) {
+std::unique_ptr<Simulation> create_sim(const Config::Simulation &sim_cfg, Bodies &bodies) {
     if (sim_cfg.simtype == Config::Simulation::SimType::NAIVE) {
         return std::make_unique<AllPairsSim>(sim_cfg, bodies);
     }
@@ -36,8 +35,7 @@ int main(int argc, const char *argv[]) {
     try {
         const CLArgs clargs(argc, argv);
         Config cfg(clargs.config);
-        std::vector<Body> bodies = IO::parse_csv(cfg.io.universe_infile.string(), 
-                cfg.io.echo_bodies);
+        Bodies bodies = IO::parse_csv(cfg.io.universe_infile.string(), cfg.io.echo_bodies);
     
         std::unique_ptr<Simulation> sim = create_sim(cfg.sim, bodies);
         Graphics graphics(cfg.graphics, bodies);
