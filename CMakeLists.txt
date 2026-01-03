@@ -1,6 +1,6 @@
 # Top-level CMakeLists.txt
 
-cmake_minimum_required(VERSION 3.14)
+cmake_minimum_required(VERSION 3.23)
 project(n-body-2d)
 
 # Set the C++ standard

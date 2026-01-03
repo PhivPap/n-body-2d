@@ -9,6 +9,8 @@
 #include "Body/Body.hpp"
 #include "CLArgs/CLArgs.hpp"
 #include "Simulation/Simulation.hpp"
+#include "Simulation/AllPairs.hpp"
+#include "Simulation/BarnesHut.hpp"
 #include "Graphics/Graphics.hpp"
 #include "Controller/Controller.hpp"
 
@@ -25,7 +27,7 @@ std::unique_ptr<Simulation> create_sim(const Config::Simulation &sim_cfg, Bodies
         return std::make_unique<AllPairsSim>(sim_cfg, bodies);
     }
     else if (sim_cfg.simtype == Config::Simulation::SimType::BARNES_HUT) {
-        return std::make_unique<BarnesHutSim>(sim_cfg, bodies);
+        return std::make_unique<BarnesHut>(sim_cfg, bodies);
     }
     assert(false);
     return nullptr;
