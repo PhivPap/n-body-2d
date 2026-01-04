@@ -9,6 +9,8 @@
 
 class Bodies {
 public:
+    const uint64_t n;
+
     Bodies() = delete;
     Bodies(std::vector<std::string> &&id, std::vector<double> &&mass, 
             std::vector<sf::Vector2<double>> &&pos, 
@@ -22,14 +24,17 @@ public:
     const sf::Vector2<double> &pos(uint64_t index) const;
     sf::Vector2<double> &vel(uint64_t index);
     const sf::Vector2<double> &vel(uint64_t index) const;
-
-    const uint64_t n;
+    double *mass_data();
+    const double *mass_data() const;
+    sf::Vector2<double> *pos_data();
+    const sf::Vector2<double> *pos_data() const;
+    sf::Vector2<double> *vel_data();
+    const sf::Vector2<double> *vel_data() const;
 private:
-    bool validate_len() const;
-    bool validate_ids() const;
-
     std::vector<std::string> id_;
     std::vector<double> mass_;
     std::vector<sf::Vector2<double>> pos_;
     std::vector<sf::Vector2<double>> vel_;
+
+    bool validate_ids() const;
 };

@@ -1,7 +1,7 @@
 project(simulation LANGUAGES CXX CUDA)
 
 
-set(CMAKE_CUDA_STANDARD 17)
+set(CMAKE_CUDA_STANDARD 20)
 set(CMAKE_CUDA_STANDARD_REQUIRED ON)
 set(CMAKE_CUDA_ARCHITECTURES "native")
 
@@ -15,6 +15,7 @@ add_library(${PROJECT_NAME}
         ${CMAKE_CURRENT_LIST_DIR}/src/Simulation.cpp 
         ${CMAKE_CURRENT_LIST_DIR}/src/AllPairs.cpp 
         ${CMAKE_CURRENT_LIST_DIR}/src/BarnesHut.cpp 
+        ${CMAKE_CURRENT_LIST_DIR}/src/BarnesHutCuda.cpp
         ${CMAKE_CURRENT_LIST_DIR}/src/BarnesHutCuda.cu)
 target_include_directories(${PROJECT_NAME} PRIVATE ${CMAKE_CURRENT_LIST_DIR}/include)
 

@@ -71,6 +71,31 @@ const sf::Vector2<double> &Bodies::vel(uint64_t index) const {
     return vel_[index];
 }
 
+double *Bodies::mass_data() {
+    return mass_.data();
+}
+
+const double *Bodies::mass_data() const {
+    return mass_.data();
+}
+
+sf::Vector2<double> *Bodies::pos_data() {
+    return pos_.data();
+}
+
+const sf::Vector2<double> *Bodies::pos_data() const {
+    return pos_.data();
+}
+
+sf::Vector2<double> *Bodies::vel_data() {
+    return vel_.data();
+}
+
+const sf::Vector2<double> *Bodies::vel_data() const {
+    return vel_.data();
+}
+
+
 bool Bodies::validate_ids() const {
     std::unordered_set<std::string_view> unique_body_ids;
     unique_body_ids.reserve(n);
