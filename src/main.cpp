@@ -11,6 +11,7 @@
 #include "Simulation/Simulation.hpp"
 #include "Simulation/AllPairs.hpp"
 #include "Simulation/BarnesHut.hpp"
+#include "Simulation/BarnesHutCuda.hpp"
 #include "Graphics/Graphics.hpp"
 #include "Controller/Controller.hpp"
 
@@ -23,11 +24,14 @@ void sigint_handler(int signum) {
 }
 
 std::unique_ptr<Simulation> create_sim(const Config::Simulation &sim_cfg, Bodies &bodies) {
-    if (sim_cfg.simtype == Config::Simulation::SimType::NAIVE) {
+    if (sim_cfg.simtype == Config::Simulation::SimType::ALL_PAIRS) {
         return std::make_unique<AllPairsSim>(sim_cfg, bodies);
     }
     else if (sim_cfg.simtype == Config::Simulation::SimType::BARNES_HUT) {
         return std::make_unique<BarnesHut>(sim_cfg, bodies);
+    }
+    else if (sim_cfg.simtype == Config::Simulation::SimType::BARNES_HUT_GPU) {
+        return std::make_unique<BarnesHutCuda>(sim_cfg, bodies);
     }
     assert(false);
     return nullptr;

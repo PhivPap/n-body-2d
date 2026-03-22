@@ -1,10 +1,12 @@
 #include "Simulation/BarnesHutCuda.hpp"
 
-#include "Simulation/BarnesHutCuda.cuh"
+#include <algorithm>
+#include <limits>
 
 
 BarnesHutCuda::BarnesHutCuda(const Config::Simulation &sim_cfg, Bodies &bodies) 
-        : Simulation(sim_cfg, bodies) {
+        : Simulation(sim_cfg, bodies),
+          max_quads(bodies.n * 8) {
     init_device_resources();
 }
 
@@ -28,15 +30,10 @@ void BarnesHutCuda::on_pause() {
 void BarnesHutCuda::simulate() {
     while (!should_stop()) {
         compute_bounding_box();
-        compute_morton_codes();
-        sort_by_morton_code();
-
-        // build quad tree
-
-        // update velocities
-
-        // update positions
-
+        build_quad_tree();
+        compute_forces();
+        update_positions();
+        sync_from_gpu_bodies();
         post_iteration();
     }
 }

@@ -22,7 +22,7 @@ public:
         double timestep;
         uint64_t iterations;
         std::string simtype_str;
-        enum class SimType : uint8_t {BARNES_HUT, NAIVE} simtype;
+        enum class SimType : uint8_t {ALL_PAIRS, BARNES_HUT, BARNES_HUT_GPU} simtype;
         double softening_factor;
         uint16_t threads;
 

@@ -46,4 +46,21 @@ target_include_directories(${PROJECT_NAME} PRIVATE ${THIRD_PARTY_DIR}/SMFL/inclu
 target_link_libraries(${PROJECT_NAME} PRIVATE sfml-graphics sfml-window sfml-system)
 
 find_package(CUDAToolkit REQUIRED)
-target_link_libraries(${PROJECT_NAME} PRIVATE CUDA::cudart)
+
+enable_language(CUDA)
+set_target_properties(${PROJECT_NAME} PROPERTIES
+    CUDA_SEPARABLE_COMPILATION ON
+)
+target_compile_options(${PROJECT_NAME} PRIVATE
+    $<$<COMPILE_LANGUAGE:CUDA>:-rdc=true>
+)
+set_target_properties(simulation PROPERTIES
+    CUDA_RESOLVE_DEVICE_SYMBOLS ON
+)
+
+add_library(cudadevrt STATIC IMPORTED)
+set_target_properties(cudadevrt PROPERTIES
+    IMPORTED_LOCATION
+        ${CUDAToolkit_LIBRARY_ROOT}/targets/x86_64-linux/lib/libcudadevrt.a
+)
+target_link_libraries(${PROJECT_NAME} PRIVATE cudadevrt CUDA::cudart)

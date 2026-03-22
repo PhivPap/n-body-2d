@@ -174,7 +174,8 @@ bool Config::IO::validate() {
 std::string_view Config::Simulation::simtype_to_string(SimType simtype) {
     switch (simtype) {
     case SimType::BARNES_HUT: return "Barnes-Hut";
-    case SimType::NAIVE: return "All Pairs";
+    case SimType::ALL_PAIRS: return "All Pairs";
+    case SimType::BARNES_HUT_GPU: return "Barnes-Hut GPU";
     }
     assert(false);
     return {};
@@ -192,11 +193,14 @@ bool Config::Simulation::parse_simtype() {
     Log::debug("`{}`", simtype_str_lower);
     
     bool ok = true;
-    if (simtype_str_lower == to_lower(simtype_to_string(SimType::BARNES_HUT))) {
+    if (simtype_str_lower == to_lower(simtype_to_string(SimType::ALL_PAIRS))) {
+        simtype = SimType::ALL_PAIRS;
+    }
+    else if (simtype_str_lower == to_lower(simtype_to_string(SimType::BARNES_HUT))) {
         simtype = SimType::BARNES_HUT;
     }
-    else if (simtype_str_lower == to_lower(simtype_to_string(SimType::NAIVE))) {
-        simtype = SimType::NAIVE;
+    else if (simtype_str_lower == to_lower(simtype_to_string(SimType::BARNES_HUT_GPU))) {
+        simtype = SimType::BARNES_HUT_GPU;
     }
     else {
         ok = false;
@@ -232,7 +236,7 @@ bool Config::Simulation::validate() {
         ok = false;
         Log::error("Config::Simulation::simtype `{}` is not one of the valid options `{}`, `{}`",
                 simtype_str, simtype_to_string(SimType::BARNES_HUT), 
-                simtype_to_string(SimType::NAIVE));
+                simtype_to_string(SimType::ALL_PAIRS));
     }
     if (!in_range(softening_factor, SOFTENING_FACTOR_RANGE)) {
         ok = false;
