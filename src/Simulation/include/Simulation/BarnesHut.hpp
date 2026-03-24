@@ -10,6 +10,7 @@ public:
     ~BarnesHut() override;
 private:
     const uint16_t n_threads;
+    const double theta_sq;
     Quadtree qtree;
     std::thread master;
     std::vector<std::thread> workers;

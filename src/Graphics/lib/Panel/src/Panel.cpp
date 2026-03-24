@@ -36,102 +36,100 @@ void Panel::update_displayed_data(DisplayedData &&displayed_data) {
 }
 
 std::string Panel::DisplayedData::fmt_timestep() const {
-    return fmt::format("Time Step:     {}", Log::Time::from(timestep_s));
+    return fmt::format("{}", Log::Time::from(timestep_s));
 }
 
 std::string Panel::DisplayedData::fmt_algorithm() const {
-    return fmt::format("Algorithm:     {}", algorithm);
+    return fmt::format("{}", algorithm);
 }
 
 std::string Panel::DisplayedData::fmt_theta() const {
-    return fmt::format("Theta:         {}", theta);
+    return fmt::format("{}", theta);
 }
 
 std::string Panel::DisplayedData::fmt_softening_factor() const {
-    return fmt::format("Soft. Factor:  {:.5f}", softening_factor);
+    return fmt::format("{:.5f}", softening_factor);
 }
 
 std::string Panel::DisplayedData::fmt_threads() const {
-    return fmt::format("Threads:       {}", threads);
+    return fmt::format("{}", threads);
 }
 
 std::string Panel::DisplayedData::fmt_viewport_m() const {
-    return fmt::format("View[W x H]:   {} x {}", Log::Distance::from(viewport_m.x), 
+    return fmt::format("{} x {}", Log::Distance::from(viewport_m.x), 
             Log::Distance::from(viewport_m.y));
 }
 
 std::string Panel::DisplayedData::fmt_viewport_px() const {
-    return fmt::format("Window[W x H]: {}px x {}px", viewport_px.x, viewport_px.y);
+    return fmt::format("{}px x {}px", viewport_px.x, viewport_px.y);
 }
 
 std::string Panel::DisplayedData::fmt_vsync() const {
-    return fmt::format("Vsync:         {}", vsync ? "ON" : "OFF");
+    return fmt::format("{}", vsync ? "ON" : "OFF");
 }
 
 std::string Panel::DisplayedData::fmt_grid() const {
-    return fmt::format("Grid:          {}", grid ? "ON" : "OFF");
+    return fmt::format("{}", grid ? "ON" : "OFF");
 }
 
 std::string Panel::DisplayedData::fmt_max_fps() const {
-    return fmt::format("Max FPS:       {}", max_fps);
+    return fmt::format("{}", max_fps);
 }
 
 std::string Panel::DisplayedData::fmt_iteration() const {
-    return fmt::format("Iteration:     {}", iteration);
+    return fmt::format("{}", iteration);
 }
 
 std::string Panel::DisplayedData::fmt_iter_per_sec() const {
-    return fmt::format("IPS:           {:.3f}", iter_per_sec);
+    return fmt::format("{:.3f}", iter_per_sec);
 }
 
 std::string Panel::DisplayedData::fmt_frame() const {
-    return fmt::format("Frame:         {}", frame);
+    return fmt::format("{}", frame);
 }
 
 std::string Panel::DisplayedData::fmt_fps() const {
-    return fmt::format("FPS:           {:.3f}", fps);
+    return fmt::format("{:.3f}", fps);
 }
 
 std::string Panel::DisplayedData::fmt_elapsed() const {
-    return fmt::format("Elapsed:       {}", Log::Time::from(elapsed_s));
+    return fmt::format("{}", Log::Time::from(elapsed_s));
 }
 
 std::string Panel::DisplayedData::fmt_sim_time() const {
-    return fmt::format("Sim. Time:     {}", Log::Time::from(simulated_time_s));
+    return fmt::format("{}", Log::Time::from(simulated_time_s));
 }
 
 std::string Panel::DisplayedData::fmt_sim_rate() const {
-    return fmt::format("Sim. Rate:     {}/s", Log::Time::from(timestep_s * iter_per_sec));
+    return fmt::format("{}/s", Log::Time::from(timestep_s * iter_per_sec));
 }
 
 std::string Panel::DisplayedData::to_string() {
-constexpr const char *fmt_str = 
-R"(Configuration:
- {}
- {}
- {}
- {}
- {}
- {}
- {}
- {}
- {}
- {}
-
-Stats:
- {}
- {}
- {}
- {}
- {}
- {}
- {})";
-    return fmt::format(fmt_str, fmt_timestep(), fmt_algorithm(), fmt_theta(), 
-            fmt_softening_factor(), fmt_threads(), fmt_viewport_m(), fmt_viewport_px(), 
-            fmt_vsync(), fmt_grid(), fmt_max_fps(), fmt_iteration(), fmt_iter_per_sec(), 
-            fmt_frame(), fmt_fps(), fmt_elapsed(), fmt_sim_time(), fmt_sim_rate());
+    std::string txt = "Configuration:\n";
+    txt += fmt::format(" Timestep:      {}\n", fmt_timestep());
+    txt += fmt::format(" Algorithm:     {}\n", fmt_algorithm());
+    if (show_theta) {
+        txt += fmt::format(" Theta:         {}\n", fmt_theta());
+    }
+    txt += fmt::format(" Soft. Factor:  {}\n", fmt_softening_factor());
+    if (show_threads) {
+        txt += fmt::format(" Threads (sim):  {}\n", fmt_threads());
+    }
+    txt += fmt::format(" View[W x H]:   {}\n", fmt_viewport_m());
+    txt += fmt::format(" Window[W x H]: {}\n", fmt_viewport_px());
+    txt += fmt::format(" Vsync:         {}\n", fmt_vsync());
+    txt += fmt::format(" Grid:          {}\n", fmt_grid());
+    txt += fmt::format(" Max FPS:       {}\n", fmt_max_fps());
+    txt += "Stats:\n";
+    txt += fmt::format(" Iteration:     {}\n", fmt_iteration());
+    txt += fmt::format(" IPS:           {}\n", fmt_iter_per_sec());
+    txt += fmt::format(" Frame:         {}\n", fmt_frame());
+    txt += fmt::format(" FPS:           {}\n", fmt_fps());
+    txt += fmt::format(" Elapsed:       {}\n", fmt_elapsed());
+    txt += fmt::format(" Sim. Time:     {}\n", fmt_sim_time());
+    txt += fmt::format(" Sim. Rate:     {}\n", fmt_sim_rate());
+    return txt;
 }
-
 
 void Panel::bake() {
     texture.clear(sf::Color(40, 40, 40, 180));

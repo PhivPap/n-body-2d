@@ -75,9 +75,12 @@ void Controller::init_panel() {
     auto panel_handle = graphics.get_panel().write_handle();
     panel_handle->timestep_s = cfg.sim.timestep;
     panel_handle->algorithm = cfg.sim.simtype_str;
-    panel_handle->theta = Constants::Simulation::THETA;
+    panel_handle->theta = cfg.sim.theta;
+    panel_handle->show_theta = cfg.sim.simtype == Config::Simulation::SimType::BARNES_HUT ||
+                                cfg.sim.simtype == Config::Simulation::SimType::BARNES_HUT_GPU;
     panel_handle->softening_factor = cfg.sim.softening_factor;
     panel_handle->threads = cfg.sim.threads;
+    panel_handle->show_threads = cfg.sim.simtype != Config::Simulation::SimType::BARNES_HUT_GPU;
     panel_handle->viewport_m = {0, 0};
     panel_handle->viewport_px = {0, 0};
     panel_handle->vsync = cfg.graphics.vsync_enabled;

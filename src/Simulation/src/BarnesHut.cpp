@@ -4,6 +4,7 @@
 
 BarnesHut::BarnesHut(const Config::Simulation &sim_cfg, Bodies &bodies) : 
         Simulation(sim_cfg, bodies), n_threads(sim_cfg.threads), 
+        theta_sq(sim_cfg.theta * sim_cfg.theta),
         worker_chunk(bodies.n / n_threads), master_offset(worker_chunk * (n_threads - 1)), 
         sync_point(n_threads) {
     if (sim_cfg.threads == 0)
@@ -111,10 +112,8 @@ void BarnesHut::update_velocity(uint64_t body_idx) {
         else {
             const double dist_squared = (bodies.pos(body_idx) - quad.center_of_mass)
                     .lengthSquared();
-            constexpr double theta_squared = Constants::Simulation::THETA * 
-                    Constants::Simulation::THETA;
             if (quad.boundaries.size.lengthSquared() / 
-                    dist_squared < theta_squared) {
+                    dist_squared < theta_sq) {
                 F += body_to_quad_force(body_idx, quad);
             }
             else {

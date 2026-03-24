@@ -9,8 +9,10 @@ public:
         double timestep_s;
         std::string algorithm;
         double theta;
+        bool show_theta;
         double softening_factor;
         uint32_t threads;
+        bool show_threads;
         sf::Vector2<double> viewport_m;
         sf::Vector2<uint32_t> viewport_px;
         bool vsync;

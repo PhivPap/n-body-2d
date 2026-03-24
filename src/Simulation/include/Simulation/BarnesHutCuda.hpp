@@ -50,6 +50,7 @@ public:
 private:
     std::thread sim_thread;
     Box bounding_box;
+    const double theta_sq;
     const int32_t max_quads;
 
     // Body arrays (sorted by Morton code each iteration)

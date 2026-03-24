@@ -385,12 +385,10 @@ namespace Kernel {
             const Vector2 * __restrict__ pos,
             const double  * __restrict__ mass,
             Vector2 *vel,
-            int32_t n, double epsilon_sq, double G_dt) {
+            int32_t n, double epsilon_sq, double G_dt, double theta_sq) {
 
         const int32_t i = static_cast<int32_t>(blockIdx.x * blockDim.x + threadIdx.x);
         if (i >= n) return;
-
-        constexpr double THETA_SQ = Constants::Simulation::THETA * Constants::Simulation::THETA;
 
         const double body_x = pos[i].x;
         const double body_y = pos[i].y;
@@ -455,7 +453,7 @@ namespace Kernel {
 
             // Internal node — opening angle test
             const double wsq = __ldg(&t_wsq[nid]);
-            if (wsq < THETA_SQ * dist_sq) {
+            if (wsq < theta_sq * dist_sq) {
                 const double r2 = dist_sq + epsilon_sq;
                 const double inv_r = rsqrt(r2);
                 const double inv_r3 = inv_r * inv_r * inv_r;
@@ -824,7 +822,7 @@ void BarnesHutCuda::compute_forces() {
         tree.child0,
         tree.body_start, tree.body_end,
         pos_d, mass_d, vel_d,
-        n, epsilon_squared, G_dt);
+        n, epsilon_squared, G_dt, theta_sq);
     CUDA_CHECK(cudaGetLastError());
     CUDA_CHECK(cudaDeviceSynchronize());
 }

@@ -16,7 +16,7 @@ namespace Constants {
         const char* const ALLOWED_ALGORITHMS[] = { "barnes-hut", "naive" };
         constexpr Range<double> SOFTENING_FACTOR_RANGE = {0.0, 0.2};
         constexpr Range<uint16_t> THREADS_RANGE = {1, 256};
-        constexpr double THETA = 0.7;
+        constexpr Range<double> THETA_RANGE = {0.0, 100.0};
         constexpr auto STATS_UPDATE_TIMER = std::chrono::microseconds(50);
         constexpr uint64_t MAX_PAIRWISE_SOFTENING_COMPUTATIONS = 1'000'000;
         constexpr double TIMESTEP_CHANGE_FACTOR = 1.1;
