@@ -6,7 +6,7 @@
 
 BarnesHutCuda::BarnesHutCuda(const Config::Simulation &sim_cfg, Bodies &bodies) 
         : Simulation(sim_cfg, bodies),
-          max_quads(bodies.n * 8) {
+          max_quads(static_cast<int32_t>(bodies.n) * 5) {
     init_device_resources();
 }
 
@@ -30,6 +30,7 @@ void BarnesHutCuda::on_pause() {
 void BarnesHutCuda::simulate() {
     while (!should_stop()) {
         compute_bounding_box();
+        sort_bodies_by_morton();
         build_quad_tree();
         compute_forces();
         update_positions();

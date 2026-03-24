@@ -45,6 +45,13 @@ target_include_directories(${PROJECT_NAME} PUBLIC ${LIB_DIR}/BufferedMeanCalcula
 target_include_directories(${PROJECT_NAME} PRIVATE ${THIRD_PARTY_DIR}/SMFL/include)
 target_link_libraries(${PROJECT_NAME} PRIVATE sfml-graphics sfml-window sfml-system)
 
+# CUB / libcudacxx from vendored CCCL (header-only)
+target_include_directories(${PROJECT_NAME} PRIVATE
+    ${THIRD_PARTY_DIR}/CCCL/cub
+    ${THIRD_PARTY_DIR}/CCCL/libcudacxx/include
+    ${THIRD_PARTY_DIR}/CCCL/thrust
+)
+
 find_package(CUDAToolkit REQUIRED)
 
 enable_language(CUDA)
@@ -53,6 +60,10 @@ set_target_properties(${PROJECT_NAME} PROPERTIES
 )
 target_compile_options(${PROJECT_NAME} PRIVATE
     $<$<COMPILE_LANGUAGE:CUDA>:-rdc=true>
+    $<$<COMPILE_LANGUAGE:CUDA>:--use_fast_math>
+    $<$<COMPILE_LANGUAGE:CUDA>:--extra-device-vectorization>
+    $<$<COMPILE_LANGUAGE:CUDA>:--dlink-time-opt>
+    $<$<COMPILE_LANGUAGE:CUDA>:-Xcompiler=-O3,-march=native,-ffast-math>
 )
 set_target_properties(simulation PROPERTIES
     CUDA_RESOLVE_DEVICE_SYMBOLS ON

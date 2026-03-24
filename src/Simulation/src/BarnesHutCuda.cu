@@ -1,10 +1,12 @@
 #include "Simulation/BarnesHutCuda.hpp"
 
 #include <cuda_runtime.h>
+#include <cub/cub.cuh>
 
 #include "Logger/Logger.hpp"
 
-constexpr auto BLOCK_SIZE = 256;
+constexpr uint32_t BLOCK_SIZE = 256;
+constexpr int32_t  LEAF_THRESHOLD = 1;  // max bodies in a leaf node before splitting
 
 #define CUDA_CHECK(call) do {                                                               \
     cudaError_t err = (call);                                                               \
@@ -14,234 +16,81 @@ constexpr auto BLOCK_SIZE = 256;
     }                                                                                       \
 } while(0)
 
+// ---------------------------------------------------------------------------
+// Device helpers
+// ---------------------------------------------------------------------------
 namespace Device {
-    __device__ double shfl_down_double(uint32_t mask, double val, int32_t delta) {
-        int32_t lo = __double2loint(val);
-        int32_t hi = __double2hiint(val);
-        lo = __shfl_down_sync(mask, lo, delta);
-        hi = __shfl_down_sync(mask, hi, delta);
-        return __hiloint2double(hi, lo);
-    }
-
     __device__ double atomic_min(double* addr, double value) {
         using ull = unsigned long long;
         ull *addr_as_ull = (ull*)addr;
         ull old = *addr_as_ull;
         ull assumed;
-    
         do {
             assumed = old;
-            double old_val = __longlong_as_double(assumed);
-            if (old_val <= value)
-                break;
+            if (__longlong_as_double(assumed) <= value) break;
             old = atomicCAS(addr_as_ull, assumed, __double_as_longlong(value));
         } while (assumed != old);
-    
         return __longlong_as_double(old);
     }
-    
+
     __device__ double atomic_max(double* addr, double value) {
         using ull = unsigned long long;
         ull *addr_as_ull = (ull*)addr;
         ull old = *addr_as_ull;
         ull assumed;
-    
         do {
             assumed = old;
-            double old_val = __longlong_as_double(assumed);
-            if (old_val >= value)
-                break;
+            if (__longlong_as_double(assumed) >= value) break;
             old = atomicCAS(addr_as_ull, assumed, __double_as_longlong(value));
         } while (assumed != old);
-    
         return __longlong_as_double(old);
     }
 
-    __device__ QUAD::Quadrant get_quadrant(Vector2 quad_center, 
-            Vector2 pos) {
-        return pos.x < quad_center.x ?
-                (pos.y < quad_center.y ? QUAD::Quadrant::TopLeft : QUAD::Quadrant::BotLeft) :
-                (pos.y < quad_center.y ? QUAD::Quadrant::TopRight : QUAD::Quadrant::BotRight);
+    // Expand a 32-bit integer into 64 bits by inserting a 0 bit after each bit.
+    __device__ __forceinline__ uint64_t expand_bits_2d(uint32_t v) {
+        uint64_t x = v;
+        x = (x | (x << 16)) & 0x0000FFFF0000FFFFull;
+        x = (x | (x <<  8)) & 0x00FF00FF00FF00FFull;
+        x = (x | (x <<  4)) & 0x0F0F0F0F0F0F0F0Full;
+        x = (x | (x <<  2)) & 0x3333333333333333ull;
+        x = (x | (x <<  1)) & 0x5555555555555555ull;
+        return x;
     }
 
-    __device__ Rect get_child_boundraries(const Rect &boundaries, 
-            Vector2 center, QUAD::Quadrant quadrant) {
-        const auto half_size_x = boundaries.size.x / 2.0;
-        const auto half_size_y = boundaries.size.y / 2.0;
-        switch (quadrant) {
-        case QUAD::Quadrant::TopLeft:  return {boundaries.position, {half_size_x, half_size_y}};
-        case QUAD::Quadrant::TopRight: return {{center.x, boundaries.position.y}, {half_size_x, half_size_y}};
-        case QUAD::Quadrant::BotRight: return {center, {half_size_x, half_size_y}};
-        }
-        // case QUAD::Quadrant::BotLeft:
-        return {{boundaries.position.x, center.y}, {half_size_x, half_size_y}}; 
-    }
-
-    __device__ void compute_com_and_count(QUAD &quad, Vector2 *pos, double *mass,
-            double *sMass, Vector2 *sCOM, int32_t *count, Vector2 center,
-            int32_t start, int32_t end) {
-        const int32_t tx = static_cast<int32_t>(threadIdx.x);
-
-        if (tx < 4)
-            count[tx] = 0;
-
-        double M = 0.0, Rx = 0.0, Ry = 0.0;
-        __syncthreads();
-
-        for (int32_t i = start + tx; i <= end; i += static_cast<int32_t>(blockDim.x)) {
-            const double m = mass[i];
-            M += m;
-            const Vector2 p = pos[i];
-            Rx += m * p.x;
-            Ry += m * p.y;
-            const auto quadrant = get_quadrant(center, p);
-            atomicAdd(&count[static_cast<uint8_t>(quadrant)], 1);
-        }
-
-        sMass[tx] = M;
-        sCOM[tx] = {Rx, Ry};
-        __syncthreads();
-
-        // Block-level reduction in shared memory
-        for (uint32_t stride = blockDim.x / 2; stride > 32; stride >>= 1) {
-            if (static_cast<uint32_t>(tx) < stride) {
-                sMass[tx] += sMass[tx + stride];
-                sCOM[tx].x += sCOM[tx + stride].x;
-                sCOM[tx].y += sCOM[tx + stride].y;
-            }
-            __syncthreads();
-        }
-
-        // Warp-level reduction using shuffle
-        if (tx < 32) {
-            M  = sMass[tx] + sMass[tx + 32];
-            Rx = sCOM[tx].x + sCOM[tx + 32].x;
-            Ry = sCOM[tx].y + sCOM[tx + 32].y;
-
-            for (int32_t offset = 16; offset >= 1; offset >>= 1) {
-                M  += shfl_down_double(0xFFFFFFFF, M, offset);
-                Rx += shfl_down_double(0xFFFFFFFF, Rx, offset);
-                Ry += shfl_down_double(0xFFFFFFFF, Ry, offset);
-            }
-        }
-
-        if (tx == 0) {
-            quad.mass = M;
-            quad.center_of_mass = {Rx / M, Ry / M};
-        }
-        __syncthreads();
-    }
-
-    __device__ void compute_offset(int32_t *count, int32_t start) {
-        const int32_t tx = static_cast<int32_t>(threadIdx.x);
-        if (tx < 4) {
-            int32_t offset = start;
-            for (int32_t i = 0; i < tx; ++i) {
-                offset += count[i];
-            }
-            count[tx + 4] = offset;
-        }
-        __syncthreads();
-    }
-
-    __device__ void group_bodies(const Vector2 *pos, Vector2 *pos_alt, 
-            const double *mass, double *mass_alt, const Vector2 *vel, Vector2 *vel_alt,
-            const int32_t *idx, int32_t *idx_alt,
-            Vector2 center, int32_t *count, int32_t start, int32_t end) {
-        int32_t *count2 = &count[4];
-        for (int32_t i = start + static_cast<int32_t>(threadIdx.x); i <= end; i += static_cast<int32_t>(blockDim.x)) {
-            const auto quadrant = Device::get_quadrant(center, pos[i]);
-            const int32_t dest = atomicAdd(&count2[static_cast<uint8_t>(quadrant)], 1);
-            pos_alt[dest] = pos[i];
-            mass_alt[dest] = mass[i];
-            vel_alt[dest] = vel[i];
-            idx_alt[dest] = idx[i];
-        }
-        __syncthreads();
-    }
-
-    __device__ void compute_force(const QUAD * __restrict__ quads, const Vector2 *pos, const double *mass,
-            int32_t body_idx, int32_t quads_count, double epsilon_sq, double G_dt, double *vel_out) {
-
-        constexpr double THETA_SQ = Constants::Simulation::THETA * Constants::Simulation::THETA;
-
-        int32_t stack[128];
-        int32_t top = 0;
-        stack[0] = 0;
-
-        const Vector2 body_pos = pos[body_idx];
-        double acc_x = 0.0, acc_y = 0.0;
-
-        while (top >= 0) {
-            const int32_t qi = stack[top--];
-
-            if (qi >= quads_count) continue;
-
-            const QUAD &quad = quads[qi];
-            if (quad.start == -1 && quad.end == -1) continue;
-
-            const Vector2 rij = {quad.center_of_mass.x - body_pos.x,
-                                 quad.center_of_mass.y - body_pos.y};
-            const double dist_sq = rij.x * rij.x + rij.y * rij.y;
-
-            if (quad.is_leaf) {
-                if (dist_sq > 0.0 && quad.mass > 0.0) {
-                    const double r_sq_soft = dist_sq + epsilon_sq;
-                    const double inv_r = rsqrt(r_sq_soft);
-                    const double inv_r3 = inv_r * inv_r * inv_r;
-                    const double a = quad.mass * inv_r3;
-                    acc_x += rij.x * a;
-                    acc_y += rij.y * a;
-                }
-                continue;
-            }
-
-            // Opening angle criterion: (s/d)^2 < theta^2
-            if (dist_sq > 0.0 && quad.width_sq < THETA_SQ * dist_sq) {
-                const double r_sq_soft = dist_sq + epsilon_sq;
-                const double inv_r = rsqrt(r_sq_soft);
-                const double inv_r3 = inv_r * inv_r * inv_r;
-                const double a = quad.mass * inv_r3;
-                acc_x += rij.x * a;
-                acc_y += rij.y * a;
-                continue;
-            }
-
-            // Push 4 children onto stack
-            const int32_t base = qi * 4;
-            stack[++top] = base + 4;
-            stack[++top] = base + 3;
-            stack[++top] = base + 2;
-            stack[++top] = base + 1;
-        }
-
-        vel_out[0] = acc_x * G_dt;
-        vel_out[1] = acc_y * G_dt;
+    // 64-bit Morton code for 2D point in [0,1)^2. Uses 32 bits per axis.
+    __device__ __forceinline__ uint64_t morton_2d(double nx, double ny) {
+        const uint32_t ix = __double2uint_rd(fmin(fmax(nx * 4294967296.0, 0.0), 4294967295.0));
+        const uint32_t iy = __double2uint_rd(fmin(fmax(ny * 4294967296.0, 0.0), 4294967295.0));
+        return (expand_bits_2d(ix) << 1) | expand_bits_2d(iy);
     }
 }
 
+// ---------------------------------------------------------------------------
+// Kernels
+// ---------------------------------------------------------------------------
 namespace Kernel {
-    __global__ void compute_bounding_box(const Vector2 * __restrict__ pos, uint32_t n, BarnesHutCuda::Box *global_bbox) {
+
+    // ---- Bounding box ----
+    __global__ void compute_bounding_box(const Vector2 * __restrict__ pos, uint32_t n,
+                                         BarnesHutCuda::Box *global_bbox) {
         extern __shared__ double sdata[];
-    
         double *sxmin = sdata;
-        double *sxmax = sdata + blockDim.x;
+        double *sxmax = sdata +     blockDim.x;
         double *symin = sdata + 2 * blockDim.x;
         double *symax = sdata + 3 * blockDim.x;
-    
+
         const uint32_t tid = threadIdx.x;
         const uint32_t idx = blockIdx.x * blockDim.x + tid;
-    
+
         const double x = (idx < n) ? pos[idx].x :  INFINITY;
         const double y = (idx < n) ? pos[idx].y :  INFINITY;
-    
+
         sxmin[tid] = x;
         sxmax[tid] = (idx < n) ? x : -INFINITY;
         symin[tid] = y;
         symax[tid] = (idx < n) ? y : -INFINITY;
-    
         __syncthreads();
-    
+
         for (uint32_t stride = blockDim.x / 2; stride > 0; stride >>= 1) {
             if (tid < stride) {
                 sxmin[tid] = fmin(sxmin[tid], sxmin[tid + stride]);
@@ -251,7 +100,7 @@ namespace Kernel {
             }
             __syncthreads();
         }
-    
+
         if (tid == 0) {
             Device::atomic_min(&global_bbox->x_min, sxmin[0]);
             Device::atomic_max(&global_bbox->x_max, sxmax[0]);
@@ -260,97 +109,375 @@ namespace Kernel {
         }
     }
 
-    __global__ void build_quad_tree(QUAD *quads, Vector2 *pos, Vector2 *pos_alt, 
-            double *mass, double *mass_alt, Vector2 *vel, Vector2 *vel_alt,
-            int32_t *idx, int32_t *idx_alt,
-            const int32_t *work_list, int32_t *work_list_next, int32_t *work_count_next,
-            int32_t quads_count, int32_t leaf_limit) {
-        __shared__ int32_t count[8];
-        __shared__ double totalMass[BLOCK_SIZE];
-        __shared__ Vector2 centerMass[BLOCK_SIZE];
+    // ---- Morton code computation ----
+    __global__ void compute_morton_codes(const Vector2 * __restrict__ pos, uint32_t n,
+                                         const BarnesHutCuda::Box * __restrict__ bbox,
+                                         uint64_t *morton, int32_t *indices) {
+        const uint32_t i = blockIdx.x * blockDim.x + threadIdx.x;
+        if (i >= n) return;
 
-        const int32_t tx = static_cast<int32_t>(threadIdx.x);
-        const int32_t quad_idx = work_list[blockIdx.x];
+        const BarnesHutCuda::Box b = *bbox;
+        const double inv_w = 1.0 / (b.x_max - b.x_min);
+        const double inv_h = 1.0 / (b.y_max - b.y_min);
 
-        QUAD &quad = quads[quad_idx];
-        const int32_t start = quad.start, end = quad.end;
+        const double nx = (pos[i].x - b.x_min) * inv_w;
+        const double ny = (pos[i].y - b.y_min) * inv_h;
 
-        Vector2 center;
-        center.x = quad.boundaries.position.x + quad.boundaries.size.x / 2.0;
-        center.y = quad.boundaries.position.y + quad.boundaries.size.y / 2.0;
+        morton[i]  = Device::morton_2d(nx, ny);
+        indices[i] = static_cast<int32_t>(i);
+    }
 
-        Device::compute_com_and_count(quad, pos, mass, totalMass, centerMass, count, center, start, end);
+    // ---- Reorder body arrays by sorted index ----
+    __global__ void reorder_bodies(const int32_t * __restrict__ sorted_idx,
+                                   const Vector2 * __restrict__ pos_in,
+                                   const Vector2 * __restrict__ vel_in,
+                                   const double  * __restrict__ mass_in,
+                                   const int32_t * __restrict__ orig_idx_in,
+                                   Vector2 *pos_out, Vector2 *vel_out,
+                                   double *mass_out, int32_t *orig_idx_out,
+                                   int32_t n) {
+        const int32_t i = static_cast<int32_t>(blockIdx.x * blockDim.x + threadIdx.x);
+        if (i >= n) return;
+        const int32_t src = sorted_idx[i];
+        pos_out[i]      = pos_in[src];
+        vel_out[i]      = vel_in[src];
+        mass_out[i]     = mass_in[src];
+        orig_idx_out[i] = orig_idx_in[src];
+    }
 
-        if (quad_idx >= leaf_limit || start == end) {
-            for (int32_t i = start + tx; i <= end; i += static_cast<int32_t>(blockDim.x)) {
-                pos_alt[i] = pos[i];
-                mass_alt[i] = mass[i];
-                vel_alt[i] = vel[i];
-                idx_alt[i] = idx[i];
+    // ---- Tree build: topology only (no COM computation) ----
+    // One thread per work-list item. Only does binary search on Morton codes
+    // to find child split points and allocate child nodes.
+
+    __device__ int32_t lower_bound_quadrant(const uint64_t * __restrict__ morton,
+                                            int32_t lo, int32_t hi,
+                                            uint64_t target, int32_t shift) {
+        while (lo < hi) {
+            int32_t mid = lo + (hi - lo) / 2;
+            if (((morton[mid] >> shift) & 3ull) < target)
+                lo = mid + 1;
+            else
+                hi = mid;
+        }
+        return lo;
+    }
+
+    __global__ void build_tree_topology(
+            const uint64_t * __restrict__ morton,
+            // tree SoA
+            double  *t_wsq,
+            int32_t *t_c0,     int32_t *t_c1,     int32_t *t_c2,    int32_t *t_c3,
+            int32_t *t_bstart, int32_t *t_bend,
+            // book-keeping
+            const int32_t *work_list, int32_t work_count,
+            int32_t *work_list_next, int32_t *work_count_next,
+            int32_t *node_alloc, int32_t max_nodes,
+            int32_t level) {
+
+        const int32_t tid = static_cast<int32_t>(blockIdx.x * blockDim.x + threadIdx.x);
+        if (tid >= work_count) return;
+
+        const int32_t nid = work_list[tid];
+        const int32_t start = t_bstart[nid];
+        const int32_t end   = t_bend[nid];
+
+        // Leaf condition: too few bodies or max depth reached
+        if ((end - start) < LEAF_THRESHOLD || level >= 30) return;
+
+        // Find split points via binary search on 2 Morton bits at this level
+        const int32_t shift = 62 - level * 2;
+
+        const int32_t b0 = lower_bound_quadrant(morton, start, end + 1, 0ull, shift);
+        const int32_t b1 = lower_bound_quadrant(morton, start, end + 1, 1ull, shift);
+        const int32_t b2 = lower_bound_quadrant(morton, start, end + 1, 2ull, shift);
+        const int32_t b3 = lower_bound_quadrant(morton, start, end + 1, 3ull, shift);
+        const int32_t b4 = end + 1;
+
+        int32_t cs[4], ce[4];
+        cs[0] = b0;  ce[0] = b1 - 1;
+        cs[1] = b1;  ce[1] = b2 - 1;
+        cs[2] = b2;  ce[2] = b3 - 1;
+        cs[3] = b3;  ce[3] = b4 - 1;
+
+        int32_t n_children = 0;
+        for (int32_t q = 0; q < 4; ++q)
+            if (cs[q] <= ce[q]) ++n_children;
+
+        if (n_children == 0) return;
+
+        const int32_t child_base = atomicAdd(node_alloc, 4);
+        if (child_base + 3 >= max_nodes) return;
+
+        const double child_wsq = t_wsq[nid] * 0.25;
+
+        t_c0[nid] = child_base + 0;
+        t_c1[nid] = child_base + 1;
+        t_c2[nid] = child_base + 2;
+        t_c3[nid] = child_base + 3;
+
+        for (int32_t q = 0; q < 4; ++q) {
+            const int32_t cid = child_base + q;
+            t_wsq[cid] = child_wsq;
+            t_c0[cid]  = -1;
+            t_c1[cid]  = -1;
+            t_c2[cid]  = -1;
+            t_c3[cid]  = -1;
+            if (cs[q] <= ce[q]) {
+                t_bstart[cid] = cs[q];
+                t_bend[cid]   = ce[q];
+                work_list_next[atomicAdd(work_count_next, 1)] = cid;
+            } else {
+                t_bstart[cid] = -1;
+                t_bend[cid]   = -1;
+            }
+        }
+    }
+
+    // ---- COM computation: one pass over all bodies ----
+    // Each thread processes one body and atomically accumulates into its
+    // leaf node's COM. Then separately propagate up.
+    // But for simplicity and correctness we use a single kernel that
+    // processes each tree node (from leaf list) and computes its COM via reduction.
+
+    // Compute COM for leaf nodes in a given level's work list.
+    // Skips internal nodes (child0 >= 0).
+    // Launched as 1 block per node.
+    __global__ void compute_leaf_com(
+            const Vector2 * __restrict__ pos,
+            const double  * __restrict__ mass,
+            double *t_mass, double *t_com_x, double *t_com_y,
+            const int32_t *node_list, int32_t node_count,
+            const int32_t *t_bstart, const int32_t *t_bend,
+            const int32_t *t_c0) {
+
+        if (static_cast<int32_t>(blockIdx.x) >= node_count) return;
+
+        const int32_t nid = node_list[blockIdx.x];
+
+        // Skip internal nodes
+        if (t_c0[nid] >= 0) return;
+
+        const int32_t start = t_bstart[nid];
+        const int32_t end   = t_bend[nid];
+
+        // Fast path for single-body leaf (overwhelmingly common case)
+        if (start == end) {
+            if (threadIdx.x == 0) {
+                t_mass[nid]  = mass[start];
+                t_com_x[nid] = pos[start].x;
+                t_com_y[nid] = pos[start].y;
             }
             return;
         }
 
-        Device::compute_offset(count, start);
-        Device::group_bodies(pos, pos_alt, mass, mass_alt, vel, vel_alt, idx, idx_alt, center, count, start, end);
+        // Multi-body leaf: reduction
+        extern __shared__ char smem_raw[];
+        double *sMass = reinterpret_cast<double*>(smem_raw);
+        double *sComX = sMass + blockDim.x;
+        double *sComY = sComX + blockDim.x;
+        const int32_t tx = static_cast<int32_t>(threadIdx.x);
+
+        double M = 0.0, Rx = 0.0, Ry = 0.0;
+        for (int32_t i = start + tx; i <= end; i += static_cast<int32_t>(blockDim.x)) {
+            const double m = mass[i];
+            M  += m;
+            Rx += m * pos[i].x;
+            Ry += m * pos[i].y;
+        }
+        sMass[tx] = M;  sComX[tx] = Rx;  sComY[tx] = Ry;
+        __syncthreads();
+
+        for (uint32_t s = blockDim.x / 2; s > 0; s >>= 1) {
+            if (static_cast<uint32_t>(tx) < s) {
+                sMass[tx] += sMass[tx + s];
+                sComX[tx] += sComX[tx + s];
+                sComY[tx] += sComY[tx + s];
+            }
+            __syncthreads();
+        }
 
         if (tx == 0) {
-            const int32_t base = quad_idx * 4;
-            quad.is_leaf = false;
-            const double child_width_sq = quad.width_sq * 0.25;
-
-            if (count[0] > 0) {
-                QUAD &child = quads[base + 1];
-                child.boundaries = Device::get_child_boundraries(quad.boundaries, center, QUAD::Quadrant::TopLeft);
-                child.start = start;
-                child.end = start + count[0] - 1;
-                child.width_sq = child_width_sq;
-                work_list_next[atomicAdd(work_count_next, 1)] = base + 1;
-            }
-
-            if (count[1] > 0) {
-                QUAD &child = quads[base + 2];
-                child.boundaries = Device::get_child_boundraries(quad.boundaries, center, QUAD::Quadrant::TopRight);
-                child.start = start + count[0];
-                child.end = start + count[0] + count[1] - 1;
-                child.width_sq = child_width_sq;
-                work_list_next[atomicAdd(work_count_next, 1)] = base + 2;
-            }
-
-            if (count[2] > 0) {
-                QUAD &child = quads[base + 3];
-                child.boundaries = Device::get_child_boundraries(quad.boundaries, center, QUAD::Quadrant::BotRight);
-                child.start = start + count[0] + count[1];
-                child.end = start + count[0] + count[1] + count[2] - 1;
-                child.width_sq = child_width_sq;
-                work_list_next[atomicAdd(work_count_next, 1)] = base + 3;
-            }
-
-            if (count[3] > 0) {
-                QUAD &child = quads[base + 4];
-                child.boundaries = Device::get_child_boundraries(quad.boundaries, center, QUAD::Quadrant::BotLeft);
-                child.start = start + count[0] + count[1] + count[2];
-                child.end = end;
-                child.width_sq = child_width_sq;
-                work_list_next[atomicAdd(work_count_next, 1)] = base + 4;
-            }
+            t_mass[nid]  = sMass[0];
+            t_com_x[nid] = sComX[0] / sMass[0];
+            t_com_y[nid] = sComY[0] / sMass[0];
         }
     }
 
-    __global__ void compute_force(const QUAD * __restrict__ quads, const Vector2 * __restrict__ pos, 
-            const double * __restrict__ mass, Vector2 *vel, 
-            int32_t quads_count, int32_t n, double epsilon_sq, double G_dt) {
+    // Propagate COM from children to parents.
+    // Skips leaf nodes (child0 < 0).
+    // One thread per node in the level's work list.
+    __global__ void propagate_com_up(
+            double *t_mass, double *t_com_x, double *t_com_y,
+            const int32_t *t_c0, const int32_t *t_c1,
+            const int32_t *t_c2, const int32_t *t_c3,
+            const int32_t *t_bstart,
+            const int32_t *node_list, int32_t count) {
+
+        const int32_t tid = static_cast<int32_t>(blockIdx.x * blockDim.x + threadIdx.x);
+        if (tid >= count) return;
+
+        const int32_t nid = node_list[tid];
+
+        // Skip leaf nodes
+        if (t_c0[nid] < 0) return;
+
+        const int32_t children[4] = {t_c0[nid], t_c1[nid], t_c2[nid], t_c3[nid]};
+
+        double M = 0.0, Rx = 0.0, Ry = 0.0;
+        for (int32_t q = 0; q < 4; ++q) {
+            const int32_t cid = children[q];
+            if (t_bstart[cid] < 0) continue;  // empty child
+            const double cm = t_mass[cid];
+            M  += cm;
+            Rx += cm * t_com_x[cid];
+            Ry += cm * t_com_y[cid];
+        }
+        t_mass[nid]  = M;
+        t_com_x[nid] = Rx / M;
+        t_com_y[nid] = Ry / M;
+    }
+
+    // ---- Pack SoA tree → AoS ForceNode array ----
+    __global__ void pack_force_nodes(
+            const double  * __restrict__ t_mass,
+            const double  * __restrict__ t_com_x,
+            const double  * __restrict__ t_com_y,
+            const double  * __restrict__ t_wsq,
+            const int32_t * __restrict__ t_c0,
+            const int32_t * __restrict__ t_bstart,
+            const int32_t * __restrict__ t_bend,
+            ForceNode *out, int32_t node_count) {
+
         const int32_t i = static_cast<int32_t>(blockIdx.x * blockDim.x + threadIdx.x);
+        if (i >= node_count) return;
 
-        if (i < n) {
-            double dv[2];
-            Device::compute_force(quads, pos, mass, i, quads_count, epsilon_sq, G_dt, dv);
-            vel[i].x += dv[0];
-            vel[i].y += dv[1];
+        ForceNode fn;
+        fn.com_x      = t_com_x[i];
+        fn.com_y      = t_com_y[i];
+        fn.mass       = t_mass[i];
+        fn.width_sq   = t_wsq[i];
+        fn.c0         = t_c0[i];
+        fn.body_start = t_bstart[i];
+        fn.body_end   = t_bend[i];
+        // Build child mask: children are c0, c0+1, c0+2, c0+3
+        uint8_t mask = 0;
+        if (fn.c0 >= 0) {
+            if (t_bstart[fn.c0    ] >= 0) mask |= 1u;
+            if (t_bstart[fn.c0 + 1] >= 0) mask |= 2u;
+            if (t_bstart[fn.c0 + 2] >= 0) mask |= 4u;
+            if (t_bstart[fn.c0 + 3] >= 0) mask |= 8u;
         }
+        fn.child_mask = mask;
+        out[i] = fn;
     }
 
-    __global__ void update_positions(Vector2 *pos, Vector2 *vel, int32_t n, double dt) {
+    // ---- Force computation (one thread per body, SoA tree) ----
+    __global__ void compute_force(
+            // tree SoA (read-only)
+            const double  * __restrict__ t_mass,
+            const double  * __restrict__ t_com_x,
+            const double  * __restrict__ t_com_y,
+            const double  * __restrict__ t_wsq,
+            const int32_t * __restrict__ t_c0,
+            const int32_t * __restrict__ t_bstart,
+            const int32_t * __restrict__ t_bend,
+            // body data
+            const Vector2 * __restrict__ pos,
+            const double  * __restrict__ mass,
+            Vector2 *vel,
+            int32_t n, double epsilon_sq, double G_dt) {
+
+        const int32_t i = static_cast<int32_t>(blockIdx.x * blockDim.x + threadIdx.x);
+        if (i >= n) return;
+
+        constexpr double THETA_SQ = Constants::Simulation::THETA * Constants::Simulation::THETA;
+
+        const double body_x = pos[i].x;
+        const double body_y = pos[i].y;
+        double acc_x = 0.0, acc_y = 0.0;
+
+        int32_t stack[32];
+        int32_t top = 0;
+        stack[0] = 0;  // root
+
+        while (top >= 0) {
+            const int32_t nid = stack[top--];
+
+            const int32_t bs = __ldg(&t_bstart[nid]);
+            if (bs < 0) continue;  // empty node
+
+            const double node_mass = __ldg(&t_mass[nid]);
+            const double cx = __ldg(&t_com_x[nid]);
+            const double cy = __ldg(&t_com_y[nid]);
+
+            const double dx = cx - body_x;
+            const double dy = cy - body_y;
+            const double dist_sq = dx * dx + dy * dy;
+
+            const int32_t c0 = __ldg(&t_c0[nid]);
+
+            // Leaf node: c0 == -1
+            if (c0 < 0) {
+                const int32_t be = __ldg(&t_bend[nid]);
+                if (bs == be) {
+                    // Single-body leaf
+                    if (bs != i) {
+                        const double d2 = dist_sq + epsilon_sq;
+                        const double inv_r = rsqrt(d2);
+                        const double inv_r3 = inv_r * inv_r * inv_r;
+                        acc_x += dx * (node_mass * inv_r3);
+                        acc_y += dy * (node_mass * inv_r3);
+                    }
+                } else if (i < bs || i > be) {
+                    // Body outside this leaf — use COM
+                    const double r2 = dist_sq + epsilon_sq;
+                    const double inv_r = rsqrt(r2);
+                    const double inv_r3 = inv_r * inv_r * inv_r;
+                    const double a = node_mass * inv_r3;
+                    acc_x += dx * a;
+                    acc_y += dy * a;
+                } else {
+                    // Body inside multi-body leaf — iterate
+                    for (int32_t j = bs; j <= be; ++j) {
+                        if (j == i) continue;
+                        const Vector2 p = pos[j];
+                        const double drx = p.x - body_x;
+                        const double dry = p.y - body_y;
+                        const double d2 = drx * drx + dry * dry + epsilon_sq;
+                        const double inv_r = rsqrt(d2);
+                        const double inv_r3 = inv_r * inv_r * inv_r;
+                        acc_x += drx * (mass[j] * inv_r3);
+                        acc_y += dry * (mass[j] * inv_r3);
+                    }
+                }
+                continue;
+            }
+
+            // Internal node — opening angle test
+            const double wsq = __ldg(&t_wsq[nid]);
+            if (wsq < THETA_SQ * dist_sq) {
+                const double r2 = dist_sq + epsilon_sq;
+                const double inv_r = rsqrt(r2);
+                const double inv_r3 = inv_r * inv_r * inv_r;
+                const double a = node_mass * inv_r3;
+                acc_x += dx * a;
+                acc_y += dy * a;
+                continue;
+            }
+
+            // Push non-empty children (contiguous: c0, c0+1, c0+2, c0+3)
+            if (__ldg(&t_bstart[c0 + 3]) >= 0) stack[++top] = c0 + 3;
+            if (__ldg(&t_bstart[c0 + 2]) >= 0) stack[++top] = c0 + 2;
+            if (__ldg(&t_bstart[c0 + 1]) >= 0) stack[++top] = c0 + 1;
+            if (__ldg(&t_bstart[c0    ]) >= 0) stack[++top] = c0;
+        }
+
+        vel[i].x += acc_x * G_dt;
+        vel[i].y += acc_y * G_dt;
+    }
+
+    // ---- Update positions ----
+    __global__ void update_positions(Vector2 *pos, const Vector2 *vel, int32_t n, double dt) {
         const int32_t i = static_cast<int32_t>(blockIdx.x * blockDim.x + threadIdx.x);
         if (i < n) {
             pos[i].x += vel[i].x * dt;
@@ -358,27 +485,10 @@ namespace Kernel {
         }
     }
 
-    __global__ void init_quads(QUAD *quads, int32_t count) {
-        const int32_t i = static_cast<int32_t>(blockIdx.x * blockDim.x + threadIdx.x);
-        if (i < count) {
-            quads[i].start = -1;
-            quads[i].end = -1;
-            quads[i].is_leaf = true;
-            quads[i].mass = 0;
-            quads[i].center_of_mass = {0.0, 0.0};
-            quads[i].width_sq = 0.0;
-        }
-    }
-
-    __global__ void init_indices(int32_t *idx, int32_t n) {
-        const int32_t i = static_cast<int32_t>(blockIdx.x * blockDim.x + threadIdx.x);
-        if (i < n) {
-            idx[i] = i;
-        }
-    }
-
+    // ---- Scatter sorted data back to original body order ----
     __global__ void scatter_to_original_order(const Vector2 *sorted_pos, const Vector2 *sorted_vel,
-            const int32_t *idx, Vector2 *out_pos, Vector2 *out_vel, int32_t n) {
+                                              const int32_t *idx, Vector2 *out_pos, Vector2 *out_vel,
+                                              int32_t n) {
         const int32_t i = static_cast<int32_t>(blockIdx.x * blockDim.x + threadIdx.x);
         if (i < n) {
             const int32_t orig = idx[i];
@@ -386,41 +496,104 @@ namespace Kernel {
             out_vel[orig] = sorted_vel[i];
         }
     }
-    
+
+    // ---- Initialize index array to identity ----
+    __global__ void init_indices(int32_t *idx, int32_t n) {
+        const int32_t i = static_cast<int32_t>(blockIdx.x * blockDim.x + threadIdx.x);
+        if (i < n) idx[i] = i;
+    }
+
+} // namespace Kernel
+
+
+// ===========================================================================
+// Host-side implementations (called from BarnesHutCuda methods)
+// ===========================================================================
+
+static void alloc_tree_soa(TreeNodesSoA &t, int32_t count) {
+    const size_t d_bytes = sizeof(double)  * count;
+    const size_t i_bytes = sizeof(int32_t) * count;
+    CUDA_CHECK(cudaMalloc(&t.mass,       d_bytes));
+    CUDA_CHECK(cudaMalloc(&t.com_x,      d_bytes));
+    CUDA_CHECK(cudaMalloc(&t.com_y,      d_bytes));
+    CUDA_CHECK(cudaMalloc(&t.width_sq,   d_bytes));
+    CUDA_CHECK(cudaMalloc(&t.child0,     i_bytes));
+    CUDA_CHECK(cudaMalloc(&t.child1,     i_bytes));
+    CUDA_CHECK(cudaMalloc(&t.child2,     i_bytes));
+    CUDA_CHECK(cudaMalloc(&t.child3,     i_bytes));
+    CUDA_CHECK(cudaMalloc(&t.body_start, i_bytes));
+    CUDA_CHECK(cudaMalloc(&t.body_end,   i_bytes));
 }
 
+static void free_tree_soa(TreeNodesSoA &t) {
+    CUDA_CHECK(cudaFree(t.mass));
+    CUDA_CHECK(cudaFree(t.com_x));
+    CUDA_CHECK(cudaFree(t.com_y));
+    CUDA_CHECK(cudaFree(t.width_sq));
+    CUDA_CHECK(cudaFree(t.child0));
+    CUDA_CHECK(cudaFree(t.child1));
+    CUDA_CHECK(cudaFree(t.child2));
+    CUDA_CHECK(cudaFree(t.child3));
+    CUDA_CHECK(cudaFree(t.body_start));
+    CUDA_CHECK(cudaFree(t.body_end));
+}
 
 void BarnesHutCuda::init_device_resources() {
-    const auto mass_bytes = sizeof(bodies.mass(0)) * bodies.n;
-    const auto pos_bytes = sizeof(bodies.pos(0)) * bodies.n;
-    const auto vel_bytes = sizeof(bodies.vel(0)) * bodies.n;
-    const auto idx_bytes = sizeof(int32_t) * bodies.n;
-    const auto quad_bytes = sizeof(QUAD) * max_quads;
-    const int32_t work_list_size = static_cast<int32_t>(bodies.n) + 1;
+    const int32_t n = static_cast<int32_t>(bodies.n);
+    const auto mass_bytes = sizeof(double)  * n;
+    const auto pos_bytes  = sizeof(Vector2) * n;
+    const auto vel_bytes  = sizeof(Vector2) * n;
+    const auto idx_bytes  = sizeof(int32_t) * n;
 
-    CUDA_CHECK(cudaMalloc(&mass_d, mass_bytes));
+    // Body arrays (primary + alt for sorting)
+    CUDA_CHECK(cudaMalloc(&mass_d,     mass_bytes));
     CUDA_CHECK(cudaMalloc(&mass_alt_d, mass_bytes));
-    CUDA_CHECK(cudaMalloc(&pos_d, pos_bytes));
-    CUDA_CHECK(cudaMalloc(&pos_alt_d, pos_bytes));
-    CUDA_CHECK(cudaMalloc(&vel_d, vel_bytes));
-    CUDA_CHECK(cudaMalloc(&vel_alt_d, vel_bytes));
-    CUDA_CHECK(cudaMalloc(&idx_d, idx_bytes));
-    CUDA_CHECK(cudaMalloc(&idx_alt_d, idx_bytes));
+    CUDA_CHECK(cudaMalloc(&pos_d,      pos_bytes));
+    CUDA_CHECK(cudaMalloc(&pos_alt_d,  pos_bytes));
+    CUDA_CHECK(cudaMalloc(&vel_d,      vel_bytes));
+    CUDA_CHECK(cudaMalloc(&vel_alt_d,  vel_bytes));
+    CUDA_CHECK(cudaMalloc(&idx_d,      idx_bytes));
+    CUDA_CHECK(cudaMalloc(&idx_alt_d,  idx_bytes));
+
+    // Morton codes + sort indices
+    CUDA_CHECK(cudaMalloc(&morton_d,       sizeof(uint64_t) * n));
+    CUDA_CHECK(cudaMalloc(&morton_alt_d,   sizeof(uint64_t) * n));
+    CUDA_CHECK(cudaMalloc(&sort_idx_d,     idx_bytes));
+    CUDA_CHECK(cudaMalloc(&sort_idx_alt_d, idx_bytes));
+
+    // Bounding box
     CUDA_CHECK(cudaMalloc(&bounding_box_d, sizeof(Box)));
-    CUDA_CHECK(cudaMalloc(&quads_d, quad_bytes));
-    CUDA_CHECK(cudaMalloc(&work_list_d, sizeof(int32_t) * work_list_size));
-    CUDA_CHECK(cudaMalloc(&work_list_next_d, sizeof(int32_t) * work_list_size));
-    CUDA_CHECK(cudaMalloc(&work_count_d, sizeof(int32_t)));
 
+    // Tree nodes (SoA)
+    alloc_tree_soa(tree, max_quads);
+    CUDA_CHECK(cudaMalloc(&node_count_d, sizeof(int32_t)));
+    CUDA_CHECK(cudaMalloc(&node_parent_d, sizeof(int32_t) * max_quads));
+
+    // Packed AoS for force traversal
+    CUDA_CHECK(cudaMalloc(&force_nodes_d, sizeof(ForceNode) * max_quads));
+
+    // Work lists
+    const int32_t wl_size = n + 1;
+    CUDA_CHECK(cudaMalloc(&work_list_d,      sizeof(int32_t) * wl_size));
+    CUDA_CHECK(cudaMalloc(&work_list_next_d, sizeof(int32_t) * wl_size));
+    CUDA_CHECK(cudaMalloc(&work_count_d,     sizeof(int32_t)));
+
+    // Query CUB temp storage size for radix sort
+    cub_temp_bytes = 0;
+    cub::DeviceRadixSort::SortPairs(nullptr, cub_temp_bytes,
+                                    morton_d, morton_alt_d,
+                                    sort_idx_d, sort_idx_alt_d,
+                                    n);
+    CUDA_CHECK(cudaMalloc(&cub_temp_d, cub_temp_bytes));
+
+    // Upload initial body data
     CUDA_CHECK(cudaMemcpy(mass_d, bodies.mass_data(), mass_bytes, cudaMemcpyHostToDevice));
-    CUDA_CHECK(cudaMemcpy(pos_d, bodies.pos_data(), pos_bytes, cudaMemcpyHostToDevice));
-    CUDA_CHECK(cudaMemcpy(vel_d, bodies.vel_data(), vel_bytes, cudaMemcpyHostToDevice));
+    CUDA_CHECK(cudaMemcpy(pos_d,  bodies.pos_data(),  pos_bytes,  cudaMemcpyHostToDevice));
+    CUDA_CHECK(cudaMemcpy(vel_d,  bodies.vel_data(),  vel_bytes,  cudaMemcpyHostToDevice));
 
-    // Initialize index array to identity mapping once; it will be
-    // carried through every tree build to track original body order.
-    constexpr uint32_t block_size = BLOCK_SIZE;
-    const uint32_t grid_size = (bodies.n + block_size - 1) / block_size;
-    Kernel::init_indices<<<grid_size, block_size>>>(idx_d, static_cast<int32_t>(bodies.n));
+    // Initialize index to identity
+    const uint32_t grid = (n + BLOCK_SIZE - 1) / BLOCK_SIZE;
+    Kernel::init_indices<<<grid, BLOCK_SIZE>>>(idx_d, n);
     CUDA_CHECK(cudaGetLastError());
     CUDA_CHECK(cudaDeviceSynchronize());
 }
@@ -434,158 +607,232 @@ void BarnesHutCuda::release_device_resources() {
     CUDA_CHECK(cudaFree(vel_alt_d));
     CUDA_CHECK(cudaFree(idx_d));
     CUDA_CHECK(cudaFree(idx_alt_d));
+    CUDA_CHECK(cudaFree(morton_d));
+    CUDA_CHECK(cudaFree(morton_alt_d));
+    CUDA_CHECK(cudaFree(sort_idx_d));
+    CUDA_CHECK(cudaFree(sort_idx_alt_d));
+    CUDA_CHECK(cudaFree(cub_temp_d));
     CUDA_CHECK(cudaFree(bounding_box_d));
-    CUDA_CHECK(cudaFree(quads_d));
+    free_tree_soa(tree);
+    CUDA_CHECK(cudaFree(node_count_d));
+    CUDA_CHECK(cudaFree(node_parent_d));
+    CUDA_CHECK(cudaFree(force_nodes_d));
     CUDA_CHECK(cudaFree(work_list_d));
     CUDA_CHECK(cudaFree(work_list_next_d));
     CUDA_CHECK(cudaFree(work_count_d));
 }
 
 void BarnesHutCuda::sync_from_gpu_bodies() {
-    // Scatter sorted GPU data back to original body order using pos_alt_d/vel_alt_d as temp
-    constexpr uint32_t block_size = 256;
-    const uint32_t grid_size = (bodies.n + block_size - 1) / block_size;
-    Kernel::scatter_to_original_order<<<grid_size, block_size>>>(
-        pos_d, vel_d, idx_d, pos_alt_d, vel_alt_d, static_cast<int32_t>(bodies.n)
-    );
+    const int32_t n = static_cast<int32_t>(bodies.n);
+    const uint32_t grid = (n + BLOCK_SIZE - 1) / BLOCK_SIZE;
+
+    // Scatter sorted GPU data back to original body order
+    Kernel::scatter_to_original_order<<<grid, BLOCK_SIZE>>>(
+        pos_d, vel_d, idx_d, pos_alt_d, vel_alt_d, n);
     CUDA_CHECK(cudaGetLastError());
     CUDA_CHECK(cudaDeviceSynchronize());
 
-    const auto pos_bytes = sizeof(bodies.pos(0)) * bodies.n;
-    const auto vel_bytes = sizeof(bodies.vel(0)) * bodies.n;
-
-    CUDA_CHECK(cudaMemcpy(bodies.pos_data(), pos_alt_d, pos_bytes, cudaMemcpyDeviceToHost));
-    CUDA_CHECK(cudaMemcpy(bodies.vel_data(), vel_alt_d, vel_bytes, cudaMemcpyDeviceToHost));
+    CUDA_CHECK(cudaMemcpy(bodies.pos_data(), pos_alt_d,
+                          sizeof(Vector2) * n, cudaMemcpyDeviceToHost));
+    CUDA_CHECK(cudaMemcpy(bodies.vel_data(), vel_alt_d,
+                          sizeof(Vector2) * n, cudaMemcpyDeviceToHost));
 }
 
 void BarnesHutCuda::compute_bounding_box() {
     bounding_box = Box{
-        .x_min = std::numeric_limits<double>::max(),
+        .x_min =  std::numeric_limits<double>::max(),
         .x_max = -std::numeric_limits<double>::max(),
-        .y_min = std::numeric_limits<double>::max(),
+        .y_min =  std::numeric_limits<double>::max(),
         .y_max = -std::numeric_limits<double>::max(),
     };
-
     CUDA_CHECK(cudaMemcpy(bounding_box_d, &bounding_box, sizeof(Box), cudaMemcpyHostToDevice));
 
-    constexpr uint32_t block_size = BLOCK_SIZE;
-    const uint32_t grid_size = (bodies.n + block_size - 1) / block_size;
-    constexpr uint32_t shared_mem_size = 4 * block_size * sizeof(double);
-
-    Kernel::compute_bounding_box<<<grid_size, block_size, shared_mem_size>>>(
-        pos_d, static_cast<uint32_t>(bodies.n), bounding_box_d
-    );
+    const uint32_t grid = (bodies.n + BLOCK_SIZE - 1) / BLOCK_SIZE;
+    constexpr uint32_t shared_mem = 4 * BLOCK_SIZE * sizeof(double);
+    Kernel::compute_bounding_box<<<grid, BLOCK_SIZE, shared_mem>>>(
+        pos_d, static_cast<uint32_t>(bodies.n), bounding_box_d);
     CUDA_CHECK(cudaGetLastError());
     CUDA_CHECK(cudaDeviceSynchronize());
     CUDA_CHECK(cudaMemcpy(&bounding_box, bounding_box_d, sizeof(Box), cudaMemcpyDeviceToHost));
 
-    // Square the bounding box — required because the force computation
-    // tracks cell width by halving at each tree level.
+    // Square the bounding box
     const double x_range = bounding_box.x_max - bounding_box.x_min;
     const double y_range = bounding_box.y_max - bounding_box.y_min;
     if (x_range > y_range) {
-        const double mid_y = (bounding_box.y_min + bounding_box.y_max) * 0.5;
-        bounding_box.y_min = mid_y - x_range * 0.5;
-        bounding_box.y_max = mid_y + x_range * 0.5;
+        const double mid = (bounding_box.y_min + bounding_box.y_max) * 0.5;
+        bounding_box.y_min = mid - x_range * 0.5;
+        bounding_box.y_max = mid + x_range * 0.5;
     } else {
-        const double mid_x = (bounding_box.x_min + bounding_box.x_max) * 0.5;
-        bounding_box.x_min = mid_x - y_range * 0.5;
-        bounding_box.x_max = mid_x + y_range * 0.5;
+        const double mid = (bounding_box.x_min + bounding_box.x_max) * 0.5;
+        bounding_box.x_min = mid - y_range * 0.5;
+        bounding_box.x_max = mid + y_range * 0.5;
     }
+    // Upload squared bbox for Morton code computation
+    CUDA_CHECK(cudaMemcpy(bounding_box_d, &bounding_box, sizeof(Box), cudaMemcpyHostToDevice));
+}
+
+void BarnesHutCuda::sort_bodies_by_morton() {
+    const int32_t n = static_cast<int32_t>(bodies.n);
+    const uint32_t grid = (n + BLOCK_SIZE - 1) / BLOCK_SIZE;
+
+    // 1. Compute Morton codes
+    Kernel::compute_morton_codes<<<grid, BLOCK_SIZE>>>(
+        pos_d, static_cast<uint32_t>(n), bounding_box_d, morton_d, sort_idx_d);
+    CUDA_CHECK(cudaGetLastError());
+
+    // 2. Radix sort by Morton code
+    cub::DeviceRadixSort::SortPairs(cub_temp_d, cub_temp_bytes,
+                                    morton_d, morton_alt_d,
+                                    sort_idx_d, sort_idx_alt_d,
+                                    n);
+    CUDA_CHECK(cudaGetLastError());
+
+    // 3. Reorder body arrays
+    Kernel::reorder_bodies<<<grid, BLOCK_SIZE>>>(
+        sort_idx_alt_d,
+        pos_d, vel_d, mass_d, idx_d,
+        pos_alt_d, vel_alt_d, mass_alt_d, idx_alt_d,
+        n);
+    CUDA_CHECK(cudaGetLastError());
+
+    // Swap primary ↔ alt so primary holds sorted data
+    std::swap(pos_d,  pos_alt_d);
+    std::swap(vel_d,  vel_alt_d);
+    std::swap(mass_d, mass_alt_d);
+    std::swap(idx_d,  idx_alt_d);
+
+    // morton_alt_d now holds sorted Morton codes — swap so morton_d is sorted
+    std::swap(morton_d, morton_alt_d);
+
+    CUDA_CHECK(cudaDeviceSynchronize());
 }
 
 void BarnesHutCuda::build_quad_tree() {
-    constexpr uint32_t block_size = BLOCK_SIZE;
-    const int32_t leaf_limit = max_quads / 4 - 1;
+    const int32_t n = static_cast<int32_t>(bodies.n);
 
-    // Initialize all quads to default (sentinel) state
-    const uint32_t init_grid = (max_quads + block_size - 1) / block_size;
-    Kernel::init_quads<<<init_grid, block_size>>>(quads_d, max_quads);
-    CUDA_CHECK(cudaGetLastError());
-    CUDA_CHECK(cudaDeviceSynchronize());
+    // Initialize root node (index 0)
+    const double root_width_sq = std::pow(bounding_box.x_max - bounding_box.x_min, 2.0);
 
-    const QUAD root {
-        .boundaries = {
-            .position = {bounding_box.x_min, bounding_box.y_min},
-            .size = {bounding_box.x_max - bounding_box.x_min, bounding_box.y_max - bounding_box.y_min}
-        },
-        .mass = 0.0,
-        .center_of_mass = {0.0, 0.0},
-        .start = 0,
-        .end = static_cast<int32_t>(bodies.n) - 1,
-        .is_leaf = true,
-        .width_sq = root.boundaries.size.x * root.boundaries.size.x
-    };
-    CUDA_CHECK(cudaMemcpy(quads_d, &root, sizeof(QUAD), cudaMemcpyHostToDevice));
+    // Reset node allocator: root = 0, next alloc starts at 1
+    int32_t alloc_start = 1;
+    CUDA_CHECK(cudaMemcpy(node_count_d, &alloc_start, sizeof(int32_t), cudaMemcpyHostToDevice));
 
-    // Initialize work list with root quad
+    // Set root node fields
+    int32_t zero_i = 0;
+    int32_t minus_one = -1;
+    int32_t n_minus_1 = n - 1;
+
+    CUDA_CHECK(cudaMemcpy(tree.width_sq   + 0, &root_width_sq,sizeof(double),  cudaMemcpyHostToDevice));
+    CUDA_CHECK(cudaMemcpy(tree.child0     + 0, &minus_one,    sizeof(int32_t), cudaMemcpyHostToDevice));
+    CUDA_CHECK(cudaMemcpy(tree.child1     + 0, &minus_one,    sizeof(int32_t), cudaMemcpyHostToDevice));
+    CUDA_CHECK(cudaMemcpy(tree.child2     + 0, &minus_one,    sizeof(int32_t), cudaMemcpyHostToDevice));
+    CUDA_CHECK(cudaMemcpy(tree.child3     + 0, &minus_one,    sizeof(int32_t), cudaMemcpyHostToDevice));
+    CUDA_CHECK(cudaMemcpy(tree.body_start + 0, &zero_i,       sizeof(int32_t), cudaMemcpyHostToDevice));
+    CUDA_CHECK(cudaMemcpy(tree.body_end   + 0, &n_minus_1,    sizeof(int32_t), cudaMemcpyHostToDevice));
+
+    // ---------------------------------------------------------------
+    // Phase 1: Build topology level-by-level.
+    // All work lists stored contiguously in work_list_d.
+    // Only copy back work_count (one int32_t) per level.
+    // ---------------------------------------------------------------
+
+    // Level offsets: level_offsets[i] = start index within work_list_d for level i
+    // level_counts[i] = number of work items at level i
+    std::vector<int32_t> level_offsets;
+    std::vector<int32_t> level_counts;
+
+    // Seed root at offset 0 in work_list_d
     int32_t root_idx = 0;
     CUDA_CHECK(cudaMemcpy(work_list_d, &root_idx, sizeof(int32_t), cudaMemcpyHostToDevice));
+
+    int32_t cur_offset = 0;
     int32_t work_count = 1;
 
-    // Build tree level-by-level using work lists of occupied quads.
-    // Each level reads from cur_* and writes sorted data to cur_*_alt,
-    // then we swap the buffer pointers for the next level.
-    Vector2 *cur_pos = pos_d, *cur_pos_alt = pos_alt_d;
-    double  *cur_mass = mass_d, *cur_mass_alt = mass_alt_d;
-    Vector2 *cur_vel = vel_d, *cur_vel_alt = vel_alt_d;
-    int32_t *cur_idx = idx_d, *cur_idx_alt = idx_alt_d;
-    int32_t *cur_work = work_list_d, *cur_work_next = work_list_next_d;
+    for (int32_t level = 0; level < 31; ++level) {
+        if (work_count == 0) break;
 
-    // TODO: need to define a max level based on max_quads
-    for (int32_t level = 0; level < 20; level++) {
-        if (work_count == 0)
-            break;
+        level_offsets.push_back(cur_offset);
+        level_counts.push_back(work_count);
 
-        // Reset next work count
+        // Next level's work items will be written starting after all existing items
+        const int32_t next_offset = cur_offset + work_count;
+
         CUDA_CHECK(cudaMemset(work_count_d, 0, sizeof(int32_t)));
 
-        Kernel::build_quad_tree<<<work_count, block_size>>>(
-            quads_d, cur_pos, cur_pos_alt, cur_mass, cur_mass_alt,
-            cur_vel, cur_vel_alt, cur_idx, cur_idx_alt,
-            cur_work, cur_work_next, work_count_d,
-            max_quads, leaf_limit
-        );
+        const uint32_t topo_grid = (work_count + BLOCK_SIZE - 1) / BLOCK_SIZE;
+        Kernel::build_tree_topology<<<topo_grid, BLOCK_SIZE>>>(
+            morton_d,
+            tree.width_sq,
+            tree.child0, tree.child1, tree.child2, tree.child3,
+            tree.body_start, tree.body_end,
+            work_list_d + cur_offset, work_count,
+            work_list_d + next_offset, work_count_d,
+            node_count_d, max_quads,
+            level);
         CUDA_CHECK(cudaGetLastError());
         CUDA_CHECK(cudaDeviceSynchronize());
 
-        // Read next level's work count
         CUDA_CHECK(cudaMemcpy(&work_count, work_count_d, sizeof(int32_t), cudaMemcpyDeviceToHost));
-
-        // Swap buffers for next level
-        std::swap(cur_pos, cur_pos_alt);
-        std::swap(cur_mass, cur_mass_alt);
-        std::swap(cur_vel, cur_vel_alt);
-        std::swap(cur_idx, cur_idx_alt);
-        std::swap(cur_work, cur_work_next);
+        cur_offset = next_offset;
     }
 
-    // Ensure the primary buffers (pos_d, mass_d, vel_d, idx_d) hold the final data.
-    if (cur_pos != pos_d) {
-        const auto pos_bytes  = sizeof(Vector2) * bodies.n;
-        const auto mass_bytes = sizeof(double) * bodies.n;
-        const auto vel_bytes  = sizeof(Vector2) * bodies.n;
-        const auto idx_bytes  = sizeof(int32_t) * bodies.n;
-        CUDA_CHECK(cudaMemcpy(pos_d, cur_pos, pos_bytes, cudaMemcpyDeviceToDevice));
-        CUDA_CHECK(cudaMemcpy(mass_d, cur_mass, mass_bytes, cudaMemcpyDeviceToDevice));
-        CUDA_CHECK(cudaMemcpy(vel_d, cur_vel, vel_bytes, cudaMemcpyDeviceToDevice));
-        CUDA_CHECK(cudaMemcpy(idx_d, cur_idx, idx_bytes, cudaMemcpyDeviceToDevice));
+    // ---------------------------------------------------------------
+    // Phase 2: Compute COM bottom-up.
+    // Process levels from deepest to shallowest.
+    // At each level, launch compute_leaf_com (skips internals) and
+    // propagate_com_up (skips leaves). Both kernels self-filter
+    // using child0 — no host-side node classification needed.
+    // ---------------------------------------------------------------
+
+    const int32_t num_levels = static_cast<int32_t>(level_offsets.size());
+    for (int32_t lvl = num_levels - 1; lvl >= 0; --lvl) {
+        const int32_t off = level_offsets[lvl];
+        const int32_t cnt = level_counts[lvl];
+        const int32_t *level_nodes = work_list_d + off;
+
+        // Leaf COM: one block per node, kernel skips internal nodes
+        constexpr uint32_t leaf_block = 128;
+        constexpr uint32_t leaf_smem = 3 * leaf_block * sizeof(double);
+        Kernel::compute_leaf_com<<<cnt, leaf_block, leaf_smem>>>(
+            pos_d, mass_d,
+            tree.mass, tree.com_x, tree.com_y,
+            level_nodes, cnt,
+            tree.body_start, tree.body_end,
+            tree.child0);
+        CUDA_CHECK(cudaGetLastError());
+
+        // Propagate COM: one thread per node, kernel skips leaves
+        const uint32_t prop_grid = (cnt + BLOCK_SIZE - 1) / BLOCK_SIZE;
+        Kernel::propagate_com_up<<<prop_grid, BLOCK_SIZE>>>(
+            tree.mass, tree.com_x, tree.com_y,
+            tree.child0, tree.child1, tree.child2, tree.child3,
+            tree.body_start,
+            level_nodes, cnt);
+        CUDA_CHECK(cudaGetLastError());
     }
+
+    CUDA_CHECK(cudaDeviceSynchronize());
 }
 
 void BarnesHutCuda::compute_forces() {
-    constexpr uint32_t block_size = 256;
-    const uint32_t grid_size = (bodies.n + block_size - 1) / block_size;
+    const int32_t n = static_cast<int32_t>(bodies.n);
     const double G_dt = Constants::Simulation::G * timestep;
-    Kernel::compute_force<<<grid_size, block_size>>>(quads_d, pos_d, mass_d, vel_d, max_quads, static_cast<int32_t>(bodies.n), epsilon_squared, G_dt);
+
+    const uint32_t grid = (n + BLOCK_SIZE - 1) / BLOCK_SIZE;
+    Kernel::compute_force<<<grid, BLOCK_SIZE>>>(
+        tree.mass, tree.com_x, tree.com_y, tree.width_sq,
+        tree.child0,
+        tree.body_start, tree.body_end,
+        pos_d, mass_d, vel_d,
+        n, epsilon_squared, G_dt);
     CUDA_CHECK(cudaGetLastError());
     CUDA_CHECK(cudaDeviceSynchronize());
 }
 
 void BarnesHutCuda::update_positions() {
-    constexpr uint32_t block_size = 256;
-    const uint32_t grid_size = (bodies.n + block_size - 1) / block_size;
-    Kernel::update_positions<<<grid_size, block_size>>>(pos_d, vel_d, static_cast<int32_t>(bodies.n), timestep);
+    const int32_t n = static_cast<int32_t>(bodies.n);
+    const uint32_t grid = (n + BLOCK_SIZE - 1) / BLOCK_SIZE;
+    Kernel::update_positions<<<grid, BLOCK_SIZE>>>(pos_d, vel_d, n, timestep);
     CUDA_CHECK(cudaGetLastError());
     CUDA_CHECK(cudaDeviceSynchronize());
 }

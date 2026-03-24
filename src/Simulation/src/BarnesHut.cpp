@@ -111,8 +111,10 @@ void BarnesHut::update_velocity(uint64_t body_idx) {
         else {
             const double dist_squared = (bodies.pos(body_idx) - quad.center_of_mass)
                     .lengthSquared();
+            constexpr double theta_squared = Constants::Simulation::THETA * 
+                    Constants::Simulation::THETA;
             if (quad.boundaries.size.lengthSquared() / 
-                    dist_squared < Constants::Simulation::THETA) {
+                    dist_squared < theta_squared) {
                 F += body_to_quad_force(body_idx, quad);
             }
             else {
