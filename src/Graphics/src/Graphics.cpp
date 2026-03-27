@@ -37,7 +37,7 @@ Graphics::Graphics(const Config::Graphics &graphics_cfg, const Bodies &bodies) :
     window.setVerticalSyncEnabled(graphics_cfg.vsync_enabled);
 
     for (uint64_t i = 0; i < body_vertex_array.getVertexCount(); i++) {
-        body_vertex_array[i].color = Constants::Graphics::BODY_COLOR;
+            body_vertex_array[i].color = Constants::Graphics::BODY_COLOR;
     }
 
     glEnable(GL_PROGRAM_POINT_SIZE);
@@ -113,9 +113,30 @@ void Graphics::draw_grid() {
 void Graphics::draw_bodies() {
     const uint64_t vertex_count = body_vertex_array.getVertexCount();
     for (uint64_t i = 0; i < bodies.n; i++) {
-        body_vertex_array[i].position = vp.body_on_viewport(bodies.pos(i));
+        body_vertex_array[i].position = vp.coords_to_pos_on_viewport(bodies.pos(i));
+        if (opt_selected_region) {
+            if (opt_selected_region->contains(bodies.pos(i))) {
+                body_vertex_array[i].color = Constants::Graphics::SELECT_COLOR;
+            }
+            else {
+                body_vertex_array[i].color = Constants::Graphics::BODY_COLOR;
+            }
+        }
     }
+    opt_selected_region = std::nullopt; 
     window.draw(body_vertex_array, sf::RenderStates(&body_shader));
+}
+
+void Graphics::draw_selector() {
+    if (opt_select_grabbed_pos) {
+        const sf::Vector2i new_cursor_pos = sf::Mouse::getPosition(window);
+        sf::RectangleShape selector(sf::Vector2f(new_cursor_pos - *opt_select_grabbed_pos));
+        selector.setPosition(sf::Vector2f(*opt_select_grabbed_pos));
+        selector.setFillColor(sf::Color(0, 0, 0, 0));
+        selector.setOutlineColor(Constants::Graphics::SELECT_COLOR);
+        selector.setOutlineThickness(2.f);
+        window.draw(selector);
+    }
 }
 
 void Graphics::update_stats() {
@@ -147,6 +168,9 @@ void Graphics::zoom_view(double delta) {
 }
 
 void Graphics::grab_view() {
+    if (opt_select_grabbed_pos) {
+        release_select(true);
+    }
     static const std::optional grabbed_cursor = 
             sf::Cursor::createFromSystem(sf::Cursor::Type::Cross);
     if (grabbed_cursor) {
@@ -168,6 +192,30 @@ void Graphics::release_view() {
         Log::warning("Failed to create default cursor");
     }
     opt_view_grabbed_pos = std::nullopt;
+}
+
+void Graphics::grab_select() {
+    if (opt_view_grabbed_pos) {
+        release_view();
+    }
+    opt_select_grabbed_pos = sf::Mouse::getPosition(window);
+}
+
+void Graphics::release_select(bool skip_select) {
+    if (!skip_select) {
+        const auto select_from = vp.pos_on_viewport_to_coords(
+                sf::Vector2f(*opt_select_grabbed_pos));
+        const auto select_to = vp.pos_on_viewport_to_coords(
+                sf::Vector2f(sf::Mouse::getPosition(window)));
+        opt_selected_region = sf::Rect<double>(
+            { std::min(select_from.x, select_to.x),std::min(select_from.y, select_to.y) }, 
+            { std::abs(select_to.x - select_from.x), std::abs(select_to.y - select_from.y)});
+        // There's no point in iterating through bodies to find which are in the selected rect, 
+        // since draw bodies already needs to iterate through all bodies to draw them, so we can 
+        // just store the selected rect and check then. 
+
+    }
+    opt_select_grabbed_pos = std::nullopt;
 }
 
 void Graphics::body_size_increase() {
@@ -203,6 +251,7 @@ void Graphics::draw_frame() {
         draw_grid();    
     }
     draw_bodies();
+    draw_selector();
     window.draw(panel);
     window.display();
     frame++;

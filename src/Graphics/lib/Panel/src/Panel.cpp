@@ -120,7 +120,7 @@ std::string Panel::DisplayedData::to_string() {
     txt += fmt::format(" Vsync:         {}\n", fmt_vsync());
     txt += fmt::format(" Grid:          {}\n", fmt_grid());
     txt += fmt::format(" Max FPS:       {}\n", fmt_max_fps());
-    txt += "Stats:\n";
+    txt += "\nStats:\n";
     txt += fmt::format(" Iteration:     {}\n", fmt_iteration());
     txt += fmt::format(" IPS:           {}\n", fmt_iter_per_sec());
     txt += fmt::format(" Frame:         {}\n", fmt_frame());

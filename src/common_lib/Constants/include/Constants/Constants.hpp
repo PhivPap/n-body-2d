@@ -36,6 +36,7 @@ namespace Constants {
         constexpr Range<uint8_t> BODY_DIAMETER_PIXELS_RANGE = {1, 50};
         constexpr sf::Color BG_COLOR(0, 0, 0);
         constexpr sf::Color GRID_COLOR(255, 255, 255, 64);
+        constexpr sf::Color SELECT_COLOR(255, 0, 0, 200);
         constexpr uint8_t FPS_CALC_BUFFER_LEN = 60;
         constexpr Range<float> PANEL_UPDATE_HZ_RANGE = {0.1, 30};
         constexpr sf::Vector2u PANEL_RES = {340, 480};

@@ -30,10 +30,16 @@ void Controller::handle_events(sf::RenderWindow &window) {
             if (mouse_clicked->button == sf::Mouse::Button::Left) {
                 graphics.grab_view();
             }
+            else if (mouse_clicked->button == sf::Mouse::Button::Right) {
+                graphics.grab_select();
+            }
         }
         else if (const auto *mouse_released = event->getIf<sf::Event::MouseButtonReleased>()) {
             if (mouse_released->button == sf::Mouse::Button::Left) {
                 graphics.release_view();
+            }
+            else if (mouse_released->button == sf::Mouse::Button::Right) {
+                graphics.release_select();
             }
         }
         else if (const auto *key_pressed = event->getIf<sf::Event::KeyPressed>()) {

@@ -55,8 +55,13 @@ void ViewPort::pan(sf::Vector2f pan_pixels) {
             .componentWiseMul(rect.size);
 }
 
-sf::Vector2f ViewPort::body_on_viewport(
-        const sf::Vector2<double> &body_pos) const {
-    const auto relative_pos = (body_pos - rect.position).componentWiseDiv(rect.size);
+sf::Vector2f ViewPort::coords_to_pos_on_viewport(
+        const sf::Vector2<double> &coords) const {
+    const auto relative_pos = (coords - rect.position).componentWiseDiv(rect.size);
     return window_res.componentWiseMul(sf::Vector2f(relative_pos));
+}
+
+sf::Vector2<double> ViewPort::pos_on_viewport_to_coords(const sf::Vector2f &pos) const {
+    const auto relative_pos = pos.componentWiseDiv(window_res);
+    return rect.position + rect.size.componentWiseMul(sf::Vector2<double>(relative_pos));
 }

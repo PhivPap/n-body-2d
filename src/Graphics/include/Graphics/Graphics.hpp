@@ -29,6 +29,8 @@ public:
     void zoom_view(double delta);
     void grab_view();
     void release_view();
+    void grab_select();
+    void release_select(bool skip_select = false);
     void body_size_increase();
     void body_size_decrease();
 
@@ -44,6 +46,8 @@ private:
     uint64_t frame = 0;
     bool grid_enabled;
     std::optional<sf::Vector2i> opt_view_grabbed_pos{};
+    std::optional<sf::Vector2i> opt_select_grabbed_pos{};
+    std::optional<sf::Rect<double>> opt_selected_region{};
     sf::Shader body_shader{};
     Panel panel{Constants::Graphics::PANEL_RES};
     BufferedMeanCalculator<float, 60> fps_calculator{};
@@ -54,5 +58,6 @@ private:
     void pan_if_view_grabbed();
     void draw_grid();
     void draw_bodies();
+    void draw_selector();
     void update_stats();
 };
