@@ -10,6 +10,7 @@
 #include "Panel/Panel.hpp"
 #include "StopWatch/StopWatch.hpp"
 #include "Constants/Constants.hpp"
+#include "Panel/PanelManager.hpp"
 
 class Graphics {
 public:
@@ -49,6 +50,7 @@ private:
     std::optional<sf::Vector2i> opt_select_grabbed_pos{};
     std::optional<sf::Rect<double>> opt_selected_region{};
     sf::Shader body_shader{};
+    PanelManager panel_manager{};
     Panel panel{Constants::Graphics::PANEL_RES};
     BufferedMeanCalculator<float, 60> fps_calculator{};
     Stats stats{};

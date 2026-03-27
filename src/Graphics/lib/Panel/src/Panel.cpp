@@ -28,6 +28,14 @@ Panel::WriteHandle Panel::write_handle() {
     return WriteHandle(this);
 }
 
+sf::Vector2f Panel::get_size() const {
+    return sf::Vector2f(texture.getSize());
+}
+
+bool Panel::is_visible() const {
+    return visible;
+}
+
 void Panel::update_displayed_data(DisplayedData &&displayed_data) {
     this->displayed_data = std::move(displayed_data);
     if (visible) {

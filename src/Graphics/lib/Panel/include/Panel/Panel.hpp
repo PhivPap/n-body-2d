@@ -3,6 +3,7 @@
 #include "SFML/System.hpp"
 #include "SFML/Graphics.hpp"
 
+
 class Panel : public sf::Drawable, public sf::Transformable {
 public:
     struct DisplayedData {
@@ -63,6 +64,9 @@ public:
     Panel(sf::Vector2u size);
     void set_visible(bool visible);
     WriteHandle write_handle();
+
+    sf::Vector2f get_size() const;
+    bool is_visible() const;
 private:
     void update_displayed_data(DisplayedData &&displayed_data);
     sf::RenderTexture texture;
