@@ -1,8 +1,10 @@
 #pragma once
 
 #include <string>
+#include <cstdint>
 
 #include "fmt/base.h"
+#include "fmt/format.h"
 
 namespace Log {
     class Distance {
