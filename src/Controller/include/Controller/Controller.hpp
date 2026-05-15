@@ -18,8 +18,8 @@ private:
     RLCaller stats_update_rate_limiter;
 
     void handle_events(sf::RenderWindow &window);
-    void init_panel();
-    void update_stats();
+    void init_panels();
+    void update_panels();
     void timestep_increase();
     void timestep_decrease();
 };

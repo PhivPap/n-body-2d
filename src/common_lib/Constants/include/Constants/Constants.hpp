@@ -4,6 +4,7 @@
 #include <chrono>
 
 #include "SFML/Graphics/Color.hpp"
+#include <SFML/System/Vector2.hpp>
 
 template <typename T>
 using Range = std::pair<T, T>;
@@ -39,7 +40,8 @@ namespace Constants {
         constexpr sf::Color SELECT_COLOR(255, 0, 0, 200);
         constexpr uint8_t FPS_CALC_BUFFER_LEN = 60;
         constexpr Range<float> PANEL_UPDATE_HZ_RANGE = {0.1, 30};
-        constexpr sf::Vector2u PANEL_RES = {340, 480};
+        constexpr sf::Vector2u CONFIG_PANEL_RES = {340, 240};
+        constexpr sf::Vector2u STATS_PANEL_RES = {340, 200};
         constexpr auto STATS_UPDATE_TIMER = std::chrono::microseconds(50);
 
         static_assert(ZOOM_FACTOR > 1.0);

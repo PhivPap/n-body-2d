@@ -13,11 +13,11 @@ public:
 
     PanelManager() = default;
     ~PanelManager() = default;
-    void register_panel(Panel* panel, Position position);
+    void register_panel(IPanel* panel, Position position);
 
 private:
     static constexpr float PANEL_MARGIN = 10.f;
-    std::vector<std::pair<Panel*, Position>> panels;
+    std::vector<std::pair<IPanel*, Position>> panels;
 
     PanelManager(const PanelManager&) = delete;
     PanelManager& operator=(const PanelManager&) = delete;

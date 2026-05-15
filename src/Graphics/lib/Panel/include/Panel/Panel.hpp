@@ -3,78 +3,135 @@
 #include "SFML/System.hpp"
 #include "SFML/Graphics.hpp"
 
-
-class Panel : public sf::Drawable, public sf::Transformable {
+class IPanel : public sf::Drawable, public sf::Transformable {
 public:
-    struct DisplayedData {
-        double timestep_s;
-        std::string algorithm;
-        double theta;
-        bool show_theta;
-        double softening_factor;
-        uint32_t threads;
-        bool show_threads;
-        sf::Vector2<double> viewport_m;
-        sf::Vector2<uint32_t> viewport_px;
-        bool vsync;
-        bool grid;
-        uint32_t max_fps;
+    virtual ~IPanel() = default;
+    virtual sf::Vector2f get_size() const = 0;
+    virtual bool is_visible() const = 0;
+    virtual void set_visible(bool visible) = 0;
+protected:
+    virtual void draw(sf::RenderTarget& target, sf::RenderStates states) const = 0;
+};
 
-        uint64_t iteration;
-        double iter_per_sec;
-        uint64_t frame;
-        float fps;
-        double elapsed_s;
-        double simulated_time_s;
-
-        std::string fmt_timestep() const;
-        std::string fmt_algorithm() const;
-        std::string fmt_theta() const;
-        std::string fmt_softening_factor() const;
-        std::string fmt_threads() const;
-        std::string fmt_viewport_m() const;
-        std::string fmt_viewport_px() const;
-        std::string fmt_vsync() const;
-        std::string fmt_grid() const;
-        std::string fmt_max_fps() const;
-        std::string fmt_iteration() const;
-        std::string fmt_iter_per_sec() const;
-        std::string fmt_frame() const;
-        std::string fmt_fps() const;
-        std::string fmt_elapsed() const;
-        std::string fmt_sim_time() const;
-        std::string fmt_sim_rate() const;
-        std::string to_string();
-    };
-
+template <typename Derived, typename DisplayedData>
+class PanelBase : public IPanel {
+public:
     class WriteHandle {
     public:
         WriteHandle() = delete;
-        WriteHandle(Panel* panel) : panel(panel) {}
-        ~WriteHandle() {panel->bake();}
-        DisplayedData *operator->() {
-            return &(panel->displayed_data);
-        }
+        WriteHandle(PanelBase* panel);
+        ~WriteHandle();
+        WriteHandle(const WriteHandle&) = delete;
+        WriteHandle& operator=(const WriteHandle&) = delete;
+        WriteHandle(WriteHandle&& wh) noexcept;
+        WriteHandle& operator=(WriteHandle&& wh) noexcept;
+        DisplayedData *operator->();
     private:
-        Panel* panel;
+        PanelBase* panel;
     };
 
     friend class WriteHandle;
 
-    Panel(sf::Vector2u size);
-    void set_visible(bool visible);
+    PanelBase(sf::Vector2u size);
     WriteHandle write_handle();
-
-    sf::Vector2f get_size() const;
+    void set_visible(bool visible);
     bool is_visible() const;
-private:
-    void update_displayed_data(DisplayedData &&displayed_data);
-    sf::RenderTexture texture;
-    sf::Sprite sprite;
+    sf::Vector2f get_size() const;
+protected:
     sf::Text text;
+    sf::RenderTexture texture;
     DisplayedData displayed_data;
-    bool visible;
-
+private:
+    void clear();
     void bake();
     void draw(sf::RenderTarget& target, sf::RenderStates states) const override;
+
+    sf::Sprite sprite;
+    bool visible;
 };
+
+template <typename Derived, typename DisplayedData>
+PanelBase<Derived, DisplayedData>::WriteHandle::WriteHandle(PanelBase* panel) : panel(panel) {}
+
+template <typename Derived, typename DisplayedData>
+PanelBase<Derived, DisplayedData>::WriteHandle::~WriteHandle() { panel->bake(); }
+
+template <typename Derived, typename DisplayedData>
+PanelBase<Derived, DisplayedData>::WriteHandle::WriteHandle(WriteHandle&& wh) noexcept : 
+        panel(wh.panel) {
+    wh.panel = nullptr; 
+}    
+
+template <typename Derived, typename DisplayedData> 
+PanelBase<Derived, DisplayedData>::WriteHandle& 
+PanelBase<Derived, DisplayedData>::WriteHandle::operator=(WriteHandle&& wh) noexcept {
+    if (this != &wh) {
+        panel = wh.panel;
+        wh.panel = nullptr;
+    }
+    return *this;
+}
+
+template <typename Derived, typename DisplayedData> 
+DisplayedData *PanelBase<Derived, DisplayedData>::WriteHandle::operator->() { 
+    return &(panel->displayed_data); 
+}
+
+inline sf::Font font{ "UbuntuMono-R.ttf" };
+
+template <typename Derived, typename DisplayedData>
+PanelBase<Derived, DisplayedData>::PanelBase(sf::Vector2u size) : texture(size), 
+        sprite(texture.getTexture()), text(font), visible(true) {
+    text.setPosition({5.0f, 10.0f});
+    text.setCharacterSize(16);
+    text.setLineSpacing(1.4f);
+    texture.setSmooth(false);
+    sprite.setScale({1.0f, -1.0f});
+    sprite.setPosition({0.0f, static_cast<float>(size.y)});
+    clear();
+}
+
+template <typename Derived, typename DisplayedData>
+typename PanelBase<Derived, DisplayedData>::WriteHandle PanelBase<Derived, DisplayedData>::write_handle() {
+    return WriteHandle(this);
+}
+
+
+template <typename Derived, typename DisplayedData>
+void PanelBase<Derived, DisplayedData>::set_visible(bool visible) {
+    this->visible = visible;
+    if (visible) {
+        bake();
+    }
+}
+
+template <typename Derived, typename DisplayedData>
+bool PanelBase<Derived, DisplayedData>::is_visible() const {
+    return visible;
+}
+
+template <typename Derived, typename DisplayedData>
+sf::Vector2f PanelBase<Derived, DisplayedData>::get_size() const {
+    return sf::Vector2f(texture.getSize());
+}
+
+template <typename Derived, typename DisplayedData>
+void PanelBase<Derived, DisplayedData>::clear() {
+    texture.clear(sf::Color(40, 40, 40, 180));
+}
+
+template <typename Derived, typename DisplayedData>
+void PanelBase<Derived, DisplayedData>::bake() {
+    clear();
+    static_cast<Derived*>(this)->bake_impl();
+}
+
+template <typename Derived, typename DisplayedData>
+void PanelBase<Derived, DisplayedData>::draw(sf::RenderTarget& target, sf::RenderStates states) 
+        const {
+    if (!visible) {
+        return;
+    }
+    states.transform.combine(getTransform());
+    target.draw(sprite, states);
+}

@@ -45,7 +45,8 @@ Graphics::Graphics(const Config::Graphics &graphics_cfg, const Bodies &bodies) :
         throw std::runtime_error("Failed to load shaders");
     }
     body_shader.setUniform("pointDiameter", static_cast<float>(body_diameter_pixels));
-    panel_manager.register_panel(&panel, PanelManager::Position::TOP_LEFT);
+    panel_manager.register_panel(&config_panel, PanelManager::Position::TOP_LEFT);
+    panel_manager.register_panel(&stats_panel, PanelManager::Position::TOP_LEFT);
 }
 
 Graphics::Stats Graphics::get_stats() const {
@@ -56,8 +57,12 @@ sf::RenderWindow &Graphics::get_window() {
     return window;
 }
 
-Panel &Graphics::get_panel() {
-    return panel;
+ConfigPanel &Graphics::get_config_panel() {
+    return config_panel;
+}
+
+StatsPanel &Graphics::get_stats_panel() {
+    return stats_panel;
 }
 
 void Graphics::pan_if_view_grabbed() {
@@ -242,7 +247,7 @@ void Graphics::body_size_decrease() {
 
 void Graphics::set_grid(bool enabled) {
     grid_enabled = enabled;
-    panel.write_handle()->grid = enabled;
+    config_panel.write_handle()->grid = enabled;
 }
 
 void Graphics::draw_frame() {

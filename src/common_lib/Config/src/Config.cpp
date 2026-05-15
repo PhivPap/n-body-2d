@@ -51,7 +51,8 @@ Config::Config(const fs::path &path) {
             .pixel_scale = j_graphics.at("pixel_scale"),
             .grid_enabled = j_graphics.at("grid_enabled"),
             .panel_update_hz = j_graphics.at("panel_update_hz"),
-            .show_panel = j_graphics.at("show_panel")
+            .show_config_panel = j_graphics.at("show_config_panel"),
+            .show_stats_panel = j_graphics.at("show_stats_panel")
         };
     }
     catch (const std::exception &e) {
@@ -260,16 +261,17 @@ bool Config::Simulation::validate() {
 std::string Config::Graphics::to_string() const {
     constexpr const char *fmt_str = R"(
   Graphics:
-    enabled:          {}
-    resolution:       {}x{}
-    vsync_enabled:    {}
-    fps:              {}
-    pixel_scale:      {}
-    grid_enabled:     {}
-    show_panel:       {}
-    panel_update_hz   {})";
+    enabled:           {}
+    resolution:        {}x{}
+    vsync_enabled:     {}
+    fps:               {}
+    pixel_scale:       {}
+    grid_enabled:      {}
+    show_config_panel: {}
+    show_stats_panel:  {}
+    panel_update_hz    {})";
     return fmt::format(fmt_str, enabled, resolution.x, resolution.y, vsync_enabled, fps, 
-            pixel_scale, grid_enabled, show_panel, panel_update_hz);
+            pixel_scale, grid_enabled, show_config_panel, show_stats_panel, panel_update_hz);
 }
 
 bool Config::Graphics::validate() const {

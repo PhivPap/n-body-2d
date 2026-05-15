@@ -3,7 +3,7 @@
 #include "Logger/Logger.hpp"
 
 
-void PanelManager::register_panel(Panel* panel, Position position) {
+void PanelManager::register_panel(IPanel* panel, Position position) {
     panels.emplace_back(panel, position);
 }
 

@@ -57,8 +57,8 @@ void Controller::handle_events(sf::RenderWindow &window) {
                 graphics.set_grid(cfg.graphics.grid_enabled);
                 break;
             case sf::Keyboard::Scan::S:
-                cfg.graphics.show_panel = !cfg.graphics.show_panel;
-                graphics.get_panel().set_visible(cfg.graphics.show_panel);
+                cfg.graphics.show_config_panel = !cfg.graphics.show_config_panel;
+                graphics.get_config_panel().set_visible(cfg.graphics.show_config_panel);
                 break;
             case sf::Keyboard::Scan::Left:
                 timestep_decrease();
@@ -77,44 +77,56 @@ void Controller::handle_events(sf::RenderWindow &window) {
     }
 }
 
-void Controller::init_panel() {
-    auto panel_handle = graphics.get_panel().write_handle();
-    panel_handle->timestep_s = cfg.sim.timestep;
-    panel_handle->algorithm = cfg.sim.simtype_str;
-    panel_handle->theta = cfg.sim.theta;
-    panel_handle->show_theta = cfg.sim.simtype == Config::Simulation::SimType::BARNES_HUT ||
-                                cfg.sim.simtype == Config::Simulation::SimType::BARNES_HUT_GPU;
-    panel_handle->softening_factor = cfg.sim.softening_factor;
-    panel_handle->threads = cfg.sim.threads;
-    panel_handle->show_threads = cfg.sim.simtype != Config::Simulation::SimType::BARNES_HUT_GPU;
-    panel_handle->viewport_m = {0, 0};
-    panel_handle->viewport_px = {0, 0};
-    panel_handle->vsync = cfg.graphics.vsync_enabled;
-    panel_handle->grid = cfg.graphics.grid_enabled;
-    panel_handle->max_fps = cfg.graphics.fps;
-    panel_handle->iteration = 0;
-    panel_handle->iter_per_sec = 0;
-    panel_handle->frame = 0;
-    panel_handle->fps = 0;
-    panel_handle->elapsed_s = 0;
-    panel_handle->simulated_time_s = 0;
+void Controller::init_panels() {
+    {
+        auto write_handle = graphics.get_config_panel().write_handle();
+        write_handle->timestep_s = cfg.sim.timestep;
+        write_handle->algorithm = cfg.sim.simtype_str;
+        write_handle->theta = cfg.sim.theta;
+        write_handle->show_theta = cfg.sim.simtype == Config::Simulation::SimType::BARNES_HUT ||
+                                    cfg.sim.simtype == Config::Simulation::SimType::BARNES_HUT_GPU;
+        write_handle->softening_factor = cfg.sim.softening_factor;
+        write_handle->threads = cfg.sim.threads;
+        write_handle->show_threads = cfg.sim.simtype != Config::Simulation::SimType::BARNES_HUT_GPU;
+        write_handle->viewport_m = {0, 0};
+        write_handle->viewport_px = {0, 0};
+        write_handle->vsync = cfg.graphics.vsync_enabled;
+        write_handle->grid = cfg.graphics.grid_enabled;
+        write_handle->max_fps = cfg.graphics.fps;
+    }
+
+    {
+        auto write_handle = graphics.get_stats_panel().write_handle();
+        write_handle->iteration = 0;
+        write_handle->iter_per_sec = 0;
+        write_handle->frame = 0;
+        write_handle->fps = 0;
+        write_handle->elapsed_s = 0;
+        write_handle->simulated_time_s = 0;
+        write_handle->simulation_rate =  std::numeric_limits<double>::quiet_NaN();
+    }
 }
 
-void Controller::update_stats() {
+void Controller::update_panels() {
     const auto sim_stats = sim.get_stats();
     const auto graphics_stats = graphics.get_stats();
 
-    auto panel_handle = graphics.get_panel().write_handle();
+    {
+        auto write_handle = graphics.get_config_panel().write_handle();
+        write_handle->viewport_m = graphics_stats.viewport_m;
+        write_handle->viewport_px = graphics_stats.viewport_px;
+    }
 
-    panel_handle->iteration = sim_stats.iteration;
-    panel_handle->iter_per_sec = sim_stats.ips;
-    panel_handle->elapsed_s = sim_stats.real_elapsed_s;
-    panel_handle->simulated_time_s = sim_stats.simulated_elapsed_s;
-    panel_handle->iteration = sim_stats.iteration;
-    panel_handle->viewport_m = graphics_stats.viewport_m;
-    panel_handle->viewport_px = graphics_stats.viewport_px;
-    panel_handle->frame = graphics_stats.frame;
-    panel_handle->fps = graphics_stats.fps;
+    {
+        auto write_handle = graphics.get_stats_panel().write_handle();
+        write_handle->iteration = sim_stats.iteration;
+        write_handle->iter_per_sec = sim_stats.ips;
+        write_handle->frame = graphics_stats.frame;
+        write_handle->fps = graphics_stats.fps;
+        write_handle->elapsed_s = sim_stats.real_elapsed_s;
+        write_handle->simulated_time_s = sim_stats.simulated_elapsed_s;
+        write_handle->simulation_rate = sim_stats.ips * cfg.sim.timestep;
+    }
 }
 
 void Controller::timestep_increase() {
@@ -125,7 +137,7 @@ void Controller::timestep_increase() {
     }
     cfg.sim.timestep = new_timestep;
     sim.set_timestep(new_timestep);
-    graphics.get_panel().write_handle()->timestep_s = new_timestep;
+    graphics.get_config_panel().write_handle()->timestep_s = new_timestep;
 }
 
 void Controller::timestep_decrease() {
@@ -136,12 +148,12 @@ void Controller::timestep_decrease() {
     }
     cfg.sim.timestep = new_timestep;
     sim.set_timestep(new_timestep);
-    graphics.get_panel().write_handle()->timestep_s = new_timestep;
+    graphics.get_config_panel().write_handle()->timestep_s = new_timestep;
 }
 
 void Controller::run() {
     StopWatch sw;
-    init_panel();
+    init_panels();
     sim.run();
     sf::RenderWindow &window = graphics.get_window();
     while (!sim.is_finished()) {
@@ -150,7 +162,7 @@ void Controller::run() {
             break;
         }
         handle_events(window);
-        stats_update_rate_limiter.try_call(std::bind(&Controller::update_stats, this));
+        stats_update_rate_limiter.try_call(std::bind(&Controller::update_panels, this));
         graphics.draw_frame();
     }
     Log::debug("Sim done: [{}]", sw);

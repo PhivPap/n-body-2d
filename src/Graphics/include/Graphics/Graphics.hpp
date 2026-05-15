@@ -11,6 +11,8 @@
 #include "StopWatch/StopWatch.hpp"
 #include "Constants/Constants.hpp"
 #include "Panel/PanelManager.hpp"
+#include "Panel/ConfigPanel.hpp"
+#include "Panel/StatsPanel.hpp"
 
 class Graphics {
 public:
@@ -25,7 +27,9 @@ public:
     Graphics(const Config::Graphics &graphics_cfg, const Bodies &bodies);
     Stats get_stats() const;
     sf::RenderWindow &get_window();
-    Panel &get_panel();
+    ConfigPanel &get_config_panel();
+    StatsPanel &get_stats_panel();
+
     void resize_view(sf::Vector2f new_size);
     void zoom_view(double delta);
     void grab_view();
@@ -51,7 +55,8 @@ private:
     std::optional<sf::Rect<double>> opt_selected_region{};
     sf::Shader body_shader{};
     PanelManager panel_manager{};
-    Panel panel{Constants::Graphics::PANEL_RES};
+    ConfigPanel config_panel{Constants::Graphics::CONFIG_PANEL_RES};
+    StatsPanel stats_panel{Constants::Graphics::STATS_PANEL_RES};
     BufferedMeanCalculator<float, 60> fps_calculator{};
     Stats stats{};
     RLCaller stats_update_rate_limiter{Constants::Graphics::STATS_UPDATE_TIMER};

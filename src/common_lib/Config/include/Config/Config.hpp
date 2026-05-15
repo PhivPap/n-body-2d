@@ -41,7 +41,8 @@ public:
         double pixel_scale;
         bool grid_enabled;
         float panel_update_hz;
-        bool show_panel;
+        bool show_config_panel;
+        bool show_stats_panel;
 
         bool validate() const;
         std::string to_string() const;
