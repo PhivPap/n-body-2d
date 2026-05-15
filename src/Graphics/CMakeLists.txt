@@ -35,7 +35,7 @@ target_link_libraries(${PROJECT_NAME} PRIVATE lib-viewport)
 target_include_directories(${PROJECT_NAME} PUBLIC ${LIB_DIR}/BufferedMeanCalculator/include)
 
 target_include_directories(${PROJECT_NAME} PUBLIC ${LOCAL_LIB_DIR}/Panel/include)
-target_link_libraries(${PROJECT_NAME} PRIVATE lib-panel)
+target_link_libraries(${PROJECT_NAME} PUBLIC lib-panel)
 
 target_include_directories(${PROJECT_NAME} PRIVATE ${THIRD_PARTY_DIR}/SMFL/include)
 target_link_libraries(${PROJECT_NAME} PRIVATE sfml-graphics sfml-window sfml-system)

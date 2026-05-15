@@ -28,6 +28,7 @@ endif()
 set(SRC_DIR "${CMAKE_SOURCE_DIR}/src")
 set(LIB_DIR "${SRC_DIR}/common_lib")
 set(THIRD_PARTY_DIR "${CMAKE_SOURCE_DIR}/third_party")
+set(ASSETS_DIR "${CMAKE_SOURCE_DIR}/assets")
 
 # Disable unused SFML modules 
 set(SFML_BUILD_AUDIO OFF CACHE BOOL "Disable SFML audio module" FORCE)
@@ -43,6 +44,7 @@ add_subdirectory(${LIB_DIR}/CLArgs)
 add_subdirectory(${LIB_DIR}/StopWatch)
 add_subdirectory(${LIB_DIR}/Constants)
 add_subdirectory(${LIB_DIR}/BufferedMeanCalculator)
+add_subdirectory(${LIB_DIR}/AssetManager)
 
 add_subdirectory(${SRC_DIR}/Simulation)
 add_subdirectory(${SRC_DIR}/Graphics)
@@ -89,5 +91,9 @@ target_link_libraries(${PROJECT_NAME} PRIVATE lib-stopwatch)
 target_include_directories(${PROJECT_NAME} PRIVATE ${LIB_DIR}/Constants/include)
 target_link_libraries(${PROJECT_NAME} PRIVATE constants)
 
-target_include_directories(${PROJECT_NAME} PRIVATE ${THIRD_PARTY_DIR}/SMFL/include)
-target_link_libraries(${PROJECT_NAME} PRIVATE sfml-graphics sfml-window sfml-system)
+# Copy assets to build directory after build
+add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_directory
+        ${ASSETS_DIR}
+        $<TARGET_FILE_DIR:${PROJECT_NAME}>/assets
+)

@@ -2,6 +2,7 @@
 
 #include "SFML/System.hpp"
 #include "SFML/Graphics.hpp"
+#include "AssetManager/AssetManager.hpp"
 
 class IPanel : public sf::Drawable, public sf::Transformable {
 public:
@@ -77,11 +78,10 @@ DisplayedData *PanelBase<Derived, DisplayedData>::WriteHandle::operator->() {
     return &(panel->displayed_data); 
 }
 
-inline sf::Font font{ "UbuntuMono-R.ttf" };
-
 template <typename Derived, typename DisplayedData>
 PanelBase<Derived, DisplayedData>::PanelBase(sf::Vector2u size) : texture(size), 
-        sprite(texture.getTexture()), text(font), visible(true) {
+        sprite(texture.getTexture()), 
+        text(AssetManager::instance().get<sf::Font>("fonts/UbuntuMono-R.ttf")), visible(true) {
     text.setPosition({5.0f, 10.0f});
     text.setCharacterSize(16);
     text.setLineSpacing(1.4f);
