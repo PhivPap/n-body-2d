@@ -13,6 +13,7 @@
 #include "Panel/PanelManager.hpp"
 #include "Panel/ConfigPanel.hpp"
 #include "Panel/StatsPanel.hpp"
+#include "Panel/CommandsPanel.hpp"
 
 class Graphics {
 public:
@@ -27,6 +28,7 @@ public:
     Graphics(const Config::Graphics &graphics_cfg, const Bodies &bodies);
     Stats get_stats() const;
     sf::RenderWindow &get_window();
+    CommandsPanel &get_commands_panel();
     ConfigPanel &get_config_panel();
     StatsPanel &get_stats_panel();
 
@@ -49,7 +51,7 @@ private:
     sf::RenderWindow window;
     ViewPort vp;
     uint64_t frame = 0;
-    bool grid_enabled;
+    bool show_grid;
     std::optional<sf::Vector2i> opt_view_grabbed_pos{};
     std::optional<sf::Vector2i> opt_select_grabbed_pos{};
     std::optional<sf::Rect<double>> opt_selected_region{};
@@ -57,6 +59,7 @@ private:
     PanelManager panel_manager{};
     ConfigPanel config_panel{Constants::Graphics::CONFIG_PANEL_RES};
     StatsPanel stats_panel{Constants::Graphics::STATS_PANEL_RES};
+    CommandsPanel commands_panel{Constants::Graphics::COMMANDS_PANEL_RES};
     BufferedMeanCalculator<float, 60> fps_calculator{};
     Stats stats{};
     RLCaller stats_update_rate_limiter{Constants::Graphics::STATS_UPDATE_TIMER};

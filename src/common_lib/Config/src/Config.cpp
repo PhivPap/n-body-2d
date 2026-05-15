@@ -49,8 +49,9 @@ Config::Config(const fs::path &path) {
             .vsync_enabled = j_graphics.at("vsync"),
             .fps = j_graphics.at("fps"),
             .pixel_scale = j_graphics.at("pixel_scale"),
-            .grid_enabled = j_graphics.at("grid_enabled"),
+            .show_grid = j_graphics.at("show_grid"),
             .panel_update_hz = j_graphics.at("panel_update_hz"),
+            .show_commands_panel = j_graphics.at("show_commands_panel"),
             .show_config_panel = j_graphics.at("show_config_panel"),
             .show_stats_panel = j_graphics.at("show_stats_panel")
         };
@@ -148,9 +149,9 @@ struct fmt::formatter<Range<T>> {
 std::string Config::IO::to_string() const {
     constexpr const char *fmt_str = R"(
   IO:
-    universe_infile:  `{}`
-    universe_outfile: `{}`
-    echo_bodies:      {})";
+    universe_infile:     `{}`
+    universe_outfile:    `{}`
+    echo_bodies:         {})";
     return fmt::format(fmt_str, universe_infile.string(), universe_outfile.string(), echo_bodies);
 }
 
@@ -218,12 +219,12 @@ bool Config::Simulation::parse_simtype() {
 std::string Config::Simulation::to_string() const {
     constexpr const char *fmt_str = R"(
   Simulation:
-    timestep:         {}
-    iterations:       {}
-    algorithm:        `{}`
-    theta:            {}
-    softening_factor: {}
-    threads:          {})";
+    timestep:            {}
+    iterations:          {}
+    algorithm:           `{}`
+    theta:               {}
+    softening_factor:    {}
+    threads:             {})";
     return fmt::format(fmt_str, timestep, iterations, simtype_str, theta, softening_factor, threads);
 }
 
@@ -261,17 +262,19 @@ bool Config::Simulation::validate() {
 std::string Config::Graphics::to_string() const {
     constexpr const char *fmt_str = R"(
   Graphics:
-    enabled:           {}
-    resolution:        {}x{}
-    vsync_enabled:     {}
-    fps:               {}
-    pixel_scale:       {}
-    grid_enabled:      {}
-    show_config_panel: {}
-    show_stats_panel:  {}
-    panel_update_hz    {})";
+    enabled:             {}
+    resolution:          {}x{}
+    vsync_enabled:       {}
+    fps:                 {}
+    pixel_scale:         {}
+    show_grid:           {}
+    show_commands_panel: {}
+    show_config_panel:   {}
+    show_stats_panel:    {}
+    panel_update_hz      {})";
     return fmt::format(fmt_str, enabled, resolution.x, resolution.y, vsync_enabled, fps, 
-            pixel_scale, grid_enabled, show_config_panel, show_stats_panel, panel_update_hz);
+            pixel_scale, show_grid, show_commands_panel, show_config_panel, show_stats_panel, 
+            panel_update_hz);
 }
 
 bool Config::Graphics::validate() const {

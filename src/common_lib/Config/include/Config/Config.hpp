@@ -39,8 +39,9 @@ public:
         bool vsync_enabled;
         uint16_t fps;
         double pixel_scale;
-        bool grid_enabled;
+        bool show_grid;
         float panel_update_hz;
+        bool show_commands_panel;
         bool show_config_panel;
         bool show_stats_panel;
 

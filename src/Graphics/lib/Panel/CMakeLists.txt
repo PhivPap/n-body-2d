@@ -4,7 +4,8 @@ project(lib-panel)
 add_library(${PROJECT_NAME} 
     ${CMAKE_CURRENT_LIST_DIR}/src/PanelManager.cpp
     ${CMAKE_CURRENT_LIST_DIR}/src/StatsPanel.cpp
-    ${CMAKE_CURRENT_LIST_DIR}/src/ConfigPanel.cpp)
+    ${CMAKE_CURRENT_LIST_DIR}/src/ConfigPanel.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/src/CommandsPanel.cpp)
 target_include_directories(${PROJECT_NAME} PRIVATE ${CMAKE_CURRENT_LIST_DIR}/include)
 
 # Link libraries & Set include paths

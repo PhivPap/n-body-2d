@@ -1,14 +1,15 @@
 {
    "IO": {
-        "universe_infile": "../universe-db/1m-spiral_galaxy.csv",
-        "universe_outfile":  "../universe-db/output.csv",
+        "universe_infile": "./universe-db/100k_spiral_galaxy.csv",
+        "universe_outfile":  "./universe-db/output.csv",
         "echo_config": true,
 	    "echo_bodies": false
     },
     "Simulation": {
-        "timestep": 1e12,
+        "timestep": 1e7,
         "iterations": 1e7,
-        "algorithm": "barnes-hut",
+        "theta": 1.5,
+        "algorithm": "barnes-hut gpu",
         "softening_factor": 0.005,
         "threads": 20
     },
@@ -18,8 +19,10 @@
         "fps": 100,
 	    "vsync": false,
         "pixel_scale": 1e17,
-        "grid_enabled": false,
-        "show_panel": true,
+        "show_grid": false,
+        "show_commands_panel": true,
+        "show_config_panel": true,
+        "show_stats_panel": true,
         "panel_update_hz": 1
     }
 }

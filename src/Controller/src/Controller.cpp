@@ -53,12 +53,8 @@ void Controller::handle_events(sf::RenderWindow &window) {
                 }
                 break;
             case sf::Keyboard::Scan::G:
-                cfg.graphics.grid_enabled = !cfg.graphics.grid_enabled;
-                graphics.set_grid(cfg.graphics.grid_enabled);
-                break;
-            case sf::Keyboard::Scan::S:
-                cfg.graphics.show_config_panel = !cfg.graphics.show_config_panel;
-                graphics.get_config_panel().set_visible(cfg.graphics.show_config_panel);
+                cfg.graphics.show_grid = !cfg.graphics.show_grid;
+                graphics.set_grid(cfg.graphics.show_grid);
                 break;
             case sf::Keyboard::Scan::Left:
                 timestep_decrease();
@@ -71,6 +67,18 @@ void Controller::handle_events(sf::RenderWindow &window) {
                 break;
             case sf::Keyboard::Scan::Down:
                 graphics.body_size_decrease();
+                break;
+            case sf::Keyboard::Scan::F1:
+                cfg.graphics.show_commands_panel = !cfg.graphics.show_commands_panel;
+                graphics.get_commands_panel().set_visible(cfg.graphics.show_commands_panel);
+                break;
+            case sf::Keyboard::Scan::F2:
+                cfg.graphics.show_config_panel = !cfg.graphics.show_config_panel;
+                graphics.get_config_panel().set_visible(cfg.graphics.show_config_panel);
+                break;
+            case sf::Keyboard::Scan::F3:
+                cfg.graphics.show_stats_panel = !cfg.graphics.show_stats_panel;
+                graphics.get_stats_panel().set_visible(cfg.graphics.show_stats_panel);
                 break;
             }
         }
@@ -91,7 +99,7 @@ void Controller::init_panels() {
         write_handle->viewport_m = {0, 0};
         write_handle->viewport_px = {0, 0};
         write_handle->vsync = cfg.graphics.vsync_enabled;
-        write_handle->grid = cfg.graphics.grid_enabled;
+        write_handle->grid = cfg.graphics.show_grid;
         write_handle->max_fps = cfg.graphics.fps;
     }
 

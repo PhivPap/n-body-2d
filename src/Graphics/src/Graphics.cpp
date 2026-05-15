@@ -32,7 +32,7 @@ Graphics::Graphics(const Config::Graphics &graphics_cfg, const Bodies &bodies) :
         window(sf::VideoMode(sf::Vector2u(graphics_cfg.resolution)), "N-Body Sim"), 
         vp(sf::Vector2f(graphics_cfg.resolution), graphics_cfg.pixel_scale), 
         body_vertex_array(sf::PrimitiveType::Points, bodies.n), 
-        grid_enabled(graphics_cfg.grid_enabled) {
+        show_grid(graphics_cfg.show_grid) {
     window.setFramerateLimit(graphics_cfg.fps);
     window.setVerticalSyncEnabled(graphics_cfg.vsync_enabled);
 
@@ -47,6 +47,7 @@ Graphics::Graphics(const Config::Graphics &graphics_cfg, const Bodies &bodies) :
     body_shader.setUniform("pointDiameter", static_cast<float>(body_diameter_pixels));
     panel_manager.register_panel(&config_panel, PanelManager::Position::TOP_LEFT);
     panel_manager.register_panel(&stats_panel, PanelManager::Position::TOP_LEFT);
+    panel_manager.register_panel(&commands_panel, PanelManager::Position::TOP_RIGHT);
 }
 
 Graphics::Stats Graphics::get_stats() const {
@@ -55,6 +56,10 @@ Graphics::Stats Graphics::get_stats() const {
 
 sf::RenderWindow &Graphics::get_window() {
     return window;
+}
+
+CommandsPanel &Graphics::get_commands_panel() {
+    return commands_panel;
 }
 
 ConfigPanel &Graphics::get_config_panel() {
@@ -246,14 +251,14 @@ void Graphics::body_size_decrease() {
 }
 
 void Graphics::set_grid(bool enabled) {
-    grid_enabled = enabled;
+    show_grid = enabled;
     config_panel.write_handle()->grid = enabled;
 }
 
 void Graphics::draw_frame() {
     window.clear(Constants::Graphics::BG_COLOR);
     pan_if_view_grabbed();
-    if (grid_enabled) {
+    if (show_grid) {
         draw_grid();    
     }
     draw_bodies();
