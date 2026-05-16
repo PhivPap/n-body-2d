@@ -8,12 +8,14 @@
 #include "RLCaller/RLCaller.hpp"
 #include "BufferedMeanCalculator/BufferedMeanCalculator.hpp"
 #include "Panel/Panel.hpp"
+#include "Selector/Selector.hpp"
 #include "StopWatch/StopWatch.hpp"
 #include "Constants/Constants.hpp"
 #include "Panel/PanelManager.hpp"
 #include "Panel/ConfigPanel.hpp"
 #include "Panel/StatsPanel.hpp"
 #include "Panel/CommandsPanel.hpp"
+
 
 class Graphics {
 public:
@@ -50,11 +52,11 @@ private:
     sf::VertexArray body_vertex_array;
     sf::RenderWindow window;
     ViewPort vp;
+    Selector selector;
     uint64_t frame = 0;
     bool show_grid;
     std::optional<sf::Vector2i> opt_view_grabbed_pos{};
     std::optional<sf::Vector2i> opt_select_grabbed_pos{};
-    std::optional<sf::Rect<double>> opt_selected_region{};
     sf::Shader body_shader{};
     PanelManager panel_manager{};
     ConfigPanel config_panel{Constants::Graphics::CONFIG_PANEL_RES};

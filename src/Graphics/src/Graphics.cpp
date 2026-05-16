@@ -32,6 +32,7 @@ Graphics::Graphics(const Config::Graphics &graphics_cfg, const Bodies &bodies) :
         window(sf::VideoMode(sf::Vector2u(graphics_cfg.resolution)), "N-Body Sim"), 
         vp(sf::Vector2f(graphics_cfg.resolution), graphics_cfg.pixel_scale), 
         body_vertex_array(sf::PrimitiveType::Points, bodies.n), 
+        selector(bodies, body_vertex_array),
         show_grid(graphics_cfg.show_grid) {
     window.setFramerateLimit(graphics_cfg.fps);
     window.setVerticalSyncEnabled(graphics_cfg.vsync_enabled);
@@ -125,16 +126,7 @@ void Graphics::draw_bodies() {
     const uint64_t vertex_count = body_vertex_array.getVertexCount();
     for (uint64_t i = 0; i < bodies.n; i++) {
         body_vertex_array[i].position = vp.coords_to_pos_on_viewport(bodies.pos(i));
-        if (opt_selected_region) {
-            if (opt_selected_region->contains(bodies.pos(i))) {
-                body_vertex_array[i].color = Constants::Graphics::SELECT_COLOR;
-            }
-            else {
-                body_vertex_array[i].color = Constants::Graphics::BODY_COLOR;
-            }
-        }
     }
-    opt_selected_region = std::nullopt; 
     window.draw(body_vertex_array, sf::RenderStates(&body_shader));
 }
 
@@ -213,19 +205,17 @@ void Graphics::grab_select() {
 }
 
 void Graphics::release_select(bool skip_select) {
-    if (!skip_select) {
-        const auto select_from = vp.pos_on_viewport_to_coords(
-                sf::Vector2f(*opt_select_grabbed_pos));
-        const auto select_to = vp.pos_on_viewport_to_coords(
-                sf::Vector2f(sf::Mouse::getPosition(window)));
-        opt_selected_region = sf::Rect<double>(
-            { std::min(select_from.x, select_to.x),std::min(select_from.y, select_to.y) }, 
-            { std::abs(select_to.x - select_from.x), std::abs(select_to.y - select_from.y)});
-        // There's no point in iterating through bodies to find which are in the selected rect, 
-        // since draw bodies already needs to iterate through all bodies to draw them, so we can 
-        // just store the selected rect and check then. 
-
+    if (skip_select) {
+        opt_select_grabbed_pos = std::nullopt;
     }
+    if (!opt_select_grabbed_pos) {
+        return;
+    }
+    const sf::Rect<float> region{
+        sf::Vector2f(*opt_select_grabbed_pos),
+        sf::Vector2f(sf::Mouse::getPosition(window)) - sf::Vector2f(*opt_select_grabbed_pos)
+    };
+    selector.select(region);
     opt_select_grabbed_pos = std::nullopt;
 }
 
@@ -259,7 +249,7 @@ void Graphics::draw_frame() {
     window.clear(Constants::Graphics::BG_COLOR);
     pan_if_view_grabbed();
     if (show_grid) {
-        draw_grid();    
+        draw_grid();
     }
     draw_bodies();
     draw_selector();
