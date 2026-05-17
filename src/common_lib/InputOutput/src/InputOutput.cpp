@@ -5,12 +5,12 @@
 #include "Logger/Logger.hpp"
 #include "StopWatch/StopWatch.hpp"
 
-static void print_bodies(const Bodies &bodies) {
+static void print_bodies(const Bodies& bodies) {
     fmt::print("Bodies:\n");
-    fmt::print("{:^14}-{:^14}-{:^14}-{:^14}-{:^14}-{:^14}\n", "ID", "Mass [kg]", "pos.x [m]", 
+    fmt::print("{:^14}-{:^14}-{:^14}-{:^14}-{:^14}-{:^14}\n", "ID", "Mass [kg]", "pos.x [m]",
             "pos.y [m]", "vel.x [m/s]", "vel.y [m/s]");
     for (uint64_t i = 0; i < bodies.n; i++) {
-        fmt::print("{:^14} {:^14} {:^14g} {:^14g} {:^14g} {:^14g}\n", bodies.id(i), bodies.mass(i), 
+        fmt::print("{:^14} {:^14} {:^14g} {:^14g} {:^14g} {:^14g}\n", bodies.id(i), bodies.mass(i),
                 bodies.pos(i).x, bodies.pos(i).y, bodies.vel(i).x, bodies.vel(i).y);
     }
 }
@@ -23,16 +23,16 @@ Bodies IO::parse_csv(const fs::path& path, bool echo_bodies) {
     std::vector<sf::Vector2<double>> vel;
     try {
         csv::CSVReader reader(path.c_str());
-        for (csv::CSVRow& row: reader) {
+        for (csv::CSVRow& row : reader) {
             id.emplace_back(row[0].get<std::string>());
             mass.emplace_back(std::stod(row[1].get<>()));
-            pos.emplace_back(sf::Vector2<double>{std::stod(row[2].get<>()), 
-                    std::stod(row[3].get<>())});
-            vel.emplace_back(sf::Vector2<double>{std::stod(row[4].get<>()), 
-                    std::stod(row[5].get<>())});
+            pos.emplace_back(
+                    sf::Vector2<double>{std::stod(row[2].get<>()), std::stod(row[3].get<>())});
+            vel.emplace_back(
+                    sf::Vector2<double>{std::stod(row[4].get<>()), std::stod(row[5].get<>())});
         }
     }
-    catch (const std::exception &e) {
+    catch (const std::exception& e) {
         Log::error("{}", e.what());
         throw std::runtime_error("Failed to parse: `" + path.string() + "`");
     }
@@ -51,7 +51,7 @@ Bodies IO::parse_csv(const fs::path& path, bool echo_bodies) {
     return bodies;
 }
 
-void IO::write_csv(const fs::path& path, const Bodies &bodies) {
+void IO::write_csv(const fs::path& path, const Bodies& bodies) {
     const StopWatch sw;
     try {
         std::ofstream out_file(path.c_str());
@@ -60,11 +60,11 @@ void IO::write_csv(const fs::path& path, const Bodies &bodies) {
         }
         out_file << "id,mass,x,y,vel_x,vel_y\n";
         for (uint64_t i = 0; i < bodies.n; i++) {
-            out_file << fmt::format("{},{},{},{},{},{}\n", bodies.id(i), bodies.mass(i), 
+            out_file << fmt::format("{},{},{},{},{},{}\n", bodies.id(i), bodies.mass(i),
                     bodies.pos(i).x, bodies.pos(i).y, bodies.vel(i).x, bodies.vel(i).y);
         }
     }
-    catch (const std::exception &e) {
+    catch (const std::exception& e) {
         Log::error("{}", e.what());
         throw std::runtime_error("Failed to write: `" + path.string() + "`");
     }

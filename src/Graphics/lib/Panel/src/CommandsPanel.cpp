@@ -1,10 +1,12 @@
 #include "Panel/CommandsPanel.hpp"
 
 
-CommandsPanel::CommandsPanel(sf::Vector2u size) : Base(size) { bake_impl(); }
+CommandsPanel::CommandsPanel(sf::Vector2u size) : Base(size) {
+    bake_impl();
+}
 
 void CommandsPanel::bake_impl() {
-    const auto &d = displayed_data;
+    const auto& d = displayed_data;
     const auto txt = R"(Commands:
  Space:          Pause/Run
  G:              Toggle grid

@@ -1,7 +1,8 @@
 #include "Panel/ConfigPanel.hpp"
 
-#include "Logger/Time.hpp"
 #include "Logger/Distance.hpp"
+#include "Logger/Time.hpp"
+
 
 ConfigPanel::ConfigPanel(sf::Vector2u size) : Base(size) {}
 

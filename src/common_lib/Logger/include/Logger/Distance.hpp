@@ -1,28 +1,31 @@
 #pragma once
 
-#include <string>
 #include <cstdint>
+#include <string>
 
 #include "fmt/base.h"
 #include "fmt/format.h"
 
+
 namespace Log {
-    class Distance {
-    public:
-        enum class Unit : uint8_t {
-            NM, UM, MM, M, KM, AU, LY
-        };
+class Distance {
+public:
+    enum class Unit : uint8_t { NM, UM, MM, M, KM, AU, LY };
 
-        template <Unit unit = Unit::M> static Distance from(double units);
-        std::string to_string() const;
-    private:
-        Distance(double meters);
-        template <Unit unit> static constexpr double meters_to(double units);
-        template <Unit unit> static constexpr double meters_from(double units);
+    template <Unit unit = Unit::M>
+    static Distance from(double units);
+    std::string to_string() const;
 
-        const double meters;
-    };
-}
+private:
+    Distance(double meters);
+    template <Unit unit>
+    static constexpr double meters_to(double units);
+    template <Unit unit>
+    static constexpr double meters_from(double units);
+
+    const double meters;
+};
+}  // namespace Log
 
 template <>
 struct fmt::formatter<Log::Distance> {
@@ -50,15 +53,15 @@ inline std::string Log::Distance::to_string() const {
         _meters = -_meters;
     }
 
-    if (_meters < meters_from<Unit::UM>(1)) 
+    if (_meters < meters_from<Unit::UM>(1))
         return fmt::format("{:.3f}nm", sign * meters_to<Unit::NM>(_meters));
-    else if (_meters < meters_from<Unit::MM>(1)) 
+    else if (_meters < meters_from<Unit::MM>(1))
         return fmt::format("{:.3f}um", sign * meters_to<Unit::UM>(_meters));
-    else if (_meters < meters_from<Unit::M>(1)) 
+    else if (_meters < meters_from<Unit::M>(1))
         return fmt::format("{:.3f}mm", sign * meters_to<Unit::MM>(_meters));
-    else if (_meters < meters_from<Unit::KM>(1)) 
+    else if (_meters < meters_from<Unit::KM>(1))
         return fmt::format("{:.3f}m", sign * meters_to<Unit::M>(_meters));
-    else if (_meters < meters_from<Unit::AU>(1)) 
+    else if (_meters < meters_from<Unit::AU>(1))
         return fmt::format("{:.3f}km", sign * meters_to<Unit::KM>(_meters));
     else if (_meters < meters_from<Unit::LY>(1))
         return fmt::format("{:.3f}AU", sign * meters_to<Unit::AU>(_meters));

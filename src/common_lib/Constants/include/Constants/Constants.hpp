@@ -1,53 +1,57 @@
 #pragma once
 
-#include <cstdint>
 #include <chrono>
+#include <cstdint>
+#include <utility>
 
 #include "SFML/Graphics/Color.hpp"
-#include <SFML/System/Vector2.hpp>
+#include "SFML/System/Vector2.hpp"
+
 
 template <typename T>
 using Range = std::pair<T, T>;
 
 namespace Constants {
-    namespace Simulation {
-        constexpr double G = 6.67430e-11; // (m^3 * kg^-1 * s^-2)
-        // [picosecond (s), billion years (s)]
-        constexpr Range<double> TIMESTEP_RANGE = {1e-9, 31'556'952'000'000'000};
-        const char* const ALLOWED_ALGORITHMS[] = { "barnes-hut", "naive" };
-        constexpr Range<double> SOFTENING_FACTOR_RANGE = {0.0, 0.2};
-        constexpr Range<uint16_t> THREADS_RANGE = {1, 256};
-        constexpr Range<double> THETA_RANGE = {0.0, 100.0};
-        constexpr auto STATS_UPDATE_TIMER = std::chrono::microseconds(50);
-        constexpr uint64_t MAX_PAIRWISE_SOFTENING_COMPUTATIONS = 1'000'000;
-        constexpr double TIMESTEP_CHANGE_FACTOR = 1.1;
-        
-        static_assert(TIMESTEP_CHANGE_FACTOR > 1.0);
-    }
-    namespace Graphics {
-        constexpr Range<uint16_t> WINDOW_WIDTH_RANGE = {240, 7680};
-        constexpr Range<uint16_t> WINDOW_HEIGHT_RANGE = {135, 4320};
-        constexpr Range<uint16_t> FPS_RANGE = {1, 512};
-        // [picometer (m), observable universe diameter (m)]
-        constexpr Range<double> PIXEL_RES_RANGE = {1e-12, 8.8e50};
-        constexpr double ZOOM_FACTOR = 1.08;
-        constexpr double GRID_SPACING_FACTOR = 4;
-        constexpr sf::Color BODY_COLOR(255, 255, 255, 120);
-        constexpr uint8_t INIT_BODY_PIXEL_DIAMETER = 1;
-        constexpr Range<uint8_t> BODY_DIAMETER_PIXELS_RANGE = {1, 50};
-        constexpr sf::Color BG_COLOR(0, 0, 0);
-        constexpr sf::Color GRID_COLOR(255, 255, 255, 64);
-        constexpr sf::Color SELECT_COLOR(255, 0, 0, 200);
-        constexpr uint8_t FPS_CALC_BUFFER_LEN = 60;
-        constexpr Range<float> PANEL_UPDATE_HZ_RANGE = {0.1, 30};
-        constexpr sf::Vector2u CONFIG_PANEL_RES = {340, 240};
-        constexpr sf::Vector2u STATS_PANEL_RES = {340, 200};
-        constexpr sf::Vector2u COMMANDS_PANEL_RES = {370, 220};
-        constexpr auto STATS_UPDATE_TIMER = std::chrono::microseconds(50);
+namespace Simulation {
 
-        static_assert(ZOOM_FACTOR > 1.0);
-        static_assert(GRID_SPACING_FACTOR >= 2.0);
-        static_assert(INIT_BODY_PIXEL_DIAMETER >= BODY_DIAMETER_PIXELS_RANGE.first);
-        static_assert(INIT_BODY_PIXEL_DIAMETER <= BODY_DIAMETER_PIXELS_RANGE.second);
-    }
-}
+constexpr double G = 6.67430e-11;  // (m^3 * kg^-1 * s^-2)
+// [picosecond (s), billion years (s)]
+constexpr Range<double> TIMESTEP_RANGE = {1e-9, 31'556'952'000'000'000};
+const char* const ALLOWED_ALGORITHMS[] = {"barnes-hut", "naive"};
+constexpr Range<double> SOFTENING_FACTOR_RANGE = {0.0, 0.2};
+constexpr Range<uint16_t> THREADS_RANGE = {1, 256};
+constexpr Range<double> THETA_RANGE = {0.0, 100.0};
+constexpr auto STATS_UPDATE_TIMER = std::chrono::microseconds(50);
+constexpr uint64_t MAX_PAIRWISE_SOFTENING_COMPUTATIONS = 1'000'000;
+constexpr double TIMESTEP_CHANGE_FACTOR = 1.1;
+
+static_assert(TIMESTEP_CHANGE_FACTOR > 1.0);
+}  // namespace Simulation
+
+namespace Graphics {
+constexpr Range<uint16_t> WINDOW_WIDTH_RANGE = {240, 7680};
+constexpr Range<uint16_t> WINDOW_HEIGHT_RANGE = {135, 4320};
+constexpr Range<uint16_t> FPS_RANGE = {1, 512};
+// [picometer (m), observable universe diameter (m)]
+constexpr Range<double> PIXEL_RES_RANGE = {1e-12, 8.8e50};
+constexpr double ZOOM_FACTOR = 1.08;
+constexpr double GRID_SPACING_FACTOR = 4;
+constexpr sf::Color BODY_COLOR(255, 255, 255, 120);
+constexpr uint8_t INIT_BODY_PIXEL_DIAMETER = 1;
+constexpr Range<uint8_t> BODY_DIAMETER_PIXELS_RANGE = {1, 50};
+constexpr sf::Color BG_COLOR(0, 0, 0);
+constexpr sf::Color GRID_COLOR(255, 255, 255, 64);
+constexpr sf::Color SELECT_COLOR(255, 0, 0, 200);
+constexpr uint8_t FPS_CALC_BUFFER_LEN = 60;
+constexpr Range<float> PANEL_UPDATE_HZ_RANGE = {0.1, 30};
+constexpr sf::Vector2u CONFIG_PANEL_RES = {340, 240};
+constexpr sf::Vector2u STATS_PANEL_RES = {340, 200};
+constexpr sf::Vector2u COMMANDS_PANEL_RES = {370, 220};
+constexpr auto STATS_UPDATE_TIMER = std::chrono::microseconds(50);
+
+static_assert(ZOOM_FACTOR > 1.0);
+static_assert(GRID_SPACING_FACTOR >= 2.0);
+static_assert(INIT_BODY_PIXEL_DIAMETER >= BODY_DIAMETER_PIXELS_RANGE.first);
+static_assert(INIT_BODY_PIXEL_DIAMETER <= BODY_DIAMETER_PIXELS_RANGE.second);
+}  // namespace Graphics
+}  // namespace Constants

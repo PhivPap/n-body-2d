@@ -2,13 +2,14 @@
 
 #include "Constants/Constants.hpp"
 
-Selector::Selector(const Bodies &bodies, sf::VertexArray &body_vertex_array) : bodies(bodies), 
-        body_vertex_array(body_vertex_array) {
+
+Selector::Selector(const Bodies& bodies, sf::VertexArray& body_vertex_array)
+        : bodies(bodies), body_vertex_array(body_vertex_array) {
     assert(body_vertex_array.getVertexCount() == bodies.n);
     selected_body_indices.reserve(bodies.n);
 }
 
-void Selector::select(const sf::Rect<float> &region) {
+void Selector::select(const sf::Rect<float>& region) {
     selected_body_indices.clear();
     for (uint64_t i = 0; i < bodies.n; i++) {
         if (region.contains(body_vertex_array[i].position)) {
@@ -44,7 +45,7 @@ Selector::SelectionStats Selector::compute_stats() const {
         center_of_mass /= total_mass;
         weighted_velocity /= total_mass;
     }
-    
+
     return SelectionStats{
         .n = static_cast<uint32_t>(selected_body_indices.size()),
         .total_mass = total_mass,

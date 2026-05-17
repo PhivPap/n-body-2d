@@ -1,7 +1,7 @@
 #include "Panel/StatsPanel.hpp"
 
-#include "Logger/Time.hpp"
 #include "Logger/Distance.hpp"
+#include "Logger/Time.hpp"
 
 StatsPanel::StatsPanel(sf::Vector2u size) : Base(size) {}
 

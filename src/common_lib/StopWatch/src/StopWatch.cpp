@@ -1,10 +1,11 @@
 #include "StopWatch/StopWatch.hpp"
 
 #include "Logger/Logger.hpp"
-#include "fmt/format.h"
 #include "fmt/chrono.h"
+#include "fmt/format.h"
 
-StopWatch::StopWatch(State state): state(state) {
+
+StopWatch::StopWatch(State state) : state(state) {
     if (state == State::RUNNING) {
         last_start = std::chrono::high_resolution_clock::now();
     }
@@ -12,15 +13,13 @@ StopWatch::StopWatch(State state): state(state) {
 
 StopWatch StopWatch::operator+(const StopWatch& sw) const {
     StopWatch res(State::PAUSED);
-    res.previously_elapsed = 
-        this->duration<SecondsF64>() + sw.duration<SecondsF64>();
+    res.previously_elapsed = this->duration<SecondsF64>() + sw.duration<SecondsF64>();
     return res;
 }
 
 StopWatch StopWatch::operator-(const StopWatch& sw) const {
     StopWatch res(State::PAUSED);
-    res.previously_elapsed = 
-        this->duration<SecondsF64>() - sw.duration<SecondsF64>();
+    res.previously_elapsed = this->duration<SecondsF64>() - sw.duration<SecondsF64>();
     return res;
 }
 
@@ -30,15 +29,13 @@ double StopWatch::operator/(const StopWatch& sw) const {
 
 StopWatch StopWatch::operator*(double d) const {
     StopWatch res(State::PAUSED);
-    res.previously_elapsed = 
-        this->duration<SecondsF64>() * d;
+    res.previously_elapsed = this->duration<SecondsF64>() * d;
     return res;
 }
 
 StopWatch StopWatch::operator/(double d) const {
     StopWatch res(State::PAUSED);
-    res.previously_elapsed = 
-        this->duration<SecondsF64>() / d;
+    res.previously_elapsed = this->duration<SecondsF64>() / d;
     return res;
 }
 
@@ -53,11 +50,11 @@ void StopWatch::resume() {
 
 void StopWatch::pause() {
     if (state == State::PAUSED) {
-        Log::warning("StopWatch::pause() called on paused StopWatch");   
+        Log::warning("StopWatch::pause() called on paused StopWatch");
         return;
     }
-    previously_elapsed += std::chrono::duration_cast<decltype(previously_elapsed)>
-            (std::chrono::high_resolution_clock::now() - last_start);
+    previously_elapsed += std::chrono::duration_cast<decltype(previously_elapsed)>(
+            std::chrono::high_resolution_clock::now() - last_start);
     state = State::PAUSED;
 }
 

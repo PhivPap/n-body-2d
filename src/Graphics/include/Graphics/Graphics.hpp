@@ -2,19 +2,19 @@
 
 #include <vector>
 
-#include "Config/Config.hpp"
 #include "Body/Body.hpp"
-#include "ViewPort/ViewPort.hpp"
-#include "RLCaller/RLCaller.hpp"
 #include "BufferedMeanCalculator/BufferedMeanCalculator.hpp"
+#include "Config/Config.hpp"
+#include "Constants/Constants.hpp"
+#include "Panel/CommandsPanel.hpp"
+#include "Panel/ConfigPanel.hpp"
 #include "Panel/Panel.hpp"
+#include "Panel/PanelManager.hpp"
+#include "Panel/StatsPanel.hpp"
+#include "RLCaller/RLCaller.hpp"
 #include "Selector/Selector.hpp"
 #include "StopWatch/StopWatch.hpp"
-#include "Constants/Constants.hpp"
-#include "Panel/PanelManager.hpp"
-#include "Panel/ConfigPanel.hpp"
-#include "Panel/StatsPanel.hpp"
-#include "Panel/CommandsPanel.hpp"
+#include "ViewPort/ViewPort.hpp"
 
 
 class Graphics {
@@ -27,13 +27,12 @@ public:
         sf::Vector2<uint32_t> viewport_px;
     };
 
-    Graphics(const Config::Graphics &graphics_cfg, const Bodies &bodies);
+    Graphics(const Config::Graphics& graphics_cfg, const Bodies& bodies);
     Stats get_stats() const;
-    sf::RenderWindow &get_window();
-    CommandsPanel &get_commands_panel();
-    ConfigPanel &get_config_panel();
-    StatsPanel &get_stats_panel();
-
+    sf::RenderWindow& get_window();
+    CommandsPanel& get_commands_panel();
+    ConfigPanel& get_config_panel();
+    StatsPanel& get_stats_panel();
     void resize_view(sf::Vector2f new_size);
     void zoom_view(double delta);
     void grab_view();
@@ -42,12 +41,11 @@ public:
     void release_select(bool skip_select = false);
     void body_size_increase();
     void body_size_decrease();
-
     void set_grid(bool enabled);
     void draw_frame();
 
 private:
-    const Bodies &bodies;
+    const Bodies& bodies;
     StopWatch sw;
     sf::VertexArray body_vertex_array;
     sf::RenderWindow window;

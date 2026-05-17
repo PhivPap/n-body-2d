@@ -4,12 +4,7 @@
 
 class PanelManager : public sf::Drawable, public sf::Transformable {
 public:
-    enum class Position {
-        TOP_LEFT,
-        TOP_RIGHT,
-        BOTTOM_LEFT,
-        BOTTOM_RIGHT
-    };
+    enum class Position { TOP_LEFT, TOP_RIGHT, BOTTOM_LEFT, BOTTOM_RIGHT };
 
     PanelManager() = default;
     ~PanelManager() = default;
@@ -17,6 +12,7 @@ public:
 
 private:
     static constexpr float PANEL_MARGIN = 10.f;
+    
     std::vector<std::pair<IPanel*, Position>> panels;
 
     PanelManager(const PanelManager&) = delete;

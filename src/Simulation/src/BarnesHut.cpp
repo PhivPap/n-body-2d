@@ -2,11 +2,11 @@
 
 #include "Logger/Logger.hpp"
 
-BarnesHut::BarnesHut(const Config::Simulation &sim_cfg, Bodies &bodies) : 
-        Simulation(sim_cfg, bodies), n_threads(sim_cfg.threads), 
-        theta_sq(sim_cfg.theta * sim_cfg.theta),
-        worker_chunk(bodies.n / n_threads), master_offset(worker_chunk * (n_threads - 1)), 
-        sync_point(n_threads) {
+
+BarnesHut::BarnesHut(const Config::Simulation& sim_cfg, Bodies& bodies)
+        : Simulation(sim_cfg, bodies), n_threads(sim_cfg.threads),
+          theta_sq(sim_cfg.theta * sim_cfg.theta), worker_chunk(bodies.n / n_threads),
+          master_offset(worker_chunk * (n_threads - 1)), sync_point(n_threads) {
     if (sim_cfg.threads == 0)
         throw std::runtime_error("Thread count 0 is invalid");
     if (sim_cfg.threads > bodies.n)
@@ -39,7 +39,7 @@ void BarnesHut::on_pause() {
     master.join();
     worker_stop = true;
     std::ignore = sync_point.arrive();
-    for (auto &worker : workers) {
+    for (auto& worker : workers) {
         worker.join();
     }
     workers.clear();
@@ -70,7 +70,7 @@ void BarnesHut::simulate() {
 
 void BarnesHut::worker_task(uint32_t worker_id) {
     const uint64_t begin_idx = worker_id * worker_chunk;
-    const uint64_t end_idx =  begin_idx + worker_chunk;
+    const uint64_t end_idx = begin_idx + worker_chunk;
     while (true) {
         sync_point.arrive_and_wait();
         if (worker_stop)
@@ -100,9 +100,9 @@ void BarnesHut::update_velocity(uint64_t body_idx) {
     quad_idx_stack.push_back(0);
 
     sf::Vector2<double> F = {0.0, 0.0};
-    
+
     while (!quad_idx_stack.empty()) {
-        const Quad &quad = qtree.quads[quad_idx_stack.back()];
+        const Quad& quad = qtree.quads[quad_idx_stack.back()];
         quad_idx_stack.pop_back();
         if (quad.is_leaf()) {
             if (quad.total_mass != 0 && quad.center_of_mass != bodies.pos(body_idx)) {
@@ -110,10 +110,9 @@ void BarnesHut::update_velocity(uint64_t body_idx) {
             }
         }
         else {
-            const double dist_squared = (bodies.pos(body_idx) - quad.center_of_mass)
-                    .lengthSquared();
-            if (quad.boundaries.size.lengthSquared() / 
-                    dist_squared < theta_sq) {
+            const double dist_squared =
+                    (bodies.pos(body_idx) - quad.center_of_mass).lengthSquared();
+            if (quad.boundaries.size.lengthSquared() / dist_squared < theta_sq) {
                 F += body_to_quad_force(body_idx, quad);
             }
             else {
@@ -128,9 +127,9 @@ void BarnesHut::update_velocity(uint64_t body_idx) {
     bodies.vel(body_idx) += F / bodies.mass(body_idx) * timestep;
 }
 
-sf::Vector2<double> BarnesHut::body_to_quad_force(uint64_t body_idx, const Quad &quad) {
+sf::Vector2<double> BarnesHut::body_to_quad_force(uint64_t body_idx, const Quad& quad) {
     const double dist = distance(bodies.pos(body_idx), quad.center_of_mass);
-    const double force_amplitude = Constants::Simulation::G * bodies.mass(body_idx) * 
-            quad.total_mass / (dist * dist + epsilon_squared);
+    const double force_amplitude = Constants::Simulation::G * bodies.mass(body_idx)
+                                   * quad.total_mass / (dist * dist + epsilon_squared);
     return ((quad.center_of_mass - bodies.pos(body_idx)) / dist) * force_amplitude;
 }

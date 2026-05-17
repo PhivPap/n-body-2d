@@ -3,14 +3,14 @@
 #include <filesystem>
 
 #include "argparse/argparse.hpp"
-
 #include "Logger/Logger.hpp"
 #include "StopWatch/StopWatch.hpp"
+
 
 using namespace argparse;
 namespace fs = std::filesystem;
 
-static Log::Verbosity parse_verbosity(const ArgumentParser &argparser) {
+static Log::Verbosity parse_verbosity(const ArgumentParser& argparser) {
     const std::string verbosity_in = argparser.get("--verbosity");
     if (verbosity_in == "DEBUG") {
         return Log::Verbosity::DEBUG;
@@ -30,25 +30,22 @@ static Log::Verbosity parse_verbosity(const ArgumentParser &argparser) {
     }
 }
 
-static fs::path parse_config_path(const ArgumentParser &argparser) {
+static fs::path parse_config_path(const ArgumentParser& argparser) {
     return fs::canonical(fs::path(argparser.get("config")));
 }
 
-CLArgs::CLArgs(int argc, const char *argv[]) {
+CLArgs::CLArgs(int argc, const char* argv[]) {
     const StopWatch sw;
     ArgumentParser argparser("n-body-2d");
-    argparser.add_argument("--verbosity")
-            .default_value(std::string{"DEBUG"})
-            .help("Specify verbosity: DEBUG/INFO/WARNING/ERROR")
-            .metavar("LEVEL").nargs(1);
-    argparser.add_argument("config").help("Path to the JSON configuration file")
-            .metavar("CONFIG");
+    argparser.add_argument("--verbosity").default_value(std::string{"DEBUG"})
+            .help("Specify verbosity: DEBUG/INFO/WARNING/ERROR").metavar("LEVEL").nargs(1);
+    argparser.add_argument("config").help("Path to the JSON configuration file").metavar("CONFIG");
     try {
         argparser.parse_args(argc, argv);
         Log::verbosity = parse_verbosity(argparser);
         config = parse_config_path(argparser);
-    } 
-    catch (const std::exception &e) {
+    }
+    catch (const std::exception& e) {
         Log::error("{}", e.what());
         std::cout << argparser << std::endl;
         throw std::runtime_error("Command line argument parsing failed");

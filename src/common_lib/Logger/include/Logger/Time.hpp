@@ -1,28 +1,31 @@
 #pragma once
 
-#include <string>
 #include <cstdint>
+#include <string>
 
 #include "fmt/base.h"
 #include "fmt/format.h"
 
+
 namespace Log {
-    class Time {
-    public:
-        enum class Unit : uint8_t {
-            NS, US, MS, S, M, H, DAYS, YEARS
-        };
+class Time {
+public:
+    enum class Unit : uint8_t { NS, US, MS, S, M, H, DAYS, YEARS };
 
-        template <Unit unit = Unit::S> static Time from(double units);
-        std::string to_string() const;
-    private:
-        Time(double sec);
-        template <Unit unit> static constexpr double seconds_to(double units);
-        template <Unit unit> static constexpr double seconds_from(double units);
+    template <Unit unit = Unit::S>
+    static Time from(double units);
+    std::string to_string() const;
 
-        const double sec;
-    };
-}
+private:
+    Time(double sec);
+    template <Unit unit>
+    static constexpr double seconds_to(double units);
+    template <Unit unit>
+    static constexpr double seconds_from(double units);
+
+    const double sec;
+};
+}  // namespace Log
 
 template <>
 struct fmt::formatter<Log::Time> {

@@ -4,10 +4,12 @@
 
 #include "Simulation/Simulation.hpp"
 
+
 class BarnesHut : public Simulation {
 public:
-    BarnesHut(const Config::Simulation &sim_cfg, Bodies &bodies);
+    BarnesHut(const Config::Simulation& sim_cfg, Bodies& bodies);
     ~BarnesHut() override;
+
 private:
     const uint16_t n_threads;
     const double theta_sq;
@@ -29,5 +31,5 @@ private:
     void update_positions(uint64_t begin_idx, uint64_t end_idx);
     void update_velocities(uint64_t begin_idx, uint64_t end_idx);
     void update_velocity(uint64_t body_idx);
-    sf::Vector2<double> body_to_quad_force(uint64_t body_idx, const Quad &quad);
+    sf::Vector2<double> body_to_quad_force(uint64_t body_idx, const Quad& quad);
 };

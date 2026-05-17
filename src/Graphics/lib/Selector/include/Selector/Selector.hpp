@@ -16,13 +16,13 @@ public:
     };
 
     Selector() = delete;
-    Selector(const Bodies &bodies, sf::VertexArray &body_vertex_array);
-    void select(const sf::Rect<float> &region);
+    Selector(const Bodies& bodies, sf::VertexArray& body_vertex_array);
+    void select(const sf::Rect<float>& region);
     void clear();
     SelectionStats compute_stats() const;
 
 private:
-    const Bodies &bodies;
-    sf::VertexArray &body_vertex_array;
+    const Bodies& bodies;
+    sf::VertexArray& body_vertex_array;
     std::vector<uint32_t> selected_body_indices;
 };

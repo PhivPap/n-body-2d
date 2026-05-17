@@ -4,8 +4,8 @@
 #include "Logger/Logger.hpp"
 
 
-ViewPort::ViewPort(sf::Vector2f window_res, double pixel_scale) : window_res(window_res), 
-        pixel_scale(pixel_scale) {
+ViewPort::ViewPort(sf::Vector2f window_res, double pixel_scale)
+        : window_res(window_res), pixel_scale(pixel_scale) {
     init_rect();
 }
 
@@ -29,7 +29,8 @@ void ViewPort::zoom(Zoom direction, sf::Vector2f cursor_pos) {
         }
         pixel_scale = new_pixel_res;
         rect.position += sf::Vector2<double>(cursor_pos.componentWiseDiv(window_res))
-                .componentWiseMul(rect.size) * (1 - ZOOM_FACTOR_NORMALIZED);
+                                 .componentWiseMul(rect.size)
+                         * (1 - ZOOM_FACTOR_NORMALIZED);
         compute_rect_size();
     }
     else {
@@ -41,7 +42,8 @@ void ViewPort::zoom(Zoom direction, sf::Vector2f cursor_pos) {
         pixel_scale = new_pixel_res;
         compute_rect_size();
         rect.position -= sf::Vector2<double>(cursor_pos.componentWiseDiv(window_res))
-                .componentWiseMul(rect.size) * (1 - ZOOM_FACTOR_NORMALIZED);
+                                 .componentWiseMul(rect.size)
+                         * (1 - ZOOM_FACTOR_NORMALIZED);
     }
 }
 
@@ -52,16 +54,23 @@ void ViewPort::resize(sf::Vector2f new_res) {
 
 void ViewPort::pan(sf::Vector2f pan_pixels) {
     rect.position += sf::Vector2<double>(pan_pixels.componentWiseDiv(window_res))
-            .componentWiseMul(rect.size);
+                             .componentWiseMul(rect.size);
 }
 
-sf::Vector2f ViewPort::coords_to_pos_on_viewport(
-        const sf::Vector2<double> &coords) const {
+sf::Vector2f ViewPort::coords_to_pos_on_viewport(const sf::Vector2<double>& coords) const {
     const auto relative_pos = (coords - rect.position).componentWiseDiv(rect.size);
     return window_res.componentWiseMul(sf::Vector2f(relative_pos));
 }
 
-sf::Vector2<double> ViewPort::pos_on_viewport_to_coords(const sf::Vector2f &pos) const {
+sf::Vector2<double> ViewPort::pos_on_viewport_to_coords(const sf::Vector2f& pos) const {
     const auto relative_pos = pos.componentWiseDiv(window_res);
     return rect.position + rect.size.componentWiseMul(sf::Vector2<double>(relative_pos));
+}
+
+sf::Vector2f ViewPort::get_window_res() const {
+    return window_res;
+}
+
+sf::Rect<double> ViewPort::get_rect() const {
+    return rect;
 }

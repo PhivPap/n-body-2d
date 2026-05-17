@@ -1,11 +1,11 @@
 #include "Graphics/Graphics.hpp"
 
-#include "Logger/Logger.hpp"
 #include "Constants/Constants.hpp"
+#include "Logger/Logger.hpp"
 #include <GL/gl.h>
 
-constexpr std::string_view body_vertex_shader = 
-R"glsl(
+constexpr std::string_view body_vertex_shader =
+        R"glsl(
 #version 130
 uniform float pointDiameter;
 void main() {
@@ -14,8 +14,8 @@ void main() {
     gl_FrontColor = gl_Color;  // Pass color if using
 }
 )glsl";
-constexpr std::string_view body_fragment_shader = 
-R"glsl(
+constexpr std::string_view body_fragment_shader =
+        R"glsl(
 #version 130
 uniform float pointDiameter;
 void main() {
@@ -27,18 +27,17 @@ void main() {
 }
 )glsl";
 
-Graphics::Graphics(const Config::Graphics &graphics_cfg, const Bodies &bodies) :
-        bodies(bodies), 
-        window(sf::VideoMode(sf::Vector2u(graphics_cfg.resolution)), "N-Body Sim"), 
-        vp(sf::Vector2f(graphics_cfg.resolution), graphics_cfg.pixel_scale), 
-        body_vertex_array(sf::PrimitiveType::Points, bodies.n), 
-        selector(bodies, body_vertex_array),
-        show_grid(graphics_cfg.show_grid) {
+Graphics::Graphics(const Config::Graphics& graphics_cfg, const Bodies& bodies)
+        : bodies(bodies),
+          window(sf::VideoMode(sf::Vector2u(graphics_cfg.resolution)), "N-Body Sim"),
+          vp(sf::Vector2f(graphics_cfg.resolution), graphics_cfg.pixel_scale),
+          body_vertex_array(sf::PrimitiveType::Points, bodies.n),
+          selector(bodies, body_vertex_array), show_grid(graphics_cfg.show_grid) {
     window.setFramerateLimit(graphics_cfg.fps);
     window.setVerticalSyncEnabled(graphics_cfg.vsync_enabled);
 
     for (uint64_t i = 0; i < body_vertex_array.getVertexCount(); i++) {
-            body_vertex_array[i].color = Constants::Graphics::BODY_COLOR;
+        body_vertex_array[i].color = Constants::Graphics::BODY_COLOR;
     }
 
     glEnable(GL_PROGRAM_POINT_SIZE);
@@ -55,19 +54,19 @@ Graphics::Stats Graphics::get_stats() const {
     return stats;
 }
 
-sf::RenderWindow &Graphics::get_window() {
+sf::RenderWindow& Graphics::get_window() {
     return window;
 }
 
-CommandsPanel &Graphics::get_commands_panel() {
+CommandsPanel& Graphics::get_commands_panel() {
     return commands_panel;
 }
 
-ConfigPanel &Graphics::get_config_panel() {
+ConfigPanel& Graphics::get_config_panel() {
     return config_panel;
 }
 
-StatsPanel &Graphics::get_stats_panel() {
+StatsPanel& Graphics::get_stats_panel() {
     return stats_panel;
 }
 
@@ -82,7 +81,7 @@ void Graphics::pan_if_view_grabbed() {
 // This calculation guarantees:
 // 1. There are at least N grid squares in the smallest window dimension,
 // 2. There are at most N*N grid squares in the smallest window dimension.
-// Whenever the above conditions break from either zoom or window resizing, 
+// Whenever the above conditions break from either zoom or window resizing,
 // the grid spacing will adjust accordingly.
 void Graphics::draw_grid() {
     const sf::Rect<double> rect = vp.get_rect();
@@ -96,13 +95,11 @@ void Graphics::draw_grid() {
 
     const double min_dim = std::min(rect.size.x, rect.size.y);
 
-    auto log = [](double num, double base) {
-        return std::log(num) / std::log(base);
-    };
+    auto log = [](double num, double base) { return std::log(num) / std::log(base); };
 
-    const double spacing = std::pow(Constants::Graphics::GRID_SPACING_FACTOR, 
+    const double spacing = std::pow(Constants::Graphics::GRID_SPACING_FACTOR,
             std::floor(log(min_dim, Constants::Graphics::GRID_SPACING_FACTOR)) - 1);
-    
+
     const double x2 = rect.size.x + rect.position.x;
     double x = ceil(rect.position.x / spacing) * spacing;
     while (x < x2) {
@@ -147,13 +144,11 @@ void Graphics::update_stats() {
     const auto frame_delta = frame - stats.frame;
     const auto dt = now - stats.timestamp_s;
     fps_calculator.register_value(frame_delta / dt);
-    stats = Stats {
-        .timestamp_s = now,
-        .frame = frame,
-        .fps = fps_calculator.get_mean<float>(),
-        .viewport_m = vp.get_rect().size,
-        .viewport_px = sf::Vector2<uint32_t>{vp.get_window_res()}
-    };
+    stats = Stats{.timestamp_s = now,
+            .frame = frame,
+            .fps = fps_calculator.get_mean<float>(),
+            .viewport_m = vp.get_rect().size,
+            .viewport_px = sf::Vector2<uint32_t>{vp.get_window_res()}};
 }
 
 void Graphics::resize_view(sf::Vector2f new_size) {
@@ -174,7 +169,7 @@ void Graphics::grab_view() {
     if (opt_select_grabbed_pos) {
         release_select(true);
     }
-    static const std::optional grabbed_cursor = 
+    static const std::optional grabbed_cursor =
             sf::Cursor::createFromSystem(sf::Cursor::Type::Cross);
     if (grabbed_cursor) {
         window.setMouseCursor(*grabbed_cursor);
@@ -186,8 +181,7 @@ void Graphics::grab_view() {
 }
 
 void Graphics::release_view() {
-    static const std::optional def_cursor = 
-            sf::Cursor::createFromSystem(sf::Cursor::Type::Arrow);
+    static const std::optional def_cursor = sf::Cursor::createFromSystem(sf::Cursor::Type::Arrow);
     if (def_cursor) {
         window.setMouseCursor(*def_cursor);
     }
@@ -211,10 +205,8 @@ void Graphics::release_select(bool skip_select) {
     if (!opt_select_grabbed_pos) {
         return;
     }
-    const sf::Rect<float> region{
-        sf::Vector2f(*opt_select_grabbed_pos),
-        sf::Vector2f(sf::Mouse::getPosition(window)) - sf::Vector2f(*opt_select_grabbed_pos)
-    };
+    const sf::Rect<float> region{sf::Vector2f(*opt_select_grabbed_pos),
+            sf::Vector2f(sf::Mouse::getPosition(window)) - sf::Vector2f(*opt_select_grabbed_pos)};
     selector.select(region);
     opt_select_grabbed_pos = std::nullopt;
 }
@@ -230,7 +222,7 @@ void Graphics::body_size_increase() {
 }
 
 void Graphics::body_size_decrease() {
-    // If decreasing further, unsigned wrap-around will be an issue 
+    // If decreasing further, unsigned wrap-around will be an issue
     auto new_body_diameter_pixels = body_diameter_pixels - 1;
     if (new_body_diameter_pixels < Constants::Graphics::BODY_DIAMETER_PIXELS_RANGE.first) {
         Log::warning("Reached minimum body size (pixels), cannot reduce further");
@@ -257,4 +249,4 @@ void Graphics::draw_frame() {
     window.display();
     frame++;
     stats_update_rate_limiter.try_call(std::bind(&Graphics::update_stats, this));
-}   
+}

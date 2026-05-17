@@ -4,10 +4,10 @@
 
 #include "Logger/Logger.hpp"
 
-Bodies::Bodies(std::vector<std::string> &&id, std::vector<double> &&mass, 
-        std::vector<sf::Vector2<double>> &&pos, std::vector<sf::Vector2<double>> &&vel) : 
-                n(id.size()), id_(std::move(id)), mass_(std::move(mass)), 
-                pos_(std::move(pos)), vel_(std::move(vel)) {
+Bodies::Bodies(std::vector<std::string>&& id, std::vector<double>&& mass,
+        std::vector<sf::Vector2<double>>&& pos, std::vector<sf::Vector2<double>>&& vel)
+        : n(id.size()), id_(std::move(id)), mass_(std::move(mass)), pos_(std::move(pos)),
+          vel_(std::move(vel)) {
     assert(id_.size() == n);
     assert(mass_.size() == n);
     assert(pos_.size() == n);
@@ -31,67 +31,67 @@ bool Bodies::validate() const {
     return ok;
 }
 
-std::string &Bodies::id(uint64_t index) {
+std::string& Bodies::id(uint64_t index) {
     assert(index <= n);
     return id_[index];
 }
 
-const std::string &Bodies::id(uint64_t index) const {
+const std::string& Bodies::id(uint64_t index) const {
     assert(index <= n);
     return id_[index];
 }
 
-double &Bodies::mass(uint64_t index) {
+double& Bodies::mass(uint64_t index) {
     assert(index <= n);
     return mass_[index];
 }
 
-const double &Bodies::mass(uint64_t index) const {
+const double& Bodies::mass(uint64_t index) const {
     assert(index <= n);
     return mass_[index];
 }
 
-sf::Vector2<double> &Bodies::pos(uint64_t index) {
+sf::Vector2<double>& Bodies::pos(uint64_t index) {
     assert(index <= n);
     return pos_[index];
 }
 
-const sf::Vector2<double> &Bodies::pos(uint64_t index) const {
+const sf::Vector2<double>& Bodies::pos(uint64_t index) const {
     assert(index <= n);
     return pos_[index];
 }
 
-sf::Vector2<double> &Bodies::vel(uint64_t index) {
+sf::Vector2<double>& Bodies::vel(uint64_t index) {
     assert(index <= n);
     return vel_[index];
 }
 
-const sf::Vector2<double> &Bodies::vel(uint64_t index) const {
+const sf::Vector2<double>& Bodies::vel(uint64_t index) const {
     assert(index <= n);
     return vel_[index];
 }
 
-double *Bodies::mass_data() {
+double* Bodies::mass_data() {
     return mass_.data();
 }
 
-const double *Bodies::mass_data() const {
+const double* Bodies::mass_data() const {
     return mass_.data();
 }
 
-sf::Vector2<double> *Bodies::pos_data() {
+sf::Vector2<double>* Bodies::pos_data() {
     return pos_.data();
 }
 
-const sf::Vector2<double> *Bodies::pos_data() const {
+const sf::Vector2<double>* Bodies::pos_data() const {
     return pos_.data();
 }
 
-sf::Vector2<double> *Bodies::vel_data() {
+sf::Vector2<double>* Bodies::vel_data() {
     return vel_.data();
 }
 
-const sf::Vector2<double> *Bodies::vel_data() const {
+const sf::Vector2<double>* Bodies::vel_data() const {
     return vel_.data();
 }
 

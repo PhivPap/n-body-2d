@@ -2,9 +2,10 @@
 
 #include <chrono>
 #include <cmath>
-#include <string>
 #include <fmt/core.h>
 #include <fmt/format.h>
+#include <string>
+
 
 class StopWatch {
 public:
@@ -28,6 +29,7 @@ public:
 
 private:
     using SecondsF64 = std::chrono::duration<double>;
+
     State state;
     std::chrono::time_point<std::chrono::high_resolution_clock> last_start;
     SecondsF64 previously_elapsed{0};
@@ -39,32 +41,30 @@ private:
     }
     template <typename TargetDuration, uint8_t DECIMALS, typename Duration>
     static double cast_to_f64(Duration duration) {
-        using TargetDurationF64 = 
-            std::chrono::duration<double, typename TargetDuration::period>;
+        using TargetDurationF64 = std::chrono::duration<double, typename TargetDuration::period>;
         return round<DECIMALS>(std::chrono::duration_cast<TargetDurationF64>(duration).count());
     }
     template <typename TargetDuration, typename Duration>
     static int64_t cast_to_i64(Duration duration) {
-        using TargetDurationI64 = 
-            std::chrono::duration<int64_t, typename TargetDuration::period>;
+        using TargetDurationI64 = std::chrono::duration<int64_t, typename TargetDuration::period>;
         return std::chrono::duration_cast<TargetDurationI64>(duration).count();
     }
 };
 
 template <typename TargetDuration, uint8_t DECIMALS>
 double StopWatch::elapsed() const {
-    using TargetDurationF64 = 
-            std::chrono::duration<double, typename TargetDuration::period>;
+    using TargetDurationF64 = std::chrono::duration<double, typename TargetDuration::period>;
     const auto full_duration = duration<TargetDurationF64>();
     return cast_to_f64<TargetDurationF64, DECIMALS>(full_duration);
 }
 
 template <typename TargetDuration>
 TargetDuration StopWatch::duration() const {
-    return state == State::RUNNING ?
-            std::chrono::duration_cast<TargetDuration>(previously_elapsed +
-                    (std::chrono::high_resolution_clock::now() - last_start)) :
-            std::chrono::duration_cast<TargetDuration>(previously_elapsed);
+    return state == State::RUNNING
+                   ? std::chrono::duration_cast<TargetDuration>(
+                             previously_elapsed
+                             + (std::chrono::high_resolution_clock::now() - last_start))
+                   : std::chrono::duration_cast<TargetDuration>(previously_elapsed);
 }
 
 template <>

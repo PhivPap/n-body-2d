@@ -1,8 +1,8 @@
 #pragma once
 
-#include "SFML/System.hpp"
-#include "SFML/Graphics.hpp"
 #include "AssetManager/AssetManager.hpp"
+#include "SFML/Graphics.hpp"
+#include "SFML/System.hpp"
 
 class IPanel : public sf::Drawable, public sf::Transformable {
 public:
@@ -10,6 +10,7 @@ public:
     virtual sf::Vector2f get_size() const = 0;
     virtual bool is_visible() const = 0;
     virtual void set_visible(bool visible) = 0;
+
 protected:
     virtual void draw(sf::RenderTarget& target, sf::RenderStates states) const = 0;
 };
@@ -26,7 +27,8 @@ public:
         WriteHandle& operator=(const WriteHandle&) = delete;
         WriteHandle(WriteHandle&& wh) noexcept;
         WriteHandle& operator=(WriteHandle&& wh) noexcept;
-        DisplayedData *operator->();
+        DisplayedData* operator->();
+
     private:
         PanelBase* panel;
     };
@@ -38,33 +40,37 @@ public:
     void set_visible(bool visible);
     bool is_visible() const;
     sf::Vector2f get_size() const;
+
 protected:
     sf::Text text;
     sf::RenderTexture texture;
     DisplayedData displayed_data;
+
 private:
+    sf::Sprite sprite;
+    bool visible;
+
     void clear();
     void bake();
     void draw(sf::RenderTarget& target, sf::RenderStates states) const override;
-
-    sf::Sprite sprite;
-    bool visible;
 };
 
 template <typename Derived, typename DisplayedData>
 PanelBase<Derived, DisplayedData>::WriteHandle::WriteHandle(PanelBase* panel) : panel(panel) {}
 
 template <typename Derived, typename DisplayedData>
-PanelBase<Derived, DisplayedData>::WriteHandle::~WriteHandle() { panel->bake(); }
+PanelBase<Derived, DisplayedData>::WriteHandle::~WriteHandle() {
+    panel->bake();
+}
 
 template <typename Derived, typename DisplayedData>
-PanelBase<Derived, DisplayedData>::WriteHandle::WriteHandle(WriteHandle&& wh) noexcept : 
-        panel(wh.panel) {
-    wh.panel = nullptr; 
-}    
+PanelBase<Derived, DisplayedData>::WriteHandle::WriteHandle(WriteHandle&& wh) noexcept
+        : panel(wh.panel) {
+    wh.panel = nullptr;
+}
 
-template <typename Derived, typename DisplayedData> 
-PanelBase<Derived, DisplayedData>::WriteHandle& 
+template <typename Derived, typename DisplayedData>
+PanelBase<Derived, DisplayedData>::WriteHandle&
 PanelBase<Derived, DisplayedData>::WriteHandle::operator=(WriteHandle&& wh) noexcept {
     if (this != &wh) {
         panel = wh.panel;
@@ -73,15 +79,15 @@ PanelBase<Derived, DisplayedData>::WriteHandle::operator=(WriteHandle&& wh) noex
     return *this;
 }
 
-template <typename Derived, typename DisplayedData> 
-DisplayedData *PanelBase<Derived, DisplayedData>::WriteHandle::operator->() { 
-    return &(panel->displayed_data); 
+template <typename Derived, typename DisplayedData>
+DisplayedData* PanelBase<Derived, DisplayedData>::WriteHandle::operator->() {
+    return &(panel->displayed_data);
 }
 
 template <typename Derived, typename DisplayedData>
-PanelBase<Derived, DisplayedData>::PanelBase(sf::Vector2u size) : texture(size), 
-        sprite(texture.getTexture()), 
-        text(AssetManager::instance().get<sf::Font>("fonts/UbuntuMono-R.ttf")), visible(true) {
+PanelBase<Derived, DisplayedData>::PanelBase(sf::Vector2u size)
+        : texture(size), sprite(texture.getTexture()),
+          text(AssetManager::instance().get<sf::Font>("fonts/UbuntuMono-R.ttf")), visible(true) {
     text.setPosition({5.0f, 10.0f});
     text.setCharacterSize(16);
     text.setLineSpacing(1.4f);
@@ -92,7 +98,8 @@ PanelBase<Derived, DisplayedData>::PanelBase(sf::Vector2u size) : texture(size),
 }
 
 template <typename Derived, typename DisplayedData>
-typename PanelBase<Derived, DisplayedData>::WriteHandle PanelBase<Derived, DisplayedData>::write_handle() {
+typename PanelBase<Derived, DisplayedData>::WriteHandle
+PanelBase<Derived, DisplayedData>::write_handle() {
     return WriteHandle(this);
 }
 
@@ -127,8 +134,8 @@ void PanelBase<Derived, DisplayedData>::bake() {
 }
 
 template <typename Derived, typename DisplayedData>
-void PanelBase<Derived, DisplayedData>::draw(sf::RenderTarget& target, sf::RenderStates states) 
-        const {
+void PanelBase<Derived, DisplayedData>::draw(sf::RenderTarget& target,
+        sf::RenderStates states) const {
     if (!visible) {
         return;
     }
