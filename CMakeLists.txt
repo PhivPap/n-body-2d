@@ -45,6 +45,7 @@ add_subdirectory(${LIB_DIR}/StopWatch)
 add_subdirectory(${LIB_DIR}/Constants)
 add_subdirectory(${LIB_DIR}/BufferedMeanCalculator)
 add_subdirectory(${LIB_DIR}/AssetManager)
+add_subdirectory(${LIB_DIR}/RLCaller)
 
 add_subdirectory(${SRC_DIR}/Simulation)
 add_subdirectory(${SRC_DIR}/Graphics)
@@ -61,35 +62,15 @@ add_subdirectory(${THIRD_PARTY_DIR}/argparse)
 add_executable(${PROJECT_NAME} ${SRC_DIR}/main.cpp)
 
 # Link libraries & Set include paths
-target_include_directories(${PROJECT_NAME} PRIVATE ${SRC_DIR}/Simulation/include)
-target_link_libraries(${PROJECT_NAME} PRIVATE simulation)
-
-target_include_directories(${PROJECT_NAME} PRIVATE ${SRC_DIR}/Graphics/include)
-target_link_libraries(${PROJECT_NAME} PRIVATE graphics)
-
-target_include_directories(${PROJECT_NAME} PRIVATE ${SRC_DIR}/Controller/include)
-target_link_libraries(${PROJECT_NAME} PRIVATE controller)
-
-target_include_directories(${PROJECT_NAME} PRIVATE ${LIB_DIR}/Logger/include)
-target_link_libraries(${PROJECT_NAME} PRIVATE logger)
-
-target_include_directories(${PROJECT_NAME} PRIVATE ${LIB_DIR}/InputOutput/include)
+target_link_libraries(${PROJECT_NAME} PRIVATE lib-simulation)
+target_link_libraries(${PROJECT_NAME} PRIVATE lib-graphics)
+target_link_libraries(${PROJECT_NAME} PRIVATE lib-controller)
+target_link_libraries(${PROJECT_NAME} PRIVATE lib-logger)
 target_link_libraries(${PROJECT_NAME} PRIVATE lib-input-output)
-
-target_include_directories(${PROJECT_NAME} PRIVATE ${LIB_DIR}/Config/include)
 target_link_libraries(${PROJECT_NAME} PRIVATE lib-config)
-
-target_include_directories(${PROJECT_NAME} PRIVATE ${LIB_DIR}/Body/include)
-target_link_libraries(${PROJECT_NAME} PRIVATE body)
-
-target_include_directories(${PROJECT_NAME} PRIVATE ${LIB_DIR}/CLArgs/include)
+target_link_libraries(${PROJECT_NAME} PRIVATE lib-body)
 target_link_libraries(${PROJECT_NAME} PRIVATE lib-clargs)
-
-target_include_directories(${PROJECT_NAME} PRIVATE ${LIB_DIR}/StopWatch/include)
 target_link_libraries(${PROJECT_NAME} PRIVATE lib-stopwatch)
-
-target_include_directories(${PROJECT_NAME} PRIVATE ${LIB_DIR}/Constants/include)
-target_link_libraries(${PROJECT_NAME} PRIVATE constants)
 
 # Copy assets to build directory after build
 add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
