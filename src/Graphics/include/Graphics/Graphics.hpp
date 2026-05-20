@@ -57,9 +57,9 @@ private:
     std::optional<sf::Vector2i> opt_select_grabbed_pos{};
     sf::Shader body_shader{};
     PanelManager panel_manager{};
-    ConfigPanel config_panel{Constants::Graphics::CONFIG_PANEL_RES};
-    StatsPanel stats_panel{Constants::Graphics::STATS_PANEL_RES};
-    CommandsPanel commands_panel{Constants::Graphics::COMMANDS_PANEL_RES};
+    ConfigPanel config_panel{Constants::Graphics::CONFIG_PANEL_WIDTH};
+    StatsPanel stats_panel{Constants::Graphics::STATS_PANEL_WIDTH};
+    CommandsPanel commands_panel{Constants::Graphics::COMMANDS_PANEL_WIDTH};
     BufferedMeanCalculator<float, 60> fps_calculator{};
     Stats stats{};
     RLCaller stats_update_rate_limiter{Constants::Graphics::STATS_UPDATE_TIMER};
@@ -69,5 +69,6 @@ private:
     void draw_grid();
     void draw_bodies();
     void draw_selector();
+    void draw_selection_CoM();
     void update_stats();
 };

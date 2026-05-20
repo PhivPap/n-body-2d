@@ -29,6 +29,10 @@ void Selector::clear() {
     selected_body_indices.clear();
 }
 
+bool Selector::has_selection() const {
+    return !selected_body_indices.empty();
+}
+
 Selector::SelectionStats Selector::compute_stats() const {
     double total_mass = 0.0;
     sf::Vector2<double> center_of_mass{0.0, 0.0};

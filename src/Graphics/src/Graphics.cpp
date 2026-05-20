@@ -139,6 +139,28 @@ void Graphics::draw_selector() {
     }
 }
 
+void Graphics::draw_selection_CoM() {
+    if (selector.has_selection()) {
+        const auto selection_stats = selector.compute_stats();
+        const sf::Vector2f CoM_pos = vp.coords_to_pos_on_viewport(selection_stats.center_of_mass);
+        sf::CircleShape CoM_marker(2.f);
+        CoM_marker.setOrigin({2.f, 2.f});
+        CoM_marker.setPosition(CoM_pos);
+        CoM_marker.setFillColor(sf::Color(0, 255, 0, 255));
+        window.draw(CoM_marker);
+
+        auto write_handle = stats_panel.write_handle();
+        write_handle->opt_selection = StatsDisplayedData::Selection{
+                .num_selected = selection_stats.n,
+                .total_mass = selection_stats.total_mass,
+                .center_of_mass = selection_stats.center_of_mass,
+                .weighted_velocity = selection_stats.weighted_velocity};
+    }
+    else {
+        stats_panel.write_handle()->opt_selection = std::nullopt;
+    }
+}
+
 void Graphics::update_stats() {
     const auto now = sw.elapsed<std::chrono::seconds, 6>();
     const auto frame_delta = frame - stats.frame;
@@ -245,6 +267,7 @@ void Graphics::draw_frame() {
     }
     draw_bodies();
     draw_selector();
+    draw_selection_CoM();
     window.draw(panel_manager);
     window.display();
     frame++;

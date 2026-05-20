@@ -4,9 +4,9 @@
 #include "Logger/Time.hpp"
 
 
-ConfigPanel::ConfigPanel(sf::Vector2u size) : Base(size) {}
+ConfigPanel::ConfigPanel(uint32_t width) : Base(width) {}
 
-void ConfigPanel::bake_impl() {
+void ConfigPanel::set_panel_text() {
     const auto &d = displayed_data;
     const auto txt = fmt::format(
         "Configuration:\n"
@@ -19,7 +19,11 @@ void ConfigPanel::bake_impl() {
         " Window[W x H]: {}px x {}px\n"
         " Vsync:         {}\n"
         " Grid:          {}\n"
-        " Max FPS:       {}",
+        " Max FPS:       {}\n"
+        " Sel. Show:     {}\n"
+        " Sel. Show CoM: {}\n"
+        " Sel. Follow:   {}\n"
+        " Sel. Center:   {}\n",
         Log::Time::from(d.timestep_s),
         d.algorithm,
         displayed_data.show_theta ? fmt::format(" Theta:         {}\n", d.theta) : "",
@@ -31,8 +35,11 @@ void ConfigPanel::bake_impl() {
         d.viewport_px.y,
         d.vsync ? "ON" : "OFF",
         d.grid  ? "ON" : "OFF",
-        d.max_fps
+        d.max_fps,
+        d.selection_show ? "ON" : "OFF",
+        d.selection_show_center_of_mass ? "ON" : "OFF",
+        d.selection_follow_center_of_mass ? "ON" : "OFF",
+        d.selection_center_on_center_of_mass ? "ON" : "OFF"
     );
     text.setString(txt);
-    texture.draw(text);
 }

@@ -3,6 +3,7 @@
 #include "AssetManager/AssetManager.hpp"
 #include "SFML/Graphics.hpp"
 #include "SFML/System.hpp"
+#include "Logger/Logger.hpp"
 
 class IPanel : public sf::Drawable, public sf::Transformable {
 public:
@@ -35,7 +36,7 @@ public:
 
     friend class WriteHandle;
 
-    PanelBase(sf::Vector2u size);
+    PanelBase(uint32_t width);
     WriteHandle write_handle();
     void set_visible(bool visible);
     bool is_visible() const;
@@ -47,12 +48,15 @@ protected:
     DisplayedData displayed_data;
 
 private:
+    constexpr static uint32_t VERTICAL_PADDING_PX = 6;
+
     sf::Sprite sprite;
     bool visible;
 
     void clear();
     void bake();
     void draw(sf::RenderTarget& target, sf::RenderStates states) const override;
+    void auto_height();
 };
 
 template <typename Derived, typename DisplayedData>
@@ -85,16 +89,16 @@ DisplayedData* PanelBase<Derived, DisplayedData>::WriteHandle::operator->() {
 }
 
 template <typename Derived, typename DisplayedData>
-PanelBase<Derived, DisplayedData>::PanelBase(sf::Vector2u size)
-        : texture(size), sprite(texture.getTexture()),
+PanelBase<Derived, DisplayedData>::PanelBase(uint32_t width)
+        : texture({width, 1}), sprite(texture.getTexture()),
           text(AssetManager::instance().get<sf::Font>("fonts/UbuntuMono-R.ttf")), visible(true) {
-    text.setPosition({5.0f, 10.0f});
+    text.setPosition({5.0f, 3.0f});
     text.setCharacterSize(16);
     text.setLineSpacing(1.4f);
     texture.setSmooth(false);
     sprite.setScale({1.0f, -1.0f});
-    sprite.setPosition({0.0f, static_cast<float>(size.y)});
-    clear();
+    sprite.setPosition({0.0f, 1.0f});
+    bake();
 }
 
 template <typename Derived, typename DisplayedData>
@@ -129,8 +133,10 @@ void PanelBase<Derived, DisplayedData>::clear() {
 
 template <typename Derived, typename DisplayedData>
 void PanelBase<Derived, DisplayedData>::bake() {
+    static_cast<Derived*>(this)->set_panel_text();
+    auto_height();
     clear();
-    static_cast<Derived*>(this)->bake_impl();
+    texture.draw(text);
 }
 
 template <typename Derived, typename DisplayedData>
@@ -141,4 +147,19 @@ void PanelBase<Derived, DisplayedData>::draw(sf::RenderTarget& target,
     }
     states.transform.combine(getTransform());
     target.draw(sprite, states);
+}
+
+template <typename Derived, typename DisplayedData>
+void PanelBase<Derived, DisplayedData>::auto_height() {
+    const auto text_height = static_cast<uint32_t>(text.getLocalBounds().size.y);
+    const sf::Vector2u new_texture_size{texture.getSize().x, text_height + VERTICAL_PADDING_PX};
+    if (new_texture_size.y != texture.getSize().y) {
+        if (!texture.resize(new_texture_size)) {
+            Log::warning("Failed resizing panel texture to ({}, {})", new_texture_size.x, 
+                    new_texture_size.y);
+            return;
+        }
+        sprite.setTexture(texture.getTexture(), true);
+        sprite.setPosition({0.0f, static_cast<float>(new_texture_size.y)});
+    }
 }

@@ -1,11 +1,9 @@
 #include "Panel/CommandsPanel.hpp"
 
 
-CommandsPanel::CommandsPanel(sf::Vector2u size) : Base(size) {
-    bake_impl();
-}
+CommandsPanel::CommandsPanel(uint32_t width) : Base(width) {}
 
-void CommandsPanel::bake_impl() {
+void CommandsPanel::set_panel_text() {
     const auto& d = displayed_data;
     const auto txt = R"(Commands:
  Space:          Pause/Run
@@ -15,7 +13,7 @@ void CommandsPanel::bake_impl() {
  Up/Down:        Increase/Decrease body size
  Scroll:         Zoom view
  LClick & Drag:  Pan view
- RClick & Drag:  Select bodies)";
+ RClick & Drag:  Select bodies
+)";
     text.setString(txt);
-    texture.draw(text);
 }

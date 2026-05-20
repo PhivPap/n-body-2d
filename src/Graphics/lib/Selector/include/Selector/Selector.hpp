@@ -19,6 +19,7 @@ public:
     Selector(const Bodies& bodies, sf::VertexArray& body_vertex_array);
     void select(const sf::Rect<float>& region);
     void clear();
+    bool has_selection() const;
     SelectionStats compute_stats() const;
 
 private:

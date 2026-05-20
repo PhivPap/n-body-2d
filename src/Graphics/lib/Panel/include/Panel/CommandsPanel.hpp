@@ -6,6 +6,6 @@
 class CommandsPanel : public PanelBase<CommandsPanel, std::monostate> {
 public:
     using Base = PanelBase<CommandsPanel, std::monostate>;
-    CommandsPanel(sf::Vector2u size);
-    void bake_impl();
+    CommandsPanel(uint32_t width);
+    void set_panel_text();
 };

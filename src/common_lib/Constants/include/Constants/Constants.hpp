@@ -44,9 +44,9 @@ constexpr sf::Color GRID_COLOR(255, 255, 255, 64);
 constexpr sf::Color SELECT_COLOR(255, 0, 0, 200);
 constexpr uint8_t FPS_CALC_BUFFER_LEN = 60;
 constexpr Range<float> PANEL_UPDATE_HZ_RANGE = {0.1, 30};
-constexpr sf::Vector2u CONFIG_PANEL_RES = {340, 240};
-constexpr sf::Vector2u STATS_PANEL_RES = {340, 200};
-constexpr sf::Vector2u COMMANDS_PANEL_RES = {370, 220};
+constexpr uint16_t CONFIG_PANEL_WIDTH = 340;
+constexpr uint16_t STATS_PANEL_WIDTH = 340;
+constexpr uint16_t COMMANDS_PANEL_WIDTH = 370;
 constexpr auto STATS_UPDATE_TIMER = std::chrono::microseconds(50);
 
 static_assert(ZOOM_FACTOR > 1.0);
