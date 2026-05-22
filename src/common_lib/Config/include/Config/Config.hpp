@@ -45,6 +45,9 @@ public:
         bool show_commands_panel;
         bool show_config_panel;
         bool show_stats_panel;
+        bool selection_show;
+        bool selection_show_center_of_mass;
+        bool follow_selected;
 
         bool validate() const;
         std::string to_string() const;

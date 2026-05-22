@@ -28,11 +28,14 @@ void main() {
 )glsl";
 
 Graphics::Graphics(const Config::Graphics& graphics_cfg, const Bodies& bodies)
-        : bodies(bodies),
+        : bodies(bodies), body_positions_cache(bodies.n),
           window(sf::VideoMode(sf::Vector2u(graphics_cfg.resolution)), "N-Body Sim"),
           vp(sf::Vector2f(graphics_cfg.resolution), graphics_cfg.pixel_scale),
           body_vertex_array(sf::PrimitiveType::Points, bodies.n),
-          selector(bodies, body_vertex_array), show_grid(graphics_cfg.show_grid) {
+          selector(bodies, body_positions_cache, body_vertex_array),
+          show_grid(graphics_cfg.show_grid), follow_selected(graphics_cfg.follow_selected),
+          selection_show(graphics_cfg.selection_show),
+          selection_show_center_of_mass(graphics_cfg.selection_show_center_of_mass) {
     window.setFramerateLimit(graphics_cfg.fps);
     window.setVerticalSyncEnabled(graphics_cfg.vsync_enabled);
 
@@ -122,12 +125,33 @@ void Graphics::draw_grid() {
 void Graphics::draw_bodies() {
     const uint64_t vertex_count = body_vertex_array.getVertexCount();
     for (uint64_t i = 0; i < bodies.n; i++) {
-        body_vertex_array[i].position = vp.coords_to_pos_on_viewport(bodies.pos(i));
+        body_vertex_array[i].position = vp.coords_to_pos_on_viewport(body_positions_cache[i]);
     }
     window.draw(body_vertex_array, sf::RenderStates(&body_shader));
 }
 
-void Graphics::draw_selector() {
+void Graphics::update_selection_tracking() {
+    if (!selector.has_selection()) {
+        stats_panel.write_handle()->opt_selection = std::nullopt;
+        cached_selection_stats = std::nullopt;
+        return;
+    }
+
+    const auto new_selection_stats = selector.compute_stats();
+
+    if (follow_selected && cached_selection_stats) {
+        vp.pan_coords(new_selection_stats.center_of_mass - cached_selection_stats->center_of_mass);
+    }
+
+    stats_panel.write_handle()->opt_selection = StatsDisplayedData::Selection{
+            .num_selected = new_selection_stats.n,
+            .total_mass = new_selection_stats.total_mass,
+            .center_of_mass = new_selection_stats.center_of_mass,
+            .weighted_velocity = new_selection_stats.weighted_velocity};
+    cached_selection_stats = new_selection_stats;
+}
+
+void Graphics::draw_selection_overlay() {
     if (opt_select_grabbed_pos) {
         const sf::Vector2i new_cursor_pos = sf::Mouse::getPosition(window);
         sf::RectangleShape selector(sf::Vector2f(new_cursor_pos - *opt_select_grabbed_pos));
@@ -137,27 +161,16 @@ void Graphics::draw_selector() {
         selector.setOutlineThickness(2.f);
         window.draw(selector);
     }
-}
 
-void Graphics::draw_selection_CoM() {
-    if (selector.has_selection()) {
-        const auto selection_stats = selector.compute_stats();
-        const sf::Vector2f CoM_pos = vp.coords_to_pos_on_viewport(selection_stats.center_of_mass);
-        sf::CircleShape CoM_marker(2.f);
-        CoM_marker.setOrigin({2.f, 2.f});
+    if (cached_selection_stats && selection_show_center_of_mass) {
+        const sf::Vector2f CoM_pos =
+                vp.coords_to_pos_on_viewport(cached_selection_stats->center_of_mass);
+        const float marker_radius = body_diameter_pixels / 2.0f + 2.0f;
+        sf::CircleShape CoM_marker(marker_radius);
+        CoM_marker.setOrigin({marker_radius, marker_radius});
         CoM_marker.setPosition(CoM_pos);
         CoM_marker.setFillColor(sf::Color(0, 255, 0, 255));
         window.draw(CoM_marker);
-
-        auto write_handle = stats_panel.write_handle();
-        write_handle->opt_selection = StatsDisplayedData::Selection{
-                .num_selected = selection_stats.n,
-                .total_mass = selection_stats.total_mass,
-                .center_of_mass = selection_stats.center_of_mass,
-                .weighted_velocity = selection_stats.weighted_velocity};
-    }
-    else {
-        stats_panel.write_handle()->opt_selection = std::nullopt;
     }
 }
 
@@ -231,6 +244,7 @@ void Graphics::release_select(bool skip_select) {
             sf::Vector2f(sf::Mouse::getPosition(window)) - sf::Vector2f(*opt_select_grabbed_pos)};
     selector.select(region);
     opt_select_grabbed_pos = std::nullopt;
+    cached_selection_stats = std::nullopt;
 }
 
 void Graphics::body_size_increase() {
@@ -259,15 +273,36 @@ void Graphics::set_grid(bool enabled) {
     config_panel.write_handle()->grid = enabled;
 }
 
+void Graphics::set_selection_show(bool enabled) {
+    // selector.set_show(enabled);
+    config_panel.write_handle()->selection_show = enabled;
+}
+
+void Graphics::set_selection_show_center_of_mass(bool enabled) {
+    selection_show_center_of_mass = enabled;
+    config_panel.write_handle()->selection_show_center_of_mass = enabled;
+}
+
+void Graphics::set_follow_selected(bool enabled) {
+    follow_selected = enabled;
+    config_panel.write_handle()->selection_follow_center_of_mass = enabled;
+}
+
+void Graphics::center_on_selection_center_of_mass() {
+    // selector.center_on_selection_center_of_mass();
+}
+
 void Graphics::draw_frame() {
     window.clear(Constants::Graphics::BG_COLOR);
     pan_if_view_grabbed();
+    std::memcpy(body_positions_cache.data(), bodies.pos_data(),
+            bodies.n * sizeof(sf::Vector2<double>));
+    update_selection_tracking();
     if (show_grid) {
         draw_grid();
     }
     draw_bodies();
-    draw_selector();
-    draw_selection_CoM();
+    draw_selection_overlay();
     window.draw(panel_manager);
     window.display();
     frame++;

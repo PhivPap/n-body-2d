@@ -19,7 +19,6 @@ struct ConfigDisplayedData {
     bool selection_show;
     bool selection_show_center_of_mass;
     bool selection_follow_center_of_mass;
-    bool selection_center_on_center_of_mass;
 };
 
 class ConfigPanel : public PanelBase<ConfigPanel, ConfigDisplayedData> {

@@ -56,6 +56,21 @@ void Controller::handle_events(sf::RenderWindow& window) {
                 cfg.graphics.show_grid = !cfg.graphics.show_grid;
                 graphics.set_grid(cfg.graphics.show_grid);
                 break;
+            case sf::Keyboard::Scan::S:
+                cfg.graphics.selection_show = !cfg.graphics.selection_show;
+                graphics.set_selection_show(cfg.graphics.selection_show);
+                break;
+            case sf::Keyboard::Scan::D:
+                cfg.graphics.selection_show_center_of_mass = !cfg.graphics.selection_show_center_of_mass;
+                graphics.set_selection_show_center_of_mass(cfg.graphics.selection_show_center_of_mass);
+                break;
+            case sf::Keyboard::Scan::F:
+                cfg.graphics.follow_selected = !cfg.graphics.follow_selected;
+                graphics.set_follow_selected(cfg.graphics.follow_selected);
+                break;
+            case sf::Keyboard::Scan::C:
+                graphics.center_on_selection_center_of_mass();
+                break;
             case sf::Keyboard::Scan::Left:
                 timestep_decrease();
                 break;

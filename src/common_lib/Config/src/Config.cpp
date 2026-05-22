@@ -35,6 +35,7 @@ Config::Config(const fs::path& path) {
                 .threads = j_sim.at("threads")};
 
         const auto j_graphics = json_cfg.at("Graphics");
+        const auto j_selection = j_graphics.at("selection");
         graphics = Graphics{.enabled = j_graphics.at("enabled"),
                 .resolution = {j_graphics.at("resolution").at(0),
                         j_graphics.at("resolution").at(1)},
@@ -45,7 +46,10 @@ Config::Config(const fs::path& path) {
                 .panel_update_hz = j_graphics.at("panel_update_hz"),
                 .show_commands_panel = j_graphics.at("show_commands_panel"),
                 .show_config_panel = j_graphics.at("show_config_panel"),
-                .show_stats_panel = j_graphics.at("show_stats_panel")};
+                .show_stats_panel = j_graphics.at("show_stats_panel"),
+                .selection_show = j_selection.at("show"),
+                .selection_show_center_of_mass = j_selection.at("show_center_of_mass"),
+                .follow_selected = j_selection.at("follow")};
     }
     catch (const std::exception& e) {
         Log::error("{}", e.what());
@@ -264,10 +268,13 @@ std::string Config::Graphics::to_string() const {
     show_commands_panel: {}
     show_config_panel:   {}
     show_stats_panel:    {}
-    panel_update_hz      {})";
+    panel_update_hz      {}
+    selection_show:      {}
+    selection_show_CoM:  {}
+    follow_selected:     {})";
     return fmt::format(fmt_str, enabled, resolution.x, resolution.y, vsync_enabled, fps,
             pixel_scale, show_grid, show_commands_panel, show_config_panel, show_stats_panel,
-            panel_update_hz);
+            panel_update_hz, selection_show, selection_show_center_of_mass, follow_selected);
 }
 
 bool Config::Graphics::validate() const {

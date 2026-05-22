@@ -1,5 +1,6 @@
 #pragma once
 
+#include <optional>
 #include <vector>
 
 #include "Body/Body.hpp"
@@ -42,10 +43,15 @@ public:
     void body_size_increase();
     void body_size_decrease();
     void set_grid(bool enabled);
+    void set_selection_show(bool enabled);
+    void set_selection_show_center_of_mass(bool enabled);
+    void set_follow_selected(bool enabled);
+    void center_on_selection_center_of_mass();
     void draw_frame();
 
 private:
     const Bodies& bodies;
+    std::vector<sf::Vector2<double>> body_positions_cache;
     StopWatch sw;
     sf::VertexArray body_vertex_array;
     sf::RenderWindow window;
@@ -53,6 +59,10 @@ private:
     Selector selector;
     uint64_t frame = 0;
     bool show_grid;
+    bool follow_selected;
+    bool selection_show;
+    bool selection_show_center_of_mass;
+    std::optional<Selector::SelectionStats> cached_selection_stats{};
     std::optional<sf::Vector2i> opt_view_grabbed_pos{};
     std::optional<sf::Vector2i> opt_select_grabbed_pos{};
     sf::Shader body_shader{};
@@ -68,7 +78,7 @@ private:
     void pan_if_view_grabbed();
     void draw_grid();
     void draw_bodies();
-    void draw_selector();
-    void draw_selection_CoM();
+    void update_selection_tracking();
+    void draw_selection_overlay();
     void update_stats();
 };

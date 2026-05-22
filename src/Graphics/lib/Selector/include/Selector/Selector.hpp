@@ -16,7 +16,8 @@ public:
     };
 
     Selector() = delete;
-    Selector(const Bodies& bodies, sf::VertexArray& body_vertex_array);
+    Selector(const Bodies& bodies, const std::vector<sf::Vector2<double>>& body_positions_cache, 
+            sf::VertexArray& body_vertex_array);
     void select(const sf::Rect<float>& region);
     void clear();
     bool has_selection() const;
@@ -24,6 +25,7 @@ public:
 
 private:
     const Bodies& bodies;
+    const std::vector<sf::Vector2<double>>& body_positions_cache;
     sf::VertexArray& body_vertex_array;
     std::vector<uint32_t> selected_body_indices;
 };

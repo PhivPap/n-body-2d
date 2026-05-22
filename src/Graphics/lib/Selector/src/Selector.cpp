@@ -3,8 +3,11 @@
 #include "Constants/Constants.hpp"
 
 
-Selector::Selector(const Bodies& bodies, sf::VertexArray& body_vertex_array)
-        : bodies(bodies), body_vertex_array(body_vertex_array) {
+Selector::Selector(const Bodies& bodies, 
+        const std::vector<sf::Vector2<double>>& body_positions_cache, 
+        sf::VertexArray& body_vertex_array)
+        : bodies(bodies), body_positions_cache(body_positions_cache), 
+        body_vertex_array(body_vertex_array) {
     assert(body_vertex_array.getVertexCount() == bodies.n);
     selected_body_indices.reserve(bodies.n);
 }
@@ -41,7 +44,7 @@ Selector::SelectionStats Selector::compute_stats() const {
     for (const uint32_t index : selected_body_indices) {
         const double mass = bodies.mass(index);
         total_mass += mass;
-        center_of_mass += mass * bodies.pos(index);
+        center_of_mass += mass * body_positions_cache[index];
         weighted_velocity += mass * bodies.vel(index);
     }
 
