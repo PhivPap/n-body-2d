@@ -289,7 +289,9 @@ void Graphics::set_follow_selected(bool enabled) {
 }
 
 void Graphics::center_on_selection_center_of_mass() {
-    // selector.center_on_selection_center_of_mass();
+    if (cached_selection_stats) {
+        vp.center_on_coords(cached_selection_stats->center_of_mass);
+    }
 }
 
 void Graphics::draw_frame() {

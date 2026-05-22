@@ -16,6 +16,7 @@ public:
     void resize(sf::Vector2f new_res);
     void pan(sf::Vector2f pan_pixels);
     void pan_coords(sf::Vector2<double> pan_coords);
+    void center_on_coords(sf::Vector2<double> coords);
     sf::Vector2f coords_to_pos_on_viewport(const sf::Vector2<double>& coords) const;
     sf::Vector2<double> pos_on_viewport_to_coords(const sf::Vector2f& pos) const;
     sf::Vector2f get_window_res() const;
