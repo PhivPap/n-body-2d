@@ -397,7 +397,8 @@ __global__ void compute_force(
     const double body_y = pos[i].y;
     double acc_x = 0.0, acc_y = 0.0;
 
-    int32_t stack[32];
+    constexpr int32_t STACK_CAPACITY = 128;
+    int32_t stack[STACK_CAPACITY];
     int32_t top = 0;
     stack[0] = 0;  // root
 
@@ -417,10 +418,10 @@ __global__ void compute_force(
         const double dist_sq = dx * dx + dy * dy;
 
         const int32_t c0 = __ldg(&t_c0[nid]);
+        const int32_t be = __ldg(&t_bend[nid]);
 
         // Leaf node: c0 == -1
         if (c0 < 0) {
-            const int32_t be = __ldg(&t_bend[nid]);
             if (bs == be) {
                 // Single-body leaf
                 if (bs != i) {
@@ -460,7 +461,9 @@ __global__ void compute_force(
 
         // Internal node — opening angle test
         const double wsq = __ldg(&t_wsq[nid]);
-        if (wsq < theta_sq * dist_sq) {
+        // Do not approximate a cell that contains the target body
+        const bool contains_body = i >= bs && i <= be;
+        if (!contains_body && wsq < theta_sq * dist_sq) {
             const double r2 = dist_sq + epsilon_sq;
             const double inv_r = rsqrt(r2);
             const double inv_r3 = inv_r * inv_r * inv_r;
@@ -581,8 +584,8 @@ void BarnesHutCuda::init_device_resources() {
     // Packed AoS for force traversal
     CUDA_CHECK(cudaMalloc(&force_nodes_d, sizeof(ForceNode) * max_quads));
 
-    // Work lists
-    const int32_t wl_size = n + 1;
+    // Work lists store tree nodes across levels, so size them to the node budget.
+    const int32_t wl_size = max_quads;
     CUDA_CHECK(cudaMalloc(&work_list_d, sizeof(int32_t) * wl_size));
     CUDA_CHECK(cudaMalloc(&work_list_next_d, sizeof(int32_t) * wl_size));
     CUDA_CHECK(cudaMalloc(&work_count_d, sizeof(int32_t)));
