@@ -21,7 +21,7 @@ const char* const ALLOWED_ALGORITHMS[] = {"barnes-hut", "naive"};
 constexpr Range<double> SOFTENING_FACTOR_RANGE = {0.0, 0.2};
 constexpr Range<uint16_t> THREADS_RANGE = {1, 256};
 constexpr Range<double> THETA_RANGE = {0.0, 100.0};
-constexpr auto STATS_UPDATE_TIMER = std::chrono::microseconds(50);
+constexpr auto STATS_UPDATE_TIMER = std::chrono::milliseconds(8);
 constexpr uint64_t MAX_PAIRWISE_SOFTENING_COMPUTATIONS = 1'000'000;
 constexpr double TIMESTEP_CHANGE_FACTOR = 1.1;
 
@@ -47,7 +47,7 @@ constexpr Range<float> PANEL_UPDATE_HZ_RANGE = {0.1, 30};
 constexpr uint16_t CONFIG_PANEL_WIDTH = 340;
 constexpr uint16_t STATS_PANEL_WIDTH = 340;
 constexpr uint16_t COMMANDS_PANEL_WIDTH = 370;
-constexpr auto STATS_UPDATE_TIMER = std::chrono::microseconds(50);
+constexpr auto STATS_UPDATE_TIMER = std::chrono::milliseconds(8);
 
 static_assert(ZOOM_FACTOR > 1.0);
 static_assert(GRID_SPACING_FACTOR >= 2.0);

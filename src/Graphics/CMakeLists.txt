@@ -6,6 +6,7 @@ set(LOCAL_LIB_DIR "${CMAKE_CURRENT_SOURCE_DIR}/lib")
 add_subdirectory(${LOCAL_LIB_DIR}/ViewPort)
 add_subdirectory(${LOCAL_LIB_DIR}/Panel)
 add_subdirectory(${LOCAL_LIB_DIR}/Selector)
+add_subdirectory(${LOCAL_LIB_DIR}/ActionLog)
 
 # Add library
 add_library(${PROJECT_NAME} ${CMAKE_CURRENT_LIST_DIR}/src/Graphics.cpp)
@@ -21,4 +22,5 @@ target_link_libraries(${PROJECT_NAME} PUBLIC lib-graphics-viewport)
 target_link_libraries(${PROJECT_NAME} PUBLIC lib-buffered-mean-calculator)
 target_link_libraries(${PROJECT_NAME} PUBLIC lib-graphics-panel)
 target_link_libraries(${PROJECT_NAME} PUBLIC lib-graphics-selector)
+target_link_libraries(${PROJECT_NAME} PUBLIC lib-graphics-action-log)
 target_link_libraries(${PROJECT_NAME} PRIVATE lib-logger)

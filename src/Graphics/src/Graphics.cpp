@@ -1,8 +1,11 @@
 #include "Graphics/Graphics.hpp"
 
+#include <GL/gl.h>
+
 #include "Constants/Constants.hpp"
 #include "Logger/Logger.hpp"
-#include <GL/gl.h>
+#include "Logger/Time.hpp"
+
 
 constexpr std::string_view body_vertex_shader =
         R"glsl(
@@ -51,6 +54,7 @@ Graphics::Graphics(const Config::Graphics& graphics_cfg, const Bodies& bodies)
     panel_manager.register_panel(&config_panel, PanelManager::Position::TOP_LEFT);
     panel_manager.register_panel(&stats_panel, PanelManager::Position::TOP_LEFT);
     panel_manager.register_panel(&commands_panel, PanelManager::Position::TOP_RIGHT);
+    panel_manager.register_panel(&action_log_panel, PanelManager::Position::BOTTOM_RIGHT);
 }
 
 Graphics::Stats Graphics::get_stats() const {
@@ -87,6 +91,9 @@ void Graphics::pan_if_view_grabbed() {
 // Whenever the above conditions break from either zoom or window resizing,
 // the grid spacing will adjust accordingly.
 void Graphics::draw_grid() {
+    if (!show_grid) {
+        return;
+    }
     const sf::Rect<double> rect = vp.get_rect();
     const sf::Vector2f res = vp.get_window_res();
 
@@ -156,9 +163,9 @@ void Graphics::draw_selection_overlay() {
         const sf::Vector2i new_cursor_pos = sf::Mouse::getPosition(window);
         sf::RectangleShape selector(sf::Vector2f(new_cursor_pos - *opt_select_grabbed_pos));
         selector.setPosition(sf::Vector2f(*opt_select_grabbed_pos));
-        selector.setFillColor(sf::Color(0, 0, 0, 0));
+        selector.setFillColor(sf::Color(255, 0, 0, 64));
         selector.setOutlineColor(Constants::Graphics::SELECT_COLOR);
-        selector.setOutlineThickness(2.f);
+        selector.setOutlineThickness(1.f);
         window.draw(selector);
     }
 
@@ -184,6 +191,7 @@ void Graphics::update_stats() {
             .fps = fps_calculator.get_mean<float>(),
             .viewport_m = vp.get_rect().size,
             .viewport_px = sf::Vector2<uint32_t>{vp.get_window_res()}};
+    action_log_panel.write_handle()->assign(action_log.to_string());
 }
 
 void Graphics::resize_view(sf::Vector2f new_size) {
@@ -242,7 +250,14 @@ void Graphics::release_select(bool skip_select) {
     }
     const sf::Rect<float> region{sf::Vector2f(*opt_select_grabbed_pos),
             sf::Vector2f(sf::Mouse::getPosition(window)) - sf::Vector2f(*opt_select_grabbed_pos)};
+    const bool had_selection = selector.has_selection();
     selector.select(region);
+    if (const auto num_selected = selector.num_selected(); num_selected > 0) {
+        action_log.log(fmt::format("Selected {} bodies", num_selected));
+    }
+    else if (had_selection) {
+        action_log.log("Cleared selection");
+    }
     opt_select_grabbed_pos = std::nullopt;
     cached_selection_stats = std::nullopt;
 }
@@ -252,6 +267,9 @@ void Graphics::body_size_increase() {
     if (new_body_diameter_pixels > Constants::Graphics::BODY_DIAMETER_PIXELS_RANGE.second) {
         Log::warning("Reached maximum body size (pixels), cannot magnify further");
         new_body_diameter_pixels = Constants::Graphics::BODY_DIAMETER_PIXELS_RANGE.second;
+    }
+    else {
+        action_log.log(fmt::format("Body size: {} pixels", new_body_diameter_pixels));
     }
     body_diameter_pixels = new_body_diameter_pixels;
     body_shader.setUniform("pointDiameter", static_cast<float>(body_diameter_pixels));
@@ -264,34 +282,73 @@ void Graphics::body_size_decrease() {
         Log::warning("Reached minimum body size (pixels), cannot reduce further");
         new_body_diameter_pixels = Constants::Graphics::BODY_DIAMETER_PIXELS_RANGE.first;
     }
+    else {
+        action_log.log(fmt::format("Body size: {} pixels", new_body_diameter_pixels));
+    }
     body_diameter_pixels = new_body_diameter_pixels;
     body_shader.setUniform("pointDiameter", static_cast<float>(body_diameter_pixels));
 }
 
-void Graphics::set_grid(bool enabled) {
-    show_grid = enabled;
-    config_panel.write_handle()->grid = enabled;
+void Graphics::toggle_grid() {
+    show_grid = !show_grid;
+    config_panel.write_handle()->grid = show_grid;
+    action_log.log(fmt::format("Grid: {}", show_grid ? "Enabled" : "Disabled"));
 }
 
-void Graphics::set_selection_show(bool enabled) {
-    // selector.set_show(enabled);
-    config_panel.write_handle()->selection_show = enabled;
+void Graphics::toggle_selection_show() {
+    selection_show = !selection_show;
+    config_panel.write_handle()->selection_show = selection_show;
+    action_log.log(fmt::format("Selection overlay: {}", selection_show ? "Enabled" : "Disabled"));
 }
 
-void Graphics::set_selection_show_center_of_mass(bool enabled) {
-    selection_show_center_of_mass = enabled;
-    config_panel.write_handle()->selection_show_center_of_mass = enabled;
+void Graphics::toggle_selection_show_center_of_mass() {
+    selection_show_center_of_mass = !selection_show_center_of_mass;
+    config_panel.write_handle()->selection_show_center_of_mass = selection_show_center_of_mass;
+    action_log.log(fmt::format("CoM marker: {}", selection_show_center_of_mass ? "Enabled" : "Disabled"));
 }
 
-void Graphics::set_follow_selected(bool enabled) {
-    follow_selected = enabled;
-    config_panel.write_handle()->selection_follow_center_of_mass = enabled;
+void Graphics::toggle_follow_selected() {
+    follow_selected = !follow_selected;
+    config_panel.write_handle()->selection_follow_center_of_mass = follow_selected;
+    action_log.log(fmt::format("Selection follow: {}", follow_selected ? "Enabled" : "Disabled"));
 }
 
 void Graphics::center_on_selection_center_of_mass() {
     if (cached_selection_stats) {
         vp.center_on_coords(cached_selection_stats->center_of_mass);
+        action_log.log("Centered on selection CoM");
     }
+}
+
+void Graphics::toggle_config_panel() {
+    config_panel.set_visible(!config_panel.is_visible());
+}
+
+void Graphics::toggle_stats_panel() {
+    stats_panel.set_visible(!stats_panel.is_visible());
+}
+
+void Graphics::toggle_commands_panel() {
+    commands_panel.set_visible(!commands_panel.is_visible());
+}
+
+void Graphics::toggle_action_log_panel() {
+    action_log_panel.set_visible(!action_log_panel.is_visible());
+}
+
+void Graphics::notify_paused() {
+    action_log.log("Simulation paused");
+}
+
+void Graphics::notify_resumed() {
+    action_log.log("Simulation resumed");
+}
+
+void Graphics::notify_timestep_changed(double old_dt, double new_dt) {
+    config_panel.write_handle()->timestep_s = new_dt;
+    using Time = Log::Time;
+    action_log.log(fmt::format("Dt: {} -> {}", Time::from<Time::Unit::S>(old_dt), 
+            Time::from<Time::Unit::S>(new_dt)));
 }
 
 void Graphics::draw_frame() {
@@ -300,9 +357,7 @@ void Graphics::draw_frame() {
     std::memcpy(body_positions_cache.data(), bodies.pos_data(),
             bodies.n * sizeof(sf::Vector2<double>));
     update_selection_tracking();
-    if (show_grid) {
-        draw_grid();
-    }
+    draw_grid();
     draw_bodies();
     draw_selection_overlay();
     window.draw(panel_manager);

@@ -47,26 +47,24 @@ void Controller::handle_events(sf::RenderWindow& window) {
             case sf::Keyboard::Scan::Space:
                 if (sim.get_state() == Simulation::State::PAUSED) {
                     sim.run();
+                    graphics.notify_resumed();
                 }
                 else {
                     sim.pause();
+                    graphics.notify_paused();
                 }
                 break;
             case sf::Keyboard::Scan::G:
-                cfg.graphics.show_grid = !cfg.graphics.show_grid;
-                graphics.set_grid(cfg.graphics.show_grid);
+                graphics.toggle_grid();
                 break;
             case sf::Keyboard::Scan::S:
-                cfg.graphics.selection_show = !cfg.graphics.selection_show;
-                graphics.set_selection_show(cfg.graphics.selection_show);
+                graphics.toggle_selection_show();
                 break;
             case sf::Keyboard::Scan::D:
-                cfg.graphics.selection_show_center_of_mass = !cfg.graphics.selection_show_center_of_mass;
-                graphics.set_selection_show_center_of_mass(cfg.graphics.selection_show_center_of_mass);
+                graphics.toggle_selection_show_center_of_mass();
                 break;
             case sf::Keyboard::Scan::F:
-                cfg.graphics.follow_selected = !cfg.graphics.follow_selected;
-                graphics.set_follow_selected(cfg.graphics.follow_selected);
+                graphics.toggle_follow_selected();
                 break;
             case sf::Keyboard::Scan::C:
                 graphics.center_on_selection_center_of_mass();
@@ -84,16 +82,16 @@ void Controller::handle_events(sf::RenderWindow& window) {
                 graphics.body_size_decrease();
                 break;
             case sf::Keyboard::Scan::F1:
-                cfg.graphics.show_commands_panel = !cfg.graphics.show_commands_panel;
-                graphics.get_commands_panel().set_visible(cfg.graphics.show_commands_panel);
+                graphics.toggle_commands_panel();
                 break;
             case sf::Keyboard::Scan::F2:
-                cfg.graphics.show_config_panel = !cfg.graphics.show_config_panel;
-                graphics.get_config_panel().set_visible(cfg.graphics.show_config_panel);
+                graphics.toggle_config_panel();
                 break;
             case sf::Keyboard::Scan::F3:
-                cfg.graphics.show_stats_panel = !cfg.graphics.show_stats_panel;
-                graphics.get_stats_panel().set_visible(cfg.graphics.show_stats_panel);
+                graphics.toggle_stats_panel();
+                break;
+            case sf::Keyboard::Scan::F4:
+                graphics.toggle_action_log_panel();
                 break;
             }
         }
@@ -159,9 +157,11 @@ void Controller::timestep_increase() {
         Log::warning("Reached maximum timestep, cannot accelerate further");
         new_timestep = Constants::Simulation::TIMESTEP_RANGE.second;
     }
-    cfg.sim.timestep = new_timestep;
-    sim.set_timestep(new_timestep);
-    graphics.get_config_panel().write_handle()->timestep_s = new_timestep;
+    if (new_timestep != cfg.sim.timestep) {
+        sim.set_timestep(new_timestep);
+        graphics.notify_timestep_changed(cfg.sim.timestep, new_timestep);
+        cfg.sim.timestep = new_timestep;
+    }
 }
 
 void Controller::timestep_decrease() {
@@ -170,9 +170,11 @@ void Controller::timestep_decrease() {
         Log::warning("Reached minimum timestep, cannot decelerate further");
         new_timestep = Constants::Simulation::TIMESTEP_RANGE.first;
     }
-    cfg.sim.timestep = new_timestep;
-    sim.set_timestep(new_timestep);
-    graphics.get_config_panel().write_handle()->timestep_s = new_timestep;
+    if (new_timestep != cfg.sim.timestep) {
+        sim.set_timestep(new_timestep);
+        graphics.notify_timestep_changed(cfg.sim.timestep, new_timestep);
+        cfg.sim.timestep = new_timestep;
+    }
 }
 
 void Controller::run() {

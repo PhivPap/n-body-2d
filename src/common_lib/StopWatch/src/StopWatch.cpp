@@ -73,44 +73,51 @@ StopWatch::State StopWatch::current_state() const {
 std::string StopWatch::to_string() const {
     using namespace std::chrono_literals;
 
+    std::string txt;
+
     auto full_duration = duration<SecondsF64>();
-    char sign = 0;
-    if (full_duration < 0s) {
-        sign = '-';
+    const bool negative = full_duration < 0s;
+    if (negative) {
         full_duration = -full_duration;
     }
 
     if (full_duration < 1ms) {
         const int64_t us = cast_to_i64<std::chrono::microseconds>(full_duration);
         const int64_t ns = cast_to_i64<std::chrono::nanoseconds>(full_duration) % 1000;
-        return fmt::format("{}{}.{:03}us", sign, us, ns);
+        txt = fmt::format("{}us{:03}ns", us, ns);
     }
     else if (full_duration < 1s) {
         const int64_t ms = cast_to_i64<std::chrono::milliseconds>(full_duration);
         const int64_t us = cast_to_i64<std::chrono::microseconds>(full_duration) % 1000;
-        return fmt::format("{}{}.{:03}ms", sign, ms, us);
+        txt = fmt::format("{}ms{:03}us", ms, us);
     }
     else if (full_duration < 1min) {
         const int64_t s = cast_to_i64<std::chrono::seconds>(full_duration);
         const int64_t ms = cast_to_i64<std::chrono::milliseconds>(full_duration) % 1000;
-        return fmt::format("{}{}.{:03}s", sign, s, ms);
+        txt = fmt::format("{}s{:03}ms", s, ms);
     }
     else if (full_duration < 1h) {
         const int64_t m = cast_to_i64<std::chrono::minutes>(full_duration);
         const int64_t s = cast_to_i64<std::chrono::seconds>(full_duration) % 60;
         const int64_t ms = cast_to_i64<std::chrono::milliseconds>(full_duration) % 1000;
-        return fmt::format("{}{:02}m{:02}.{:03}s", sign, m, s, ms);
+        txt = fmt::format("{:02}m{:02}s{:03}ms", m, s, ms);
     }
     else if (full_duration < 24h) {
         const int64_t h = cast_to_i64<std::chrono::hours>(full_duration);
         const int64_t m = cast_to_i64<std::chrono::minutes>(full_duration) % 60;
         const int64_t s = cast_to_i64<std::chrono::seconds>(full_duration) % 60;
-        return fmt::format("{}{:02}h{:02}m{:02}s", sign, h, m, s);
+        txt = fmt::format("{:02}h{:02}m{:02}s", h, m, s);
     }
     else {
         const int64_t d = cast_to_i64<std::chrono::hours>(full_duration) / 24;
         const int64_t h = cast_to_i64<std::chrono::hours>(full_duration) % 24;
         const int64_t m = cast_to_i64<std::chrono::minutes>(full_duration) % 60;
-        return fmt::format("{}{}d{:02}h{:02}m", sign, d, h, m);
+        txt = fmt::format("{}d{:02}h{:02}m", d, h, m);
     }
+
+    if (negative) {
+        txt = "-" + txt;
+    }
+
+    return txt;
 }

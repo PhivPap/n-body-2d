@@ -1,28 +1,35 @@
 {
    "IO": {
-        "universe_infile": "./universe-db/100k_spiral_galaxy.csv",
+        "universe_infile": "universe-db/generated/ring.csv",
         "universe_outfile":  "./universe-db/output.csv",
         "echo_config": true,
-	    "echo_bodies": false
+        "echo_bodies": false
     },
     "Simulation": {
-        "timestep": 1e7,
-        "iterations": 1e7,
-        "theta": 1.5,
+        "timestep": 1e2,
+        "iterations": 1e10,
+        "theta": 1.2,
         "algorithm": "barnes-hut gpu",
         "softening_factor": 0.005,
-        "threads": 20
+        "threads": 20,
+        "max_ips": 120
     },
     "Graphics": {
         "enabled": true,
-        "resolution": [1280, 720],
+        "resolution": [1600, 900],
         "fps": 100,
-	    "vsync": false,
-        "pixel_scale": 1e17,
+        "vsync": false,
+        "pixel_scale": 1e9,
         "show_grid": false,
         "show_commands_panel": true,
         "show_config_panel": true,
         "show_stats_panel": true,
-        "panel_update_hz": 1
+        "show_action_log_panel": true,
+        "panel_update_hz": 1,
+        "selection": {
+            "show": true,
+            "show_center_of_mass": true,
+            "follow": false
+        }
     }
 }

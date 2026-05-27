@@ -11,6 +11,7 @@ public:
     virtual sf::Vector2f get_size() const = 0;
     virtual bool is_visible() const = 0;
     virtual void set_visible(bool visible) = 0;
+    virtual void clear() = 0;
 
 protected:
     virtual void draw(sf::RenderTarget& target, sf::RenderStates states) const = 0;
@@ -47,13 +48,14 @@ protected:
     sf::RenderTexture texture;
     DisplayedData displayed_data;
 
+    void clear() override;
+
 private:
     constexpr static uint32_t VERTICAL_PADDING_PX = 6;
 
     sf::Sprite sprite;
     bool visible;
 
-    void clear();
     void bake();
     void draw(sf::RenderTarget& target, sf::RenderStates states) const override;
     void auto_height();
@@ -151,8 +153,14 @@ void PanelBase<Derived, DisplayedData>::draw(sf::RenderTarget& target,
 
 template <typename Derived, typename DisplayedData>
 void PanelBase<Derived, DisplayedData>::auto_height() {
-    const auto text_height = static_cast<uint32_t>(text.getLocalBounds().size.y);
-    const sf::Vector2u new_texture_size{texture.getSize().x, text_height + VERTICAL_PADDING_PX};
+    const auto &str = text.getString();
+    const size_t line_count = std::count(str.begin(), str.end(), '\n');
+
+
+    const auto text_height = static_cast<float>(line_count * text.getCharacterSize()) * 
+            text.getLineSpacing();
+    
+    const sf::Vector2u new_texture_size{texture.getSize().x, static_cast<uint32_t>(text_height) + VERTICAL_PADDING_PX};
     if (new_texture_size.y != texture.getSize().y) {
         if (!texture.resize(new_texture_size)) {
             Log::warning("Failed resizing panel texture to ({}, {})", new_texture_size.x, 

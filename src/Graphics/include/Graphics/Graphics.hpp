@@ -3,10 +3,12 @@
 #include <optional>
 #include <vector>
 
+#include "ActionLog/ActionLog.hpp"
 #include "Body/Body.hpp"
 #include "BufferedMeanCalculator/BufferedMeanCalculator.hpp"
 #include "Config/Config.hpp"
 #include "Constants/Constants.hpp"
+#include "Panel/ActionLogPanel.hpp"
 #include "Panel/CommandsPanel.hpp"
 #include "Panel/ConfigPanel.hpp"
 #include "Panel/Panel.hpp"
@@ -42,11 +44,18 @@ public:
     void release_select(bool skip_select = false);
     void body_size_increase();
     void body_size_decrease();
-    void set_grid(bool enabled);
-    void set_selection_show(bool enabled);
-    void set_selection_show_center_of_mass(bool enabled);
-    void set_follow_selected(bool enabled);
+    void toggle_grid();
+    void toggle_selection_show();
+    void toggle_selection_show_center_of_mass();
+    void toggle_follow_selected();
     void center_on_selection_center_of_mass();
+    void toggle_config_panel();
+    void toggle_stats_panel();
+    void toggle_commands_panel();
+    void toggle_action_log_panel();
+    void notify_paused();
+    void notify_resumed();
+    void notify_timestep_changed(double old_dt, double new_dt);
     void draw_frame();
 
 private:
@@ -70,6 +79,8 @@ private:
     ConfigPanel config_panel{Constants::Graphics::CONFIG_PANEL_WIDTH};
     StatsPanel stats_panel{Constants::Graphics::STATS_PANEL_WIDTH};
     CommandsPanel commands_panel{Constants::Graphics::COMMANDS_PANEL_WIDTH};
+    ActionLogPanel action_log_panel{Constants::Graphics::COMMANDS_PANEL_WIDTH};
+    ActionLog action_log{};
     BufferedMeanCalculator<float, 60> fps_calculator{};
     Stats stats{};
     RLCaller stats_update_rate_limiter{Constants::Graphics::STATS_UPDATE_TIMER};

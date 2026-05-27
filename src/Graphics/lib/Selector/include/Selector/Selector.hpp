@@ -21,6 +21,7 @@ public:
     void select(const sf::Rect<float>& region);
     void clear();
     bool has_selection() const;
+    uint32_t num_selected() const;
     SelectionStats compute_stats() const;
 
 private:
