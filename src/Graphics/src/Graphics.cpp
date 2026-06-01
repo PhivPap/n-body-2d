@@ -1,14 +1,14 @@
 #include "Graphics/Graphics.hpp"
 
 #include <GL/gl.h>
+#include <algorithm>
 
 #include "Constants/Constants.hpp"
 #include "Logger/Logger.hpp"
 #include "Logger/Time.hpp"
 
 
-constexpr std::string_view body_vertex_shader =
-        R"glsl(
+constexpr std::string_view body_vertex_shader = R"glsl(
 #version 130
 uniform float pointDiameter;
 void main() {
@@ -17,8 +17,7 @@ void main() {
     gl_FrontColor = gl_Color;  // Pass color if using
 }
 )glsl";
-constexpr std::string_view body_fragment_shader =
-        R"glsl(
+constexpr std::string_view body_fragment_shader = R"glsl(
 #version 130
 uniform float pointDiameter;
 void main() {
@@ -29,6 +28,15 @@ void main() {
     gl_FragColor = gl_Color;  // Use vertex color or set fixed
 }
 )glsl";
+constexpr std::string_view fade_fragment_shader = R"glsl(
+#version 130
+uniform sampler2D texture;
+uniform vec4 decay;
+void main() {
+    gl_FragColor = texture2D(texture, gl_TexCoord[0].xy) - decay;
+}
+)glsl";
+
 
 Graphics::Graphics(const Config::Graphics& graphics_cfg, const Bodies& bodies)
         : bodies(bodies), body_positions_cache(bodies.n),
@@ -47,14 +55,18 @@ Graphics::Graphics(const Config::Graphics& graphics_cfg, const Bodies& bodies)
     }
 
     glEnable(GL_PROGRAM_POINT_SIZE);
-    if (!body_shader.loadFromMemory(body_vertex_shader, body_fragment_shader)) {
+    if (!body_shader.loadFromMemory(body_vertex_shader, body_fragment_shader)
+            || !fade_shader.loadFromMemory(fade_fragment_shader, sf::Shader::Type::Fragment)) {
         throw std::runtime_error("Failed to load shaders");
     }
     body_shader.setUniform("pointDiameter", static_cast<float>(body_diameter_pixels));
+    fade_shader.setUniform("texture", sf::Shader::CurrentTexture);
     panel_manager.register_panel(&config_panel, PanelManager::Position::TOP_LEFT);
     panel_manager.register_panel(&stats_panel, PanelManager::Position::TOP_LEFT);
     panel_manager.register_panel(&commands_panel, PanelManager::Position::TOP_RIGHT);
     panel_manager.register_panel(&action_log_panel, PanelManager::Position::BOTTOM_RIGHT);
+
+    reset_trails(true);
 }
 
 Graphics::Stats Graphics::get_stats() const {
@@ -82,6 +94,7 @@ void Graphics::pan_if_view_grabbed() {
         const sf::Vector2i new_cursor_pos = sf::Mouse::getPosition(window);
         vp.pan(sf::Vector2f(*opt_view_grabbed_pos - new_cursor_pos));
         opt_view_grabbed_pos = new_cursor_pos;
+        reset_trails();
     }
 }
 
@@ -130,11 +143,25 @@ void Graphics::draw_grid() {
 }
 
 void Graphics::draw_bodies() {
-    const uint64_t vertex_count = body_vertex_array.getVertexCount();
+    sf::Sprite prev(trails_texture1.getTexture());
+    trails_texture2.clear(sf::Color::Transparent);
+    if (!paused) {
+        sf::RenderStates fade_states(sf::BlendNone);
+        fade_states.shader = &fade_shader;
+        set_fade_shader_decay();
+        trails_texture2.draw(prev, fade_states);
+    }
+
     for (uint64_t i = 0; i < bodies.n; i++) {
         body_vertex_array[i].position = vp.coords_to_pos_on_viewport(body_positions_cache[i]);
     }
-    window.draw(body_vertex_array, sf::RenderStates(&body_shader));
+
+    trails_texture2.draw(body_vertex_array, sf::RenderStates(&body_shader));
+    trails_texture2.display();
+
+    std::swap(trails_texture1, trails_texture2);
+    trails_sprite.setTexture(trails_texture1.getTexture(), true);
+    window.draw(trails_sprite);
 }
 
 void Graphics::update_selection_tracking() {
@@ -194,18 +221,49 @@ void Graphics::update_stats() {
     action_log_panel.write_handle()->assign(action_log.to_string());
 }
 
+void Graphics::draw_ui() {
+    draw_selection_overlay();
+    window.draw(panel_manager);
+}
+
+void Graphics::reset_trails(bool resize) {
+    last_trail_fade_sw.reset();
+    if (resize && (!trails_texture1.resize(window.getSize()) || 
+            !trails_texture2.resize(window.getSize()))) {
+        throw std::runtime_error("Failed to resize trail textures");
+    }
+    trails_texture1.clear(sf::Color::Transparent);
+    trails_texture2.clear(sf::Color::Transparent);
+}
+
+void Graphics::set_fade_shader_decay() {
+    const auto elapsed = last_trail_fade_sw.duration<std::chrono::duration<double>>();
+    last_trail_fade_sw.reset();
+
+    constexpr float fade_chunk_size = 1.f / 255.f;
+    const float fade_fraction = elapsed / Constants::Graphics::TRAIL_FADE;
+    const float fractional_fade_chunks = fade_fraction / fade_chunk_size + remainder_fractional_fade_chunks;
+    const float whole_fade_chunks = std::floor(fractional_fade_chunks);
+    remainder_fractional_fade_chunks = fractional_fade_chunks - whole_fade_chunks;
+
+    fade_shader.setUniform("decay", 
+            sf::Glsl::Vec4(0.f, 0.f, 0.f, whole_fade_chunks * fade_chunk_size));
+}
+
 void Graphics::resize_view(sf::Vector2f new_size) {
     vp.resize(new_size);
     window.setView(sf::View(sf::Rect<float>{{0.f, 0.f}, new_size}));
+    reset_trails(true);
 }
 
 void Graphics::zoom_view(double delta) {
-    if (delta > 0) {
+    if (delta > 0.0) {
         vp.zoom(ViewPort::Zoom::IN, sf::Vector2f(sf::Mouse::getPosition(window)));
     }
-    else if (delta < 0) {
+    else if (delta < 0.0) {
         vp.zoom(ViewPort::Zoom::OUT, sf::Vector2f(sf::Mouse::getPosition(window)));
     }
+    reset_trails();
 }
 
 void Graphics::grab_view() {
@@ -337,17 +395,19 @@ void Graphics::toggle_action_log_panel() {
 }
 
 void Graphics::notify_paused() {
+    paused = true;
     action_log.log("Simulation paused");
 }
 
 void Graphics::notify_resumed() {
+    paused = false;
     action_log.log("Simulation resumed");
 }
 
 void Graphics::notify_timestep_changed(double old_dt, double new_dt) {
     config_panel.write_handle()->timestep_s = new_dt;
     using Time = Log::Time;
-    action_log.log(fmt::format("Dt: {} -> {}", Time::from<Time::Unit::S>(old_dt), 
+    action_log.log(fmt::format("Dt: {} -> {}", Time::from<Time::Unit::S>(old_dt),
             Time::from<Time::Unit::S>(new_dt)));
 }
 
@@ -359,8 +419,7 @@ void Graphics::draw_frame() {
     update_selection_tracking();
     draw_grid();
     draw_bodies();
-    draw_selection_overlay();
-    window.draw(panel_manager);
+    draw_ui();
     window.display();
     frame++;
     stats_update_rate_limiter.try_call(std::bind(&Graphics::update_stats, this));

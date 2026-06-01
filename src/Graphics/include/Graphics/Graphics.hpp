@@ -64,6 +64,8 @@ private:
     StopWatch sw;
     sf::VertexArray body_vertex_array;
     sf::RenderWindow window;
+    sf::RenderTexture trails_texture1, trails_texture2;
+    sf::Sprite trails_sprite{trails_texture1.getTexture()};
     ViewPort vp;
     Selector selector;
     uint64_t frame = 0;
@@ -71,10 +73,12 @@ private:
     bool follow_selected;
     bool selection_show;
     bool selection_show_center_of_mass;
+    bool paused = false;
     std::optional<Selector::SelectionStats> cached_selection_stats{};
     std::optional<sf::Vector2i> opt_view_grabbed_pos{};
     std::optional<sf::Vector2i> opt_select_grabbed_pos{};
     sf::Shader body_shader{};
+    sf::Shader fade_shader{};
     PanelManager panel_manager{};
     ConfigPanel config_panel{Constants::Graphics::CONFIG_PANEL_WIDTH};
     StatsPanel stats_panel{Constants::Graphics::STATS_PANEL_WIDTH};
@@ -85,6 +89,8 @@ private:
     Stats stats{};
     RLCaller stats_update_rate_limiter{Constants::Graphics::STATS_UPDATE_TIMER};
     uint8_t body_diameter_pixels = Constants::Graphics::INIT_BODY_PIXEL_DIAMETER;
+    StopWatch last_trail_fade_sw;
+    float remainder_fractional_fade_chunks = 0.f;
 
     void pan_if_view_grabbed();
     void draw_grid();
@@ -92,4 +98,7 @@ private:
     void update_selection_tracking();
     void draw_selection_overlay();
     void update_stats();
+    void draw_ui();
+    void reset_trails(bool resize = false);
+    void set_fade_shader_decay();
 };
