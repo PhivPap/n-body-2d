@@ -4,7 +4,7 @@
 #include <limits>
 
 
-BarnesHutCuda::BarnesHutCuda(const Config::Simulation& sim_cfg, Bodies& bodies)
+BarnesHutCuda::BarnesHutCuda(Config::Simulation& sim_cfg, Bodies& bodies)
         : Simulation(sim_cfg, bodies), theta_sq(sim_cfg.theta * sim_cfg.theta),
           max_quads(static_cast<int32_t>(bodies.n) * 5) {
     init_device_resources();

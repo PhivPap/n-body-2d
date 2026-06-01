@@ -47,7 +47,7 @@ public:
         double x_min, x_max, y_min, y_max;
     };
 
-    BarnesHutCuda(const Config::Simulation& sim_cfg, Bodies& bodies);
+    BarnesHutCuda(Config::Simulation& sim_cfg, Bodies& bodies);
     virtual ~BarnesHutCuda();
 
 private:

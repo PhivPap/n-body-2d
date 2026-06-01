@@ -21,7 +21,7 @@ public:
         double simulated_elapsed_s = 0;
     };
 
-    Simulation(const Config::Simulation& sim_cfg, Bodies& bodies);
+    Simulation(Config::Simulation& sim_cfg, Bodies& bodies);
     virtual ~Simulation();
     State get_state();
     Stats get_stats();
@@ -31,11 +31,10 @@ public:
     void set_timestep(double timestep);
 
 protected:
+    Config::Simulation& sim_cfg;
     Bodies& bodies;
     const double epsilon_squared;
-    const uint64_t max_iterations;
     std::atomic<double> requested_timestep;
-    double timestep;
     uint64_t iteration = 0;
     std::atomic<bool> finished{false};
     std::atomic<bool> stop{false};

@@ -48,6 +48,7 @@ public:
         bool selection_show;
         bool selection_show_center_of_mass;
         bool follow_selected;
+        std::chrono::duration<double> trails_fade;
 
         bool validate() const;
         std::string to_string() const;

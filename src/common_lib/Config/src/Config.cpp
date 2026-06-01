@@ -49,7 +49,9 @@ Config::Config(const fs::path& path) {
                 .show_stats_panel = j_graphics.at("show_stats_panel"),
                 .selection_show = j_selection.at("show"),
                 .selection_show_center_of_mass = j_selection.at("show_center_of_mass"),
-                .follow_selected = j_selection.at("follow")};
+                .follow_selected = j_selection.at("follow"),
+                .trails_fade = std::chrono::duration<double>(j_graphics.at("trails_fade_time_s")
+                        .get<double>())};
     }
     catch (const std::exception& e) {
         Log::error("{}", e.what());
@@ -271,10 +273,12 @@ std::string Config::Graphics::to_string() const {
     panel_update_hz      {}
     selection_show:      {}
     selection_show_CoM:  {}
-    follow_selected:     {})";
+    follow_selected:     {}
+    trails_fade_time_s:  {})";
     return fmt::format(fmt_str, enabled, resolution.x, resolution.y, vsync_enabled, fps,
             pixel_scale, show_grid, show_commands_panel, show_config_panel, show_stats_panel,
-            panel_update_hz, selection_show, selection_show_center_of_mass, follow_selected);
+            panel_update_hz, selection_show, selection_show_center_of_mass, follow_selected, 
+            trails_fade.count());
 }
 
 bool Config::Graphics::validate() const {
@@ -299,6 +303,10 @@ bool Config::Graphics::validate() const {
         ok = false;
         Log::error("Config::Graphics::panel_update_hz {} not within allowed range {}",
                 panel_update_hz, PANEL_UPDATE_HZ_RANGE);
+    }
+    if (trails_fade.count() < 0) {
+        ok = false;
+        Log::error("Config::Graphics::trails_fade_time_s (={}) must be >= 0", trails_fade.count());
     }
     return ok;
 }

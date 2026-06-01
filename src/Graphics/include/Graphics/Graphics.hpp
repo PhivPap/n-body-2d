@@ -30,7 +30,7 @@ public:
         sf::Vector2<uint32_t> viewport_px;
     };
 
-    Graphics(const Config::Graphics& graphics_cfg, const Bodies& bodies);
+    Graphics(Config::Graphics& graphics_cfg, const Bodies& bodies);
     Stats get_stats() const;
     sf::RenderWindow& get_window();
     CommandsPanel& get_commands_panel();
@@ -44,6 +44,8 @@ public:
     void release_select(bool skip_select = false);
     void body_size_increase();
     void body_size_decrease();
+    void trails_length_increase();
+    void trails_length_decrease();
     void toggle_grid();
     void toggle_selection_show();
     void toggle_selection_show_center_of_mass();
@@ -59,6 +61,7 @@ public:
     void draw_frame();
 
 private:
+    Config::Graphics& graphics_cfg;
     const Bodies& bodies;
     std::vector<sf::Vector2<double>> body_positions_cache;
     StopWatch sw;
@@ -69,10 +72,6 @@ private:
     ViewPort vp;
     Selector selector;
     uint64_t frame = 0;
-    bool show_grid;
-    bool follow_selected;
-    bool selection_show;
-    bool selection_show_center_of_mass;
     bool paused = false;
     std::optional<Selector::SelectionStats> cached_selection_stats{};
     std::optional<sf::Vector2i> opt_view_grabbed_pos{};

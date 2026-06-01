@@ -8,10 +8,8 @@
 #include "Logger/Logger.hpp"
 
 
-Simulation::Simulation(const Config::Simulation& sim_cfg, Bodies& bodies)
-        : bodies(bodies), max_iterations(sim_cfg.iterations), requested_timestep(sim_cfg.timestep),
-          timestep(sim_cfg.timestep),
-          epsilon_squared(
+Simulation::Simulation(Config::Simulation& sim_cfg, Bodies& bodies)
+        : sim_cfg(sim_cfg), bodies(bodies), requested_timestep(sim_cfg.timestep), epsilon_squared(
                   std::pow(compute_plummer_softening(bodies, sim_cfg.softening_factor), 2)) {}
 
 Simulation::~Simulation() {}
@@ -57,7 +55,7 @@ void Simulation::set_timestep(double timestep) {
 }
 
 bool Simulation::should_stop() {
-    if (iteration >= max_iterations) {
+    if (iteration >= sim_cfg.iterations) {
         finished = true;
         Log::info("Simulation finshed");
         return true;
@@ -67,7 +65,7 @@ bool Simulation::should_stop() {
 
 void Simulation::post_iteration() {
     stats_update_rate_limiter.try_call(std::bind(&Simulation::update_stats, this));
-    timestep = requested_timestep.load(std::memory_order::relaxed);
+    sim_cfg.timestep = requested_timestep.load(std::memory_order::relaxed);
     iteration++;
 }
 
@@ -146,5 +144,5 @@ void Simulation::update_stats() {
     stats.iteration = iteration;
     stats.ips = ips_calculator.get_mean<float>();
     stats.real_elapsed_s = elapsed_s;
-    stats.simulated_elapsed_s += iter_delta * timestep;
+    stats.simulated_elapsed_s += iter_delta * sim_cfg.timestep;
 }

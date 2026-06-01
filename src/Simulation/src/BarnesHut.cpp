@@ -3,7 +3,7 @@
 #include "Logger/Logger.hpp"
 
 
-BarnesHut::BarnesHut(const Config::Simulation& sim_cfg, Bodies& bodies)
+BarnesHut::BarnesHut(Config::Simulation& sim_cfg, Bodies& bodies)
         : Simulation(sim_cfg, bodies), n_threads(sim_cfg.threads),
           theta_sq(sim_cfg.theta * sim_cfg.theta), worker_chunk(bodies.n / n_threads),
           master_offset(worker_chunk * (n_threads - 1)), sync_point(n_threads) {
@@ -83,7 +83,7 @@ void BarnesHut::worker_task(uint32_t worker_id) {
 
 void BarnesHut::update_positions(uint64_t begin_idx, uint64_t end_idx) {
     for (uint64_t idx = begin_idx; idx < end_idx; idx++) {
-        bodies.pos(idx) += bodies.vel(idx) * timestep;
+        bodies.pos(idx) += bodies.vel(idx) * sim_cfg.timestep;
     }
 }
 
@@ -125,7 +125,7 @@ void BarnesHut::update_velocity(uint64_t body_idx) {
         }
     }
 
-    bodies.vel(body_idx) += F / bodies.mass(body_idx) * timestep;
+    bodies.vel(body_idx) += F / bodies.mass(body_idx) * sim_cfg.timestep;
 }
 
 sf::Vector2<double> BarnesHut::body_to_quad_force(uint64_t body_idx, const Quad& quad) {

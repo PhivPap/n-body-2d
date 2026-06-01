@@ -37,7 +37,7 @@ constexpr Range<double> PIXEL_RES_RANGE = {1e-12, 8.8e50};
 constexpr double ZOOM_FACTOR = 1.08;
 constexpr double GRID_SPACING_FACTOR = 4;
 constexpr sf::Color BODY_COLOR(255, 255, 255, 120);
-constexpr auto TRAIL_FADE = std::chrono::seconds(4);
+constexpr auto TRAILS_FADE_CHANGE_STEP = std::chrono::milliseconds(100);
 constexpr uint8_t INIT_BODY_PIXEL_DIAMETER = 1;
 constexpr Range<uint8_t> BODY_DIAMETER_PIXELS_RANGE = {1, 50};
 constexpr sf::Color BG_COLOR(0, 0, 0, 255);
@@ -52,7 +52,7 @@ constexpr auto STATS_UPDATE_TIMER = std::chrono::milliseconds(8);
 
 static_assert(ZOOM_FACTOR > 1.0);
 static_assert(GRID_SPACING_FACTOR >= 2.0);
-static_assert(TRAIL_FADE.count() > 0);
+static_assert(TRAILS_FADE_CHANGE_STEP.count() > 0);
 static_assert(INIT_BODY_PIXEL_DIAMETER >= BODY_DIAMETER_PIXELS_RANGE.first);
 static_assert(INIT_BODY_PIXEL_DIAMETER <= BODY_DIAMETER_PIXELS_RANGE.second);
 }  // namespace Graphics

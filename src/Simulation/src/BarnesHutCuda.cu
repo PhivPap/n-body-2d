@@ -814,7 +814,7 @@ void BarnesHutCuda::build_quad_tree() {
 
 void BarnesHutCuda::compute_forces() {
     const int32_t n = static_cast<int32_t>(bodies.n);
-    const double G_dt = Constants::Simulation::G * timestep;
+    const double G_dt = Constants::Simulation::G * sim_cfg.timestep;
 
     const uint32_t grid = (n + BLOCK_SIZE - 1) / BLOCK_SIZE;
     Kernel::compute_force<<<grid, BLOCK_SIZE>>>(tree.mass, tree.com_x, tree.com_y, tree.width_sq,
@@ -827,7 +827,7 @@ void BarnesHutCuda::compute_forces() {
 void BarnesHutCuda::update_positions() {
     const int32_t n = static_cast<int32_t>(bodies.n);
     const uint32_t grid = (n + BLOCK_SIZE - 1) / BLOCK_SIZE;
-    Kernel::update_positions<<<grid, BLOCK_SIZE>>>(pos_d, vel_d, n, timestep);
+    Kernel::update_positions<<<grid, BLOCK_SIZE>>>(pos_d, vel_d, n, sim_cfg.timestep);
     CUDA_CHECK(cudaGetLastError());
     CUDA_CHECK(cudaDeviceSynchronize());
 }

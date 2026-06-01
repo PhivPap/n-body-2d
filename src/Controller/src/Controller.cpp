@@ -9,10 +9,12 @@
 
 volatile bool Controller::sigint_flag = false;
 
-Controller::Controller(Config& cfg, Simulation& sim, Graphics& graphics)
-        : cfg(cfg), sim(sim), graphics(graphics),
+Controller::Controller(const Config& cfg, Simulation& sim, Graphics& graphics)
+        : sim(sim), graphics(graphics), timestep(cfg.sim.timestep),
           stats_update_rate_limiter(
-                  std::chrono::duration<float>(1 / cfg.graphics.panel_update_hz)) {}
+                  std::chrono::duration<float>(1 / cfg.graphics.panel_update_hz)) {
+    init_panels(cfg);
+}
 
 void Controller::handle_events(sf::RenderWindow& window) {
     while (const std::optional event = window.pollEvent()) {
@@ -70,10 +72,10 @@ void Controller::handle_events(sf::RenderWindow& window) {
                 graphics.center_on_selection_center_of_mass();
                 break;
             case sf::Keyboard::Scan::Left:
-                timestep_decrease();
+                key_pressed->control ? graphics.trails_length_decrease() : timestep_decrease();
                 break;
             case sf::Keyboard::Scan::Right:
-                timestep_increase();
+                key_pressed->control ? graphics.trails_length_increase() : timestep_increase();
                 break;
             case sf::Keyboard::Scan::Up:
                 graphics.body_size_increase();
@@ -98,7 +100,7 @@ void Controller::handle_events(sf::RenderWindow& window) {
     }
 }
 
-void Controller::init_panels() {
+void Controller::init_panels(const Config& cfg) {
     {
         auto write_handle = graphics.get_config_panel().write_handle();
         write_handle->timestep_s = cfg.sim.timestep;
@@ -147,39 +149,38 @@ void Controller::update_panels() {
         write_handle->fps = graphics_stats.fps;
         write_handle->elapsed_s = sim_stats.real_elapsed_s;
         write_handle->simulated_time_s = sim_stats.simulated_elapsed_s;
-        write_handle->simulation_rate = sim_stats.ips * cfg.sim.timestep;
+        write_handle->simulation_rate = sim_stats.ips * timestep;
     }
 }
 
 void Controller::timestep_increase() {
-    auto new_timestep = cfg.sim.timestep * Constants::Simulation::TIMESTEP_CHANGE_FACTOR;
+    auto new_timestep = timestep * Constants::Simulation::TIMESTEP_CHANGE_FACTOR;
     if (new_timestep > Constants::Simulation::TIMESTEP_RANGE.second) {
         Log::warning("Reached maximum timestep, cannot accelerate further");
         new_timestep = Constants::Simulation::TIMESTEP_RANGE.second;
     }
-    if (new_timestep != cfg.sim.timestep) {
+    if (new_timestep != timestep) {
         sim.set_timestep(new_timestep);
-        graphics.notify_timestep_changed(cfg.sim.timestep, new_timestep);
-        cfg.sim.timestep = new_timestep;
+        graphics.notify_timestep_changed(timestep, new_timestep);
+        timestep = new_timestep;
     }
 }
 
 void Controller::timestep_decrease() {
-    auto new_timestep = cfg.sim.timestep / Constants::Simulation::TIMESTEP_CHANGE_FACTOR;
+    auto new_timestep = timestep / Constants::Simulation::TIMESTEP_CHANGE_FACTOR;
     if (new_timestep < Constants::Simulation::TIMESTEP_RANGE.first) {
         Log::warning("Reached minimum timestep, cannot decelerate further");
         new_timestep = Constants::Simulation::TIMESTEP_RANGE.first;
     }
-    if (new_timestep != cfg.sim.timestep) {
+    if (new_timestep != timestep) {
         sim.set_timestep(new_timestep);
-        graphics.notify_timestep_changed(cfg.sim.timestep, new_timestep);
-        cfg.sim.timestep = new_timestep;
+        graphics.notify_timestep_changed(timestep, new_timestep);
+        timestep = new_timestep;
     }
 }
 
 void Controller::run() {
     StopWatch sw;
-    init_panels();
     sim.run();
     sf::RenderWindow& window = graphics.get_window();
     while (!sim.is_finished()) {
