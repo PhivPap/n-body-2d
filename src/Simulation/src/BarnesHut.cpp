@@ -129,8 +129,10 @@ void BarnesHut::update_velocity(uint64_t body_idx) {
 }
 
 sf::Vector2<double> BarnesHut::body_to_quad_force(uint64_t body_idx, const Quad& quad) {
-    const double dist = distance(bodies.pos(body_idx), quad.center_of_mass);
+    const double softened_dist_sq =
+            distance_squared(bodies.pos(body_idx), quad.center_of_mass) + epsilon_squared;
     const double force_amplitude = Constants::Simulation::G * bodies.mass(body_idx)
-                                   * quad.total_mass / (dist * dist + epsilon_squared);
-    return ((quad.center_of_mass - bodies.pos(body_idx)) / dist) * force_amplitude;
+                                   * quad.total_mass
+                                   / (softened_dist_sq * std::sqrt(softened_dist_sq));
+    return (quad.center_of_mass - bodies.pos(body_idx)) * force_amplitude;
 }

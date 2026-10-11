@@ -16,14 +16,14 @@ sf::Rect<double> get_universe_boundaries(const Bodies& bodies) {
         if (bodies.pos(i).x < min_x) {
             min_x = bodies.pos(i).x;
         }
-        else if (bodies.pos(i).x > max_x) {
+        if (bodies.pos(i).x > max_x) {
             max_x = bodies.pos(i).x;
         }
 
         if (bodies.pos(i).y < min_y) {
             min_y = bodies.pos(i).y;
         }
-        else if (bodies.pos(i).y > max_y) {
+        if (bodies.pos(i).y > max_y) {
             max_y = bodies.pos(i).y;
         }
     }

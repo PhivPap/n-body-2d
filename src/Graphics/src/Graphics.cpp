@@ -31,14 +31,13 @@ void main() {
 constexpr std::string_view fade_fragment_shader = R"glsl(
 #version 130
 uniform sampler2D texture;
-uniform vec4 decay;
+uniform float decay;
 void main() {
-    gl_FragColor = texture2D(texture, gl_TexCoord[0].xy) - decay;
+    gl_FragColor = texture2D(texture, gl_TexCoord[0].xy) - decay;  // Fade rgb too (premultiplied)
 }
 )glsl";
 
-
-Graphics::Graphics(Config::Graphics& graphics_cfg, const Bodies& bodies)
+ Graphics::Graphics(Config::Graphics& graphics_cfg, const Bodies& bodies)
         : graphics_cfg(graphics_cfg), bodies(bodies), body_positions_cache(bodies.n),
           window(sf::VideoMode(sf::Vector2u(graphics_cfg.resolution)), "N-Body Sim"),
           vp(sf::Vector2f(graphics_cfg.resolution), graphics_cfg.pixel_scale),
@@ -52,6 +51,7 @@ Graphics::Graphics(Config::Graphics& graphics_cfg, const Bodies& bodies)
     }
 
     glEnable(GL_PROGRAM_POINT_SIZE);
+    glEnable(GL_POINT_SPRITE);  // gl_PointCoord is undefined without it (compatibility profile)
     if (!body_shader.loadFromMemory(body_vertex_shader, body_fragment_shader)
             || !fade_shader.loadFromMemory(fade_fragment_shader, sf::Shader::Type::Fragment)) {
         throw std::runtime_error("Failed to load shaders");
@@ -158,7 +158,9 @@ void Graphics::draw_bodies() {
 
     std::swap(trails_texture1, trails_texture2);
     trails_sprite.setTexture(trails_texture1.getTexture(), true);
-    window.draw(trails_sprite);
+    // Bodies were alpha blended onto a transparent texture, so it holds premultiplied alpha
+    window.draw(trails_sprite,
+            sf::BlendMode(sf::BlendMode::Factor::One, sf::BlendMode::Factor::OneMinusSrcAlpha));
 }
 
 void Graphics::update_selection_tracking() {
@@ -236,7 +238,7 @@ void Graphics::reset_trails(bool resize) {
 
 void Graphics::set_fade_shader_decay() {
     if (graphics_cfg.trails_fade.count() <= 0) {
-        fade_shader.setUniform("decay", sf::Glsl::Vec4(0.f, 0.f, 0.f, 1.f));
+        fade_shader.setUniform("decay", 1.f);
         return;
     }
 
@@ -249,8 +251,7 @@ void Graphics::set_fade_shader_decay() {
     const float whole_fade_chunks = std::floor(fractional_fade_chunks);
     remainder_fractional_fade_chunks = fractional_fade_chunks - whole_fade_chunks;
 
-    fade_shader.setUniform("decay", 
-            sf::Glsl::Vec4(0.f, 0.f, 0.f, whole_fade_chunks * fade_chunk_size));
+    fade_shader.setUniform("decay", whole_fade_chunks * fade_chunk_size);
 }
 
 void Graphics::resize_view(sf::Vector2f new_size) {

@@ -1,12 +1,12 @@
 {
    "IO": {
-        "universe_infile": "universe-db/generated/ring.csv",
+        "universe_infile": "universe-db/solar-system-plus.csv",
         "universe_outfile":  "./universe-db/output.csv",
         "echo_config": true,
         "echo_bodies": false
     },
     "Simulation": {
-        "timestep": 1e2,
+        "timestep": 1e-2,
         "iterations": 1e10,
         "theta": 1.2,
         "algorithm": "barnes-hut gpu",
@@ -30,6 +30,7 @@
             "show": true,
             "show_center_of_mass": true,
             "follow": false
-        }
+        },
+        "trails_fade_time_s": 5
     }
 }

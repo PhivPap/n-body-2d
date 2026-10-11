@@ -23,7 +23,7 @@ void sigint_handler(int signum) {
     Controller::sigint_flag = true;
 }
 
-std::unique_ptr<Simulation> create_sim(const Config::Simulation& sim_cfg, Bodies& bodies) {
+std::unique_ptr<Simulation> create_sim(Config::Simulation& sim_cfg, Bodies& bodies) {
     if (sim_cfg.simtype == Config::Simulation::SimType::ALL_PAIRS) {
         return std::make_unique<AllPairsSim>(sim_cfg, bodies);
     }

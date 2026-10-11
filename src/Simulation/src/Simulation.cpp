@@ -71,10 +71,10 @@ void Simulation::post_iteration() {
 
 sf::Vector2<double> Simulation::force(const sf::Vector2<double>& pos_a,
         const sf::Vector2<double>& pos_b, double mass_a, double mass_b) const {
-    const double dist = distance(pos_a, pos_b);
-    const double force_amplitude =
-            Constants::Simulation::G * mass_a * mass_b / (dist * dist + epsilon_squared);
-    return force_amplitude * (pos_b - pos_a) / dist;
+    const double softened_dist_sq = distance_squared(pos_a, pos_b) + epsilon_squared;
+    const double force_amplitude = Constants::Simulation::G * mass_a * mass_b
+                                   / (softened_dist_sq * std::sqrt(softened_dist_sq));
+    return force_amplitude * (pos_b - pos_a);
 }
 
 double Simulation::compute_plummer_softening(const Bodies& bodies, double factor,
@@ -94,7 +94,7 @@ double Simulation::compute_plummer_softening(const Bodies& bodies, double factor
                 dist_sum += distance(bodies.pos(i), bodies.pos(j));
             }
         }
-        const auto avg_pairwise_distance = dist_sum / bodies.n;
+        const auto avg_pairwise_distance = dist_sum / (bodies.n * (bodies.n - 1) / 2);
         Log::info("Average inter-body distance: {}", Log::Distance::from(avg_pairwise_distance));
         return avg_pairwise_distance;
     };
