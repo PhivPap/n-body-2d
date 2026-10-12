@@ -1,13 +1,16 @@
 #include "Simulation/BarnesHutCuda.hpp"
 
+#include <algorithm>
+#include <cfloat>
+#include <cmath>
+#include <cstring>
 #include <cub/cub.cuh>
+#include <cuda/atomic>
 #include <cuda_runtime.h>
+#include <vector>
 
 #include "Logger/Logger.hpp"
 
-
-constexpr uint32_t BLOCK_SIZE = 256;
-constexpr int32_t LEAF_THRESHOLD = 1;  // max bodies in a leaf node before splitting
 
 #define CUDA_CHECK(call)                                                                           \
     do {                                                                                           \
@@ -18,816 +21,987 @@ constexpr int32_t LEAF_THRESHOLD = 1;  // max bodies in a leaf node before split
         }                                                                                          \
     } while (0)
 
+// An iteration runs these kernels back to back on `stream`, without waiting on the host:
+//  1. start_iteration:   squares the bodies' bounding box (collected by the previous iteration)
+//                        into the root cell of the quadtree
+//  2. compute_keys:      Hilbert key of every body within the root cell
+//  3. CUB radix sort of the keys, then reorder_bodies gathers the bodies into Hilbert order
+//  4. build_lower_nodes, build_upper_nodes: the compressed quadtree of the sorted bodies, from
+//                        their binary radix tree
+//  5. compute_forces:    every warp walks the tree for a group of 32 consecutive bodies, then
+//                        integrates them (symplectic Euler: kick, then drift). A second pass
+//                        retries the bodies of the rare groups that it was faster to give up on.
+//
+// Precision: bodies stay in double precision while the tree and the forces use single precision,
+// as consumer GPUs have a small fraction of their single precision throughput in double. Positions
+// are in units of the root cell as two-floats (hi + lo, ~48 bits), so the separation of close
+// bodies keeps full single precision wherever they are in the root cell. Nodes keep their mass
+// moments relative to one of their bodies, and forces are summed with compensation.
+
+namespace {
+constexpr uint32_t BLOCK_SIZE = 256;
+constexpr uint32_t WARP_SIZE = 32;
+constexpr uint32_t FULL_MASK = 0xFFFFFFFF;
+
+// Keys hold KEY_BITS / 2 bits per axis, so cells can be split up to KEY_BITS / 2 times (bodies
+// in the same smallest cell still get separate leaves)
+constexpr int32_t KEY_BITS = 56;
+// Equal keys are told apart by up to 32 index bits, so radix tree nodes have < KEY_BITS + 32
+// common bits, i.e. the quadtree has at most (KEY_BITS + 32) / 2 levels below the root
+constexpr int32_t MAX_TREE_DEPTH = (KEY_BITS + 32) / 2 + 1;
+
+constexpr int32_t EMPTY_CHILD = INT32_MIN;  // TreeNode::child slot without a child
+
+// compute_forces
+constexpr uint32_t FORCE_WARPS = 4;  // warps per block
+// Interactions are buffered per warp and evaluated once there are at least this many
+constexpr int32_t INTERACTION_BATCH = 64;
+// A traversal step adds at most one interaction per lane
+constexpr int32_t INTERACTION_CAPACITY = INTERACTION_BATCH + WARP_SIZE;
+// The stack is sorted by depth, and every traversal step pushes <= 4 * 32 items of the same or the
+// next depth after popping all deeper ones, so it never holds more than 4 * 32 items per depth.
+// It rarely holds more than a couple hundred though, so it starts in shared memory and only moves
+// to global memory if it might overflow.
+constexpr int32_t STACK_CAPACITY = 4 * WARP_SIZE * MAX_TREE_DEPTH;
+constexpr int32_t SHARED_STACK_CAPACITY = 512;
+// A group with more than this many times the previous iteration's average interactions is given
+// up on and its bodies are retried one by one. The rare groups spread around unrelated dense
+// regions would take long enough to stall the whole pass otherwise.
+constexpr uint32_t ABANDON_FACTOR = 2;
+constexpr uint32_t MIN_ABANDON_INTERACTIONS = 512;
+// Smallest squared softening length in units of the root cell. Keeps a body's interaction with
+// itself (zero separation) finite without softening, and is far below any resolvable separation.
+constexpr float MIN_SOFTENING_SQ = 1e-24f;
+}  // namespace
+
+// Root cell of the quadtree and the scales between SI and tree units, set by start_iteration
+struct BarnesHutCuda::Frame {
+    double origin_x, origin_y;  // lower left corner of the root cell
+    double scale;               // 1 / root cell size: body tree coordinates are in [0, 1]
+    double acc_factor;          // tree unit accelerations to m/s^2: G * total mass * scale^2
+    float softening_sq;         // in tree units
+};
+
+// Counters of an iteration, set up by start_iteration
+struct BarnesHutCuda::Counters {
+    // Bounding box of the bodies (x min, x max, y min, y max) as order preserving integers (see
+    // Device::ordered), which compute_forces collects for the next iteration
+    unsigned long long bounds[4];
+    uint32_t seed_count;   // see build_upper_nodes
+    uint32_t next_group;   // next group a compute_forces warp takes
+    uint32_t retry_count;  // bodies of abandoned groups
+    uint32_t next_retry;
+    uint32_t abandon_at;  // interactions of a group, see ABANDON_FACTOR
+    unsigned long long interactions;  // of the groups compute_forces completed
+    unsigned long long groups_done;
+};
+
+// Quadtree node, stored at the index of its binary radix tree node
+struct BarnesHutCuda::TreeNode {
+    float4 com;       // center of mass in two-float tree coordinates (hi.x, hi.y, lo.x, lo.y)
+    float mass;       // in units of the total mass
+    float open_sq;    // squared distance from which the node can stand in for its bodies
+    int32_t first;    // bodies first..last (in Hilbert order) are in the node
+    int32_t last;
+    int4 child;       // >= 0: tree node, < 0: ~body index, EMPTY_CHILD: none (always the last)
+};
+static_assert(sizeof(BarnesHutCuda::TreeNode) == 48);
+
+// A radix tree node (or body) for the thread that completes its parent, see build_upper_nodes
+struct BarnesHutCuda::Arrival {
+    int32_t node;      // >= 0: radix tree node, < 0: ~body index
+    int32_t delta;     // common prefix length of the node's keys
+    int32_t child[2];  // the node's radix tree children
+    float mass;
+    float d_x, d_y;  // first mass moment relative to the node's first body
+    int32_t padding;
+};
+static_assert(sizeof(BarnesHutCuda::Arrival) == 32);
+
+// A body or radix tree node whose parent isn't within its warp's bodies, see build_upper_nodes
+struct BarnesHutCuda::Seed {
+    Arrival arrival;
+    int32_t first, last;  // its bodies
+    int32_t padding[2];
+};
+
+using Frame = BarnesHutCuda::Frame;
+using Counters = BarnesHutCuda::Counters;
+using TreeNode = BarnesHutCuda::TreeNode;
+using Arrival = BarnesHutCuda::Arrival;
+using Seed = BarnesHutCuda::Seed;
+
+
 // ---------------------------------------------------------------------------
 // Device helpers
 // ---------------------------------------------------------------------------
 namespace Device {
-__device__ double atomic_min(double* addr, double value) {
-    using ull = unsigned long long;
-    ull* addr_as_ull = (ull*)addr;
-    ull old = *addr_as_ull;
-    ull assumed;
-    do {
-        assumed = old;
-        if (__longlong_as_double(assumed) <= value)
-            break;
-        old = atomicCAS(addr_as_ull, assumed, __double_as_longlong(value));
-    } while (assumed != old);
-    return __longlong_as_double(old);
+template <typename T, typename Op>
+__device__ __forceinline__ T warp_reduce(T value, Op op) {
+    for (uint32_t offset = WARP_SIZE / 2; offset > 0; offset /= 2) {
+        value = op(value, __shfl_xor_sync(FULL_MASK, value, offset));
+    }
+    return value;
 }
 
-__device__ double atomic_max(double* addr, double value) {
-    using ull = unsigned long long;
-    ull* addr_as_ull = (ull*)addr;
-    ull old = *addr_as_ull;
-    ull assumed;
-    do {
-        assumed = old;
-        if (__longlong_as_double(assumed) >= value)
-            break;
-        old = atomicCAS(addr_as_ull, assumed, __double_as_longlong(value));
-    } while (assumed != old);
-    return __longlong_as_double(old);
+// Bits of a double as an integer with the same order, for exact integer min/max reductions
+__host__ __device__ __forceinline__ unsigned long long ordered(double x) {
+    unsigned long long bits;
+    memcpy(&bits, &x, sizeof(bits));
+    return bits >> 63 ? ~bits : bits | (1ull << 63);
 }
 
-// Expand a 32-bit integer into 64 bits by inserting a 0 bit after each bit.
-__device__ __forceinline__ uint64_t expand_bits_2d(uint32_t v) {
-    uint64_t x = v;
-    x = (x | (x << 16)) & 0x0000FFFF0000FFFFull;
-    x = (x | (x << 8)) & 0x00FF00FF00FF00FFull;
-    x = (x | (x << 4)) & 0x0F0F0F0F0F0F0F0Full;
-    x = (x | (x << 2)) & 0x3333333333333333ull;
-    x = (x | (x << 1)) & 0x5555555555555555ull;
+__host__ __device__ __forceinline__ double from_ordered(unsigned long long bits) {
+    bits = bits >> 63 ? bits & ~(1ull << 63) : ~bits;
+    double x;
+    memcpy(&x, &bits, sizeof(x));
     return x;
 }
 
-// 64-bit Morton code for 2D point in [0,1)^2. Uses 32 bits per axis.
-__device__ __forceinline__ uint64_t morton_2d(double nx, double ny) {
-    const uint32_t ix = __double2uint_rd(fmin(fmax(nx * 4294967296.0, 0.0), 4294967295.0));
-    const uint32_t iy = __double2uint_rd(fmin(fmax(ny * 4294967296.0, 0.0), 4294967295.0));
-    return (expand_bits_2d(ix) << 1) | expand_bits_2d(iy);
+// Hilbert key of tree coordinates in [0, 1]^2. Like a Morton key, every 2 bits pick one of the 4
+// quadrants of the cell given by the previous bits (so key prefixes are quadtree cells), but the
+// curve never jumps between distant cells, which keeps runs of consecutive bodies compact.
+__device__ __forceinline__ uint64_t hilbert_key(double x, double y) {
+    constexpr double CELLS = static_cast<double>(1ull << (KEY_BITS / 2));  // per axis
+    uint32_t ix = static_cast<uint32_t>(fmin(fmax(x * CELLS, 0.0), CELLS - 1.0));
+    uint32_t iy = static_cast<uint32_t>(fmin(fmax(y * CELLS, 0.0), CELLS - 1.0));
+    uint64_t key = 0;
+    for (int32_t bit = KEY_BITS / 2 - 1; bit >= 0; bit--) {
+        const uint32_t rx = (ix >> bit) & 1;
+        const uint32_t ry = (iy >> bit) & 1;
+        key |= static_cast<uint64_t>((3 * rx) ^ ry) << (2 * bit);
+        // Rotate the quadrant so the curve continues where it left off
+        const uint32_t flip = (ry == 0 && rx == 1) ? 0xFFFFFFFF : 0;
+        ix ^= flip;
+        iy ^= flip;
+        if (ry == 0) {
+            const uint32_t tmp = ix;
+            ix = iy;
+            iy = tmp;
+        }
+    }
+    return key;
+}
+
+// Length of the common prefix of neighbouring sorted keys, equal keys are told apart by index
+__device__ __forceinline__ uint8_t key_delta(uint64_t key, uint64_t next_key, uint32_t i) {
+    return key != next_key ? __clzll(key ^ next_key) - (64 - KEY_BITS)
+                           : KEY_BITS + __clz(i ^ (i + 1));
+}
+
+__device__ __forceinline__ float4 to_two_float(double x, double y) {
+    const float hi_x = __double2float_rn(x);
+    const float hi_y = __double2float_rn(y);
+    return make_float4(hi_x, hi_y, __double2float_rn(x - hi_x), __double2float_rn(y - hi_y));
+}
+
+// Two-float coordinates p moved by (x, y), without losing precision
+__device__ __forceinline__ float4 add_two_float(const float4& p, float x, float y) {
+    const float hi_x = p.x + x;
+    const float hi_y = p.y + y;
+    const float x_part = hi_x - p.x;
+    const float y_part = hi_y - p.y;
+    const float err_x = (p.x - (hi_x - x_part)) + (x - x_part);
+    const float err_y = (p.y - (hi_y - y_part)) + (y - y_part);
+    return make_float4(hi_x, hi_y, p.z + err_x, p.w + err_y);
+}
+
+// Quadtree node of the radix tree node with bodies l..r, from its mass and first mass moment
+// relative to its first body
+__device__ __forceinline__ TreeNode quad_node(const float* __restrict__ open_sq_by_level,
+        int32_t l, int32_t r, int32_t level, float m, float d_x, float d_y,
+        const float4& first_pos, const int32_t (&child)[4]) {
+    TreeNode t;
+    // A massless node keeps its first body as center of mass, any point of it does
+    t.com = m > 0.0f ? add_two_float(first_pos, d_x / m, d_y / m) : first_pos;
+    t.mass = m;
+    t.open_sq = open_sq_by_level[level];
+    t.first = l;
+    t.last = r;
+    t.child = make_int4(child[0], child[1], child[2], child[3]);
+    return t;
+}
+
+// Compensated (Kahan) float sum, as accurate as a double for the few terms it gets
+struct KahanSum {
+    float sum = 0.0f;
+    float compensation = 0.0f;
+
+    __device__ __forceinline__ void add(float value) {
+        const float y = value - compensation;
+        const float t = sum + y;
+        compensation = (t - sum) - y;
+        sum = t;
+    }
+    __device__ __forceinline__ double value() const {
+        return static_cast<double>(sum) - compensation;
+    }
+};
+
+// Acceleration of a body by the buffered interactions, in tree units
+__device__ __forceinline__ void interact(const float4* list_pos, const float* list_mass,
+        int32_t count, const float4& body, float softening_sq, KahanSum& acc_x, KahanSum& acc_y) {
+    float sum_x = 0.0f, sum_y = 0.0f;
+#pragma unroll 4
+    for (int32_t i = 0; i < count; i++) {
+        const float4 p = list_pos[i];
+        const float dx = (p.x - body.x) + (p.z - body.z);
+        const float dy = (p.y - body.y) + (p.w - body.w);
+        const float dist_sq = fmaf(dx, dx, fmaf(dy, dy, softening_sq));
+        const float inv_dist = rsqrtf(dist_sq);
+        const float f = list_mass[i] * inv_dist * inv_dist * inv_dist;
+        sum_x = fmaf(dx, f, sum_x);
+        sum_y = fmaf(dy, f, sum_y);
+    }
+    acc_x.add(sum_x);
+    acc_y.add(sum_y);
 }
 }  // namespace Device
+
 
 // ---------------------------------------------------------------------------
 // Kernels
 // ---------------------------------------------------------------------------
 namespace Kernel {
-
-// ---- Bounding box ----
-__global__ void compute_bounding_box(const Vector2* __restrict__ pos, uint32_t n,
-        BarnesHutCuda::Box* global_bbox) {
-    extern __shared__ double sdata[];
-    double* sxmin = sdata;
-    double* sxmax = sdata + blockDim.x;
-    double* symin = sdata + 2 * blockDim.x;
-    double* symax = sdata + 3 * blockDim.x;
-
-    const uint32_t tid = threadIdx.x;
-    const uint32_t idx = blockIdx.x * blockDim.x + tid;
-
-    const double x = (idx < n) ? pos[idx].x : INFINITY;
-    const double y = (idx < n) ? pos[idx].y : INFINITY;
-
-    sxmin[tid] = x;
-    sxmax[tid] = (idx < n) ? x : -INFINITY;
-    symin[tid] = y;
-    symax[tid] = (idx < n) ? y : -INFINITY;
-    __syncthreads();
-
-    for (uint32_t stride = blockDim.x / 2; stride > 0; stride >>= 1) {
-        if (tid < stride) {
-            sxmin[tid] = fmin(sxmin[tid], sxmin[tid + stride]);
-            sxmax[tid] = fmax(sxmax[tid], sxmax[tid + stride]);
-            symin[tid] = fmin(symin[tid], symin[tid + stride]);
-            symax[tid] = fmax(symax[tid], symax[tid + stride]);
-        }
-        __syncthreads();
+// Squares the bounding box of the bodies into the root cell and sets up the iteration's counters
+__global__ void start_iteration(double softening_sq, double g_total_mass, Counters* counters,
+        Frame* frame) {
+    const double x_min = Device::from_ordered(counters->bounds[0]);
+    const double x_max = Device::from_ordered(counters->bounds[1]);
+    const double y_min = Device::from_ordered(counters->bounds[2]);
+    const double y_max = Device::from_ordered(counters->bounds[3]);
+    // A degenerate box gets an arbitrary size
+    double size = fmax(x_max - x_min, y_max - y_min);
+    if (!(size > 0.0)) {
+        size = 1.0;
     }
+    const double scale = 1.0 / size;
+    frame->origin_x = 0.5 * (x_min + x_max - size);
+    frame->origin_y = 0.5 * (y_min + y_max - size);
+    frame->scale = scale;
+    frame->acc_factor = g_total_mass * scale * scale;
+    frame->softening_sq = fmaxf(static_cast<float>(softening_sq * scale * scale), MIN_SOFTENING_SQ);
 
-    if (tid == 0) {
-        Device::atomic_min(&global_bbox->x_min, sxmin[0]);
-        Device::atomic_max(&global_bbox->x_max, sxmax[0]);
-        Device::atomic_min(&global_bbox->y_min, symin[0]);
-        Device::atomic_max(&global_bbox->y_max, symax[0]);
+    counters->bounds[0] = counters->bounds[2] = UINT64_MAX;
+    counters->bounds[1] = counters->bounds[3] = 0;
+    counters->seed_count = 0;
+    counters->next_group = 0;
+    counters->retry_count = 0;
+    counters->next_retry = 0;
+    // The previous iteration's groups set the bar for this one's
+    constexpr unsigned long long NEVER = UINT32_MAX;
+    unsigned long long abandon_at = NEVER;
+    if (counters->groups_done > 0) {
+        abandon_at = max(ABANDON_FACTOR * counters->interactions / counters->groups_done,
+                static_cast<unsigned long long>(MIN_ABANDON_INTERACTIONS));
     }
+    counters->abandon_at = static_cast<uint32_t>(min(abandon_at, NEVER));
+    counters->interactions = 0;
+    counters->groups_done = 0;
 }
 
-// ---- Morton code computation ----
-__global__ void compute_morton_codes(const Vector2* __restrict__ pos, uint32_t n,
-        const BarnesHutCuda::Box* __restrict__ bbox, uint64_t* morton, int32_t* indices) {
+__global__ void compute_keys(const double2* __restrict__ pos, uint32_t n,
+        const Frame* __restrict__ frame, uint64_t* keys, uint32_t* order) {
     const uint32_t i = blockIdx.x * blockDim.x + threadIdx.x;
-    if (i >= n)
+    if (i >= n) {
         return;
-
-    const BarnesHutCuda::Box b = *bbox;
-    const double inv_w = 1.0 / (b.x_max - b.x_min);
-    const double inv_h = 1.0 / (b.y_max - b.y_min);
-
-    const double nx = (pos[i].x - b.x_min) * inv_w;
-    const double ny = (pos[i].y - b.y_min) * inv_h;
-
-    morton[i] = Device::morton_2d(nx, ny);
-    indices[i] = static_cast<int32_t>(i);
-}
-
-// ---- Reorder body arrays by sorted index ----
-__global__ void reorder_bodies(const int32_t* __restrict__ sorted_idx,
-        const Vector2* __restrict__ pos_in, const Vector2* __restrict__ vel_in,
-        const double* __restrict__ mass_in, const int32_t* __restrict__ orig_idx_in,
-        Vector2* pos_out, Vector2* vel_out, double* mass_out, int32_t* orig_idx_out, int32_t n) {
-    const int32_t i = static_cast<int32_t>(blockIdx.x * blockDim.x + threadIdx.x);
-    if (i >= n)
-        return;
-    const int32_t src = sorted_idx[i];
-    pos_out[i] = pos_in[src];
-    vel_out[i] = vel_in[src];
-    mass_out[i] = mass_in[src];
-    orig_idx_out[i] = orig_idx_in[src];
-}
-
-// ---- Tree build: topology only (no COM computation) ----
-// One thread per work-list item. Only does binary search on Morton codes
-// to find child split points and allocate child nodes.
-
-__device__ int32_t lower_bound_quadrant(const uint64_t* __restrict__ morton, int32_t lo, int32_t hi,
-        uint64_t target, int32_t shift) {
-    while (lo < hi) {
-        int32_t mid = lo + (hi - lo) / 2;
-        if (((morton[mid] >> shift) & 3ull) < target)
-            lo = mid + 1;
-        else
-            hi = mid;
     }
-    return lo;
+    const double2 p = pos[i];
+    const double scale = frame->scale;
+    keys[i] = Device::hilbert_key((p.x - frame->origin_x) * scale, (p.y - frame->origin_y) * scale);
+    order[i] = i;
 }
 
-__global__ void build_tree_topology(const uint64_t* __restrict__ morton,
-        // tree SoA
-        double* t_wsq, int32_t* t_c0, int32_t* t_c1, int32_t* t_c2, int32_t* t_c3,
-        int32_t* t_bstart, int32_t* t_bend,
-        // book-keeping
-        const int32_t* work_list, int32_t work_count, int32_t* work_list_next,
-        int32_t* work_count_next, int32_t* node_alloc, int32_t max_nodes, int32_t level) {
-
-    const int32_t tid = static_cast<int32_t>(blockIdx.x * blockDim.x + threadIdx.x);
-    if (tid >= work_count)
+// Gathers the bodies into Hilbert order and prepares the tree build
+__global__ void reorder_bodies(const uint32_t* __restrict__ order,
+        const uint64_t* __restrict__ keys, const Frame* __restrict__ frame, uint32_t n,
+        const double2* __restrict__ pos, const double2* __restrict__ vel,
+        const float* __restrict__ mass, const uint32_t* __restrict__ id, double2* pos_out,
+        double2* vel_out, float* mass_out, uint32_t* id_out, float4* body_pos,
+        uint8_t* key_delta, int32_t* merge_bound) {
+    const uint32_t i = blockIdx.x * blockDim.x + threadIdx.x;
+    if (i >= n) {
         return;
+    }
+    const uint32_t src = order[i];
+    const double2 p = pos[src];
+    pos_out[i] = p;
+    vel_out[i] = vel[src];
+    mass_out[i] = mass[src];
+    id_out[i] = id[src];
 
-    const int32_t nid = work_list[tid];
-    const int32_t start = t_bstart[nid];
-    const int32_t end = t_bend[nid];
+    const double scale = frame->scale;
+    body_pos[i] =
+            Device::to_two_float((p.x - frame->origin_x) * scale, (p.y - frame->origin_y) * scale);
+    if (i + 1 < n) {
+        key_delta[i] = Device::key_delta(keys[i], keys[i + 1], i);
+        merge_bound[i] = -1;
+    }
+}
 
-    // Leaf condition: too few bodies or max depth reached
-    if ((end - start) < LEAF_THRESHOLD || level >= 30)
+// The quadtree comes from the binary radix tree of the sorted keys. Radix node p splits its bodies
+// l..r between p and p + 1, so its common prefix length is key_delta[p], and l - 1 and r are the
+// nearest bodies with smaller common prefix lengths with their next. A radix node is a quadtree
+// node if its enclosing quadtree cell (level key_delta / 2) is smaller than its parent's, all
+// others are half cells whose children their parent adopts. This gives the same compressed
+// quadtree as a top-down build (without empty cells and single child chains).
+// Nodes get their mass and first mass moment relative to their first body,
+// d = sum(m * (u - u_first)), which stays as accurate as the node is small in single precision.
+//
+// Most nodes are within the 32 bodies of a warp, which builds them with shuffles here. The bodies
+// and nodes whose parent isn't are the seeds of build_upper_nodes.
+__global__ void build_lower_nodes(uint32_t n, const uint8_t* __restrict__ key_delta,
+        const float4* __restrict__ body_pos, const float* __restrict__ body_mass,
+        const float* __restrict__ open_sq_by_level, Counters* counters, Seed* seeds,
+        TreeNode* nodes, int32_t* root) {
+    __shared__ TreeNode block_nodes[BLOCK_SIZE];
+    const int32_t lane = threadIdx.x % WARP_SIZE;
+    const uint32_t lanes_before = (1u << lane) - 1;
+    const int32_t first_body = blockIdx.x * blockDim.x + threadIdx.x - lane;
+    if (first_body >= static_cast<int32_t>(n)) {
         return;
+    }
+    const int32_t last_body = n - 1;
+    const auto delta_of = [&](int32_t i) -> int32_t {
+        return i >= 0 && i < last_body ? key_delta[i] : -1;
+    };
+    const auto shfl_pos = [](const float4& p, int32_t src) {
+        return make_float4(__shfl_sync(FULL_MASK, p.x, src), __shfl_sync(FULL_MASK, p.y, src),
+                __shfl_sync(FULL_MASK, p.z, src), __shfl_sync(FULL_MASK, p.w, src));
+    };
+    // Every lane takes part in every shuffle below, branches only select from their results
 
-    // Find split points via binary search on 2 Morton bits at this level
-    const int32_t shift = 62 - level * 2;
+    // Lane k has body first_body + k and the radix node that splits after it
+    const int32_t body = first_body + lane;
+    const int32_t delta = delta_of(body);
+    const int32_t delta_before = delta_of(first_body - 1);
+    const float4 pos = body <= last_body ? body_pos[body] : make_float4(0.0f, 0.0f, 0.0f, 0.0f);
+    const float mass = body <= last_body ? body_mass[body] : 0.0f;
 
-    const int32_t b0 = lower_bound_quadrant(morton, start, end + 1, 0ull, shift);
-    const int32_t b1 = lower_bound_quadrant(morton, start, end + 1, 1ull, shift);
-    const int32_t b2 = lower_bound_quadrant(morton, start, end + 1, 2ull, shift);
-    const int32_t b3 = lower_bound_quadrant(morton, start, end + 1, 3ull, shift);
-    const int32_t b4 = end + 1;
+    // The node is local if it is within the warp's bodies: lanes l..r (l = -1, r = WARP_SIZE if
+    // it reaches past them)
+    int32_t l = delta_before < delta ? 0 : -1;
+    int32_t r = WARP_SIZE;
+    for (int32_t k = 0; k < WARP_SIZE; k++) {
+        const int32_t delta_k = __shfl_sync(FULL_MASK, delta, k);
+        if (delta_k < delta) {
+            if (k < lane) {
+                l = k + 1;
+            }
+            else if (k > lane && r == WARP_SIZE) {
+                r = k;
+            }
+        }
+    }
+    const bool local = body < last_body && l >= 0 && r < WARP_SIZE;
 
-    int32_t cs[4], ce[4];
-    cs[0] = b0;
-    ce[0] = b1 - 1;
-    cs[1] = b1;
-    ce[1] = b2 - 1;
-    cs[2] = b2;
-    ce[2] = b3 - 1;
-    cs[3] = b3;
-    ce[3] = b4 - 1;
+    // Local nodes' moments and radix children: their halves' radix nodes split where the common
+    // prefix is shortest
+    int32_t left_split = 0, right_split = 0;
+    int32_t left_delta = INT32_MAX, right_delta = INT32_MAX;
+    const float4 first_pos = shfl_pos(pos, max(l, 0));
+    float m = 0.0f, d_x = 0.0f, d_y = 0.0f;
+    for (int32_t k = 0; k < WARP_SIZE; k++) {
+        const int32_t delta_k = __shfl_sync(FULL_MASK, delta, k);
+        const float mass_k = __shfl_sync(FULL_MASK, mass, k);
+        const float4 pos_k = shfl_pos(pos, k);
+        if (k >= l && k <= r) {
+            m += mass_k;
+            d_x += mass_k * ((pos_k.x - first_pos.x) + (pos_k.z - first_pos.z));
+            d_y += mass_k * ((pos_k.y - first_pos.y) + (pos_k.w - first_pos.w));
+            if (k < lane && delta_k < left_delta) {
+                left_delta = delta_k;
+                left_split = k;
+            }
+            else if (k > lane && k < r && delta_k < right_delta) {
+                right_delta = delta_k;
+                right_split = k;
+            }
+        }
+    }
+    const int32_t left_child = l == lane ? ~body : first_body + left_split;
+    const int32_t right_child = r == lane + 1 ? ~(body + 1) : first_body + right_split;
+    const int32_t left_grandchildren[2] = {__shfl_sync(FULL_MASK, left_child, left_split),
+            __shfl_sync(FULL_MASK, right_child, left_split)};
+    const int32_t right_grandchildren[2] = {__shfl_sync(FULL_MASK, left_child, right_split),
+            __shfl_sync(FULL_MASK, right_child, right_split)};
 
-    int32_t n_children = 0;
-    for (int32_t q = 0; q < 4; ++q)
-        if (cs[q] <= ce[q])
-            ++n_children;
+    // The parent splits at the end with the longer common prefix
+    const int32_t delta_end = __shfl_sync(FULL_MASK, delta, min(r, WARP_SIZE - 1));
+    const int32_t delta_before_l = __shfl_sync(FULL_MASK, delta, max(l - 1, 0));
+    const int32_t delta_start = l == 0 ? delta_before : delta_before_l;
+    const int32_t parent_split = delta_end > delta_start ? r : l - 1;
+    const bool parent_local = __shfl_sync(FULL_MASK, local, max(parent_split, 0))
+                              && parent_split >= 0 && parent_split < WARP_SIZE;
+    // Same for the lane's body, a leaf
+    const int32_t delta_previous = __shfl_sync(FULL_MASK, delta, max(lane - 1, 0));
+    const int32_t delta_left = lane == 0 ? delta_before : delta_previous;
+    const int32_t leaf_parent_split = delta > delta_left ? lane : lane - 1;
+    const bool leaf_parent_local = __shfl_sync(FULL_MASK, local, max(leaf_parent_split, 0))
+                                   && leaf_parent_split >= 0;
 
-    if (n_children == 0)
-        return;
-
-    const int32_t child_base = atomicAdd(node_alloc, 4);
-    if (child_base + 3 >= max_nodes)
-        return;
-
-    const double child_wsq = t_wsq[nid] * 0.25;
-
-    t_c0[nid] = child_base + 0;
-    t_c1[nid] = child_base + 1;
-    t_c2[nid] = child_base + 2;
-    t_c3[nid] = child_base + 3;
-
-    for (int32_t q = 0; q < 4; ++q) {
-        const int32_t cid = child_base + q;
-        t_wsq[cid] = child_wsq;
-        t_c0[cid] = -1;
-        t_c1[cid] = -1;
-        t_c2[cid] = -1;
-        t_c3[cid] = -1;
-        if (cs[q] <= ce[q]) {
-            t_bstart[cid] = cs[q];
-            t_bend[cid] = ce[q];
-            work_list_next[atomicAdd(work_count_next, 1)] = cid;
+    const bool is_root = first_body + l == 0 && first_body + r == last_body;
+    const int32_t level = delta / 2;
+    if (local && (is_root || level > max(delta_start, delta_end) / 2)) {
+        int32_t child[4] = {EMPTY_CHILD, EMPTY_CHILD, EMPTY_CHILD, EMPTY_CHILD};
+        int32_t k = 0;
+        if (left_child < 0 || left_delta / 2 > level) {
+            child[k++] = left_child;
         }
         else {
-            t_bstart[cid] = -1;
-            t_bend[cid] = -1;
+            child[k++] = left_grandchildren[0];
+            child[k++] = left_grandchildren[1];
+        }
+        if (right_child < 0 || right_delta / 2 > level) {
+            child[k++] = right_child;
+        }
+        else {
+            child[k++] = right_grandchildren[0];
+            child[k++] = right_grandchildren[1];
+        }
+        block_nodes[threadIdx.x] = Device::quad_node(open_sq_by_level, first_body + l,
+                first_body + r, level, m, d_x, d_y, first_pos, child);
+        if (is_root) {
+            *root = body;
         }
     }
+    // The warp's nodes are written together, which is much faster than each lane writing its own.
+    // The slots of nodes that aren't local quadtree nodes get junk, build_upper_nodes overwrites
+    // those it builds.
+    __syncwarp();
+    const auto warp_nodes = reinterpret_cast<const float4*>(&block_nodes[threadIdx.x - lane]);
+    const auto nodes_out = reinterpret_cast<float4*>(&nodes[first_body]);
+    constexpr int32_t NODE_FLOAT4S = sizeof(TreeNode) / sizeof(float4);
+    // The last lane's node always reaches past the warp's bodies
+    const int32_t node_count = min(static_cast<int32_t>(WARP_SIZE) - 1, last_body - first_body);
+    for (int32_t k = lane; k < node_count * NODE_FLOAT4S; k += WARP_SIZE) {
+        nodes_out[k] = warp_nodes[k];
+    }
+
+    const bool leaf_seed = body <= last_body && !leaf_parent_local;
+    const bool node_seed = local && !is_root && !parent_local;
+    const uint32_t leaf_seeds = __ballot_sync(FULL_MASK, leaf_seed);
+    const uint32_t node_seeds = __ballot_sync(FULL_MASK, node_seed);
+    uint32_t seed_at = 0;
+    if (lane == 0) {
+        seed_at = atomicAdd(&counters->seed_count, __popc(leaf_seeds) + __popc(node_seeds));
+    }
+    seed_at = __shfl_sync(FULL_MASK, seed_at, 0);
+    if (leaf_seed) {
+        seeds[seed_at + __popc(leaf_seeds & lanes_before)] =
+                Seed{{~body, INT32_MAX, {EMPTY_CHILD, EMPTY_CHILD}, mass, 0.0f, 0.0f}, body, body};
+    }
+    if (node_seed) {
+        seeds[seed_at + __popc(leaf_seeds) + __popc(node_seeds & lanes_before)] =
+                Seed{{body, delta, {left_child, right_child}, m, d_x, d_y}, first_body + l,
+                        first_body + r};
+    }
 }
 
-// ---- COM computation: one pass over all bodies ----
-// Each thread processes one body and atomically accumulates into its
-// leaf node's COM. Then separately propagate up.
-// But for simplicity and correctness we use a single kernel that
-// processes each tree node (from leaf list) and computes its COM via reduction.
-
-// Compute COM for leaf nodes in a given level's work list.
-// Skips internal nodes (child0 >= 0).
-// Launched as 1 block per node.
-__global__ void compute_leaf_com(const Vector2* __restrict__ pos, const double* __restrict__ mass,
-        double* t_mass, double* t_com_x, double* t_com_y, const int32_t* node_list,
-        int32_t node_count, const int32_t* t_bstart, const int32_t* t_bend, const int32_t* t_c0) {
-
-    if (static_cast<int32_t>(blockIdx.x) >= node_count)
+// The rest of the tree, built bottom-up from the seeds: each climbs to its parent, and the second
+// child to reach a parent completes it from what the first one left there (Apetrei, "Fast and
+// Simple Agglomerative LBVH Construction", 2014)
+__global__ void build_upper_nodes(uint32_t n, const uint8_t* __restrict__ key_delta,
+        const float4* __restrict__ body_pos, const float* __restrict__ open_sq_by_level,
+        const Counters* __restrict__ counters, const Seed* __restrict__ seeds, Arrival* arrivals,
+        int32_t* merge_bound, TreeNode* nodes, int32_t* root) {
+    const uint32_t s = blockIdx.x * blockDim.x + threadIdx.x;
+    if (s >= counters->seed_count) {
         return;
+    }
+    const int32_t last_body = n - 1;
+    const auto parent_is_right = [&](int32_t l, int32_t r) {
+        return l == 0 || (r != last_body && key_delta[r] > key_delta[l - 1]);
+    };
 
-    const int32_t nid = node_list[blockIdx.x];
-
-    // Skip internal nodes
-    if (t_c0[nid] >= 0)
-        return;
-
-    const int32_t start = t_bstart[nid];
-    const int32_t end = t_bend[nid];
-
-    // Fast path for single-body leaf (overwhelmingly common case)
-    if (start == end) {
-        if (threadIdx.x == 0) {
-            t_mass[nid] = mass[start];
-            t_com_x[nid] = pos[start].x;
-            t_com_y[nid] = pos[start].y;
+    Arrival own = seeds[s].arrival;
+    int32_t l = seeds[s].first;
+    int32_t r = seeds[s].last;
+    while (true) {
+        const bool is_left_child = parent_is_right(l, r);
+        const int32_t parent = is_left_child ? r : l - 1;
+        const int32_t parent_delta = key_delta[parent];
+        Arrival* const slots = &arrivals[2 * parent];
+        slots[is_left_child ? 0 : 1] = own;
+        // Releases this node to the sibling's thread, or acquires the sibling from it
+        const int32_t other_bound =
+                cuda::atomic_ref<int32_t, cuda::thread_scope_device>(merge_bound[parent])
+                        .exchange(is_left_child ? l : r, cuda::memory_order_acq_rel);
+        if (other_bound < 0) {
+            return;  // the sibling's thread completes the parent
         }
-        return;
-    }
+        (is_left_child ? r : l) = other_bound;  // the parent's bodies, split after `parent`
+        const Arrival sibling = slots[is_left_child ? 1 : 0];
+        const Arrival& left = is_left_child ? own : sibling;
+        const Arrival& right = is_left_child ? sibling : own;
 
-    // Multi-body leaf: reduction
-    extern __shared__ char smem_raw[];
-    double* sMass = reinterpret_cast<double*>(smem_raw);
-    double* sComX = sMass + blockDim.x;
-    double* sComY = sComX + blockDim.x;
-    const int32_t tx = static_cast<int32_t>(threadIdx.x);
+        // The right child's moment is relative to its own first body
+        const float4 first_pos = body_pos[l];
+        const float4 split_pos = body_pos[parent + 1];
+        Arrival completed;
+        completed.node = parent;
+        completed.delta = parent_delta;
+        completed.child[0] = left.node;
+        completed.child[1] = right.node;
+        completed.mass = left.mass + right.mass;
+        completed.d_x = left.d_x + right.d_x
+                        + right.mass * ((split_pos.x - first_pos.x) + (split_pos.z - first_pos.z));
+        completed.d_y = left.d_y + right.d_y
+                        + right.mass * ((split_pos.y - first_pos.y) + (split_pos.w - first_pos.w));
 
-    double M = 0.0, Rx = 0.0, Ry = 0.0;
-    for (int32_t i = start + tx; i <= end; i += static_cast<int32_t>(blockDim.x)) {
-        const double m = mass[i];
-        M += m;
-        Rx += m * pos[i].x;
-        Ry += m * pos[i].y;
-    }
-    sMass[tx] = M;
-    sComX[tx] = Rx;
-    sComY[tx] = Ry;
-    __syncthreads();
-
-    for (uint32_t s = blockDim.x / 2; s > 0; s >>= 1) {
-        if (static_cast<uint32_t>(tx) < s) {
-            sMass[tx] += sMass[tx + s];
-            sComX[tx] += sComX[tx + s];
-            sComY[tx] += sComY[tx + s];
-        }
-        __syncthreads();
-    }
-
-    if (tx == 0) {
-        t_mass[nid] = sMass[0];
-        t_com_x[nid] = sComX[0] / sMass[0];
-        t_com_y[nid] = sComY[0] / sMass[0];
-    }
-}
-
-// Propagate COM from children to parents.
-// Skips leaf nodes (child0 < 0).
-// One thread per node in the level's work list.
-__global__ void propagate_com_up(double* t_mass, double* t_com_x, double* t_com_y,
-        const int32_t* t_c0, const int32_t* t_c1, const int32_t* t_c2, const int32_t* t_c3,
-        const int32_t* t_bstart, const int32_t* node_list, int32_t count) {
-
-    const int32_t tid = static_cast<int32_t>(blockIdx.x * blockDim.x + threadIdx.x);
-    if (tid >= count)
-        return;
-
-    const int32_t nid = node_list[tid];
-
-    // Skip leaf nodes
-    if (t_c0[nid] < 0)
-        return;
-
-    const int32_t children[4] = {t_c0[nid], t_c1[nid], t_c2[nid], t_c3[nid]};
-
-    double M = 0.0, Rx = 0.0, Ry = 0.0;
-    for (int32_t q = 0; q < 4; ++q) {
-        const int32_t cid = children[q];
-        if (t_bstart[cid] < 0)
-            continue;  // empty child
-        const double cm = t_mass[cid];
-        M += cm;
-        Rx += cm * t_com_x[cid];
-        Ry += cm * t_com_y[cid];
-    }
-    t_mass[nid] = M;
-    t_com_x[nid] = Rx / M;
-    t_com_y[nid] = Ry / M;
-}
-
-// ---- Pack SoA tree → AoS ForceNode array ----
-__global__ void pack_force_nodes(const double* __restrict__ t_mass,
-        const double* __restrict__ t_com_x, const double* __restrict__ t_com_y,
-        const double* __restrict__ t_wsq, const int32_t* __restrict__ t_c0,
-        const int32_t* __restrict__ t_bstart, const int32_t* __restrict__ t_bend, ForceNode* out,
-        int32_t node_count) {
-
-    const int32_t i = static_cast<int32_t>(blockIdx.x * blockDim.x + threadIdx.x);
-    if (i >= node_count)
-        return;
-
-    ForceNode fn;
-    fn.com_x = t_com_x[i];
-    fn.com_y = t_com_y[i];
-    fn.mass = t_mass[i];
-    fn.width_sq = t_wsq[i];
-    fn.c0 = t_c0[i];
-    fn.body_start = t_bstart[i];
-    fn.body_end = t_bend[i];
-    // Build child mask: children are c0, c0+1, c0+2, c0+3
-    uint8_t mask = 0;
-    if (fn.c0 >= 0) {
-        if (t_bstart[fn.c0] >= 0)
-            mask |= 1u;
-        if (t_bstart[fn.c0 + 1] >= 0)
-            mask |= 2u;
-        if (t_bstart[fn.c0 + 2] >= 0)
-            mask |= 4u;
-        if (t_bstart[fn.c0 + 3] >= 0)
-            mask |= 8u;
-    }
-    fn.child_mask = mask;
-    out[i] = fn;
-}
-
-// ---- Force computation (one thread per body, SoA tree) ----
-__global__ void compute_force(
-        // tree SoA (read-only)
-        const double* __restrict__ t_mass, const double* __restrict__ t_com_x,
-        const double* __restrict__ t_com_y, const double* __restrict__ t_wsq,
-        const int32_t* __restrict__ t_c0, const int32_t* __restrict__ t_bstart,
-        const int32_t* __restrict__ t_bend,
-        // body data
-        const Vector2* __restrict__ pos, const double* __restrict__ mass, Vector2* vel, int32_t n,
-        double epsilon_sq, double G_dt, double theta_sq) {
-
-    const int32_t i = static_cast<int32_t>(blockIdx.x * blockDim.x + threadIdx.x);
-    if (i >= n)
-        return;
-
-    const double body_x = pos[i].x;
-    const double body_y = pos[i].y;
-    double acc_x = 0.0, acc_y = 0.0;
-
-    constexpr int32_t STACK_CAPACITY = 128;
-    int32_t stack[STACK_CAPACITY];
-    int32_t top = 0;
-    stack[0] = 0;  // root
-
-    while (top >= 0) {
-        const int32_t nid = stack[top--];
-
-        const int32_t bs = __ldg(&t_bstart[nid]);
-        if (bs < 0)
-            continue;  // empty node
-
-        const double node_mass = __ldg(&t_mass[nid]);
-        const double cx = __ldg(&t_com_x[nid]);
-        const double cy = __ldg(&t_com_y[nid]);
-
-        const double dx = cx - body_x;
-        const double dy = cy - body_y;
-        const double dist_sq = dx * dx + dy * dy;
-
-        const int32_t c0 = __ldg(&t_c0[nid]);
-        const int32_t be = __ldg(&t_bend[nid]);
-
-        // Leaf node: c0 == -1
-        if (c0 < 0) {
-            if (bs == be) {
-                // Single-body leaf
-                if (bs != i) {
-                    const double d2 = dist_sq + epsilon_sq;
-                    const double inv_r = rsqrt(d2);
-                    const double inv_r3 = inv_r * inv_r * inv_r;
-                    acc_x += dx * (node_mass * inv_r3);
-                    acc_y += dy * (node_mass * inv_r3);
+        const bool is_root = l == 0 && r == last_body;
+        const int32_t level = parent_delta / 2;
+        if (is_root || level > key_delta[parent_is_right(l, r) ? r : l - 1] / 2) {
+            int32_t child[4] = {EMPTY_CHILD, EMPTY_CHILD, EMPTY_CHILD, EMPTY_CHILD};
+            int32_t k = 0;
+            for (const Arrival* c : {&left, &right}) {
+                if (c->node < 0 || c->delta / 2 > level) {
+                    child[k++] = c->node;
+                }
+                else {
+                    child[k++] = c->child[0];
+                    child[k++] = c->child[1];
                 }
             }
-            else if (i < bs || i > be) {
-                // Body outside this leaf — use COM
-                const double r2 = dist_sq + epsilon_sq;
-                const double inv_r = rsqrt(r2);
-                const double inv_r3 = inv_r * inv_r * inv_r;
-                const double a = node_mass * inv_r3;
-                acc_x += dx * a;
-                acc_y += dy * a;
+            nodes[parent] = Device::quad_node(open_sq_by_level, l, r, level, completed.mass,
+                    completed.d_x, completed.d_y, first_pos, child);
+        }
+        if (is_root) {
+            *root = parent;
+            return;
+        }
+        own = completed;
+    }
+}
+
+// Each warp takes groups of 32 consecutive bodies (in Hilbert order) and walks the tree for all of
+// them together. A node can stand in for its bodies if it is far enough from every body of the
+// group, i.e. from the group's bounding box, and contains none of them, else it is opened. The
+// lanes test 32 items of the traversal stack at once, the accepted nodes and bodies are buffered
+// in shared memory, and the whole warp evaluates the buffer once it fills up. Finally every lane
+// integrates its body, and stages it for the copy to the host if pos_out is given.
+__global__ void __launch_bounds__(FORCE_WARPS * WARP_SIZE)
+        compute_forces(const TreeNode* __restrict__ nodes, const float4* __restrict__ body_pos,
+                const float* __restrict__ body_mass, const Frame* __restrict__ frame,
+                const int32_t* __restrict__ root, const uint32_t* __restrict__ id, uint32_t n,
+                double dt, bool retry_pass, Counters* counters, uint32_t* retry_bodies,
+                int32_t* stacks, double2* pos, double2* vel, double2* pos_out, double2* vel_out) {
+    __shared__ float4 interaction_pos[FORCE_WARPS][INTERACTION_CAPACITY];
+    __shared__ float interaction_mass[FORCE_WARPS][INTERACTION_CAPACITY];
+    __shared__ int32_t shared_stacks[FORCE_WARPS][SHARED_STACK_CAPACITY];
+    const uint32_t lane = threadIdx.x % WARP_SIZE;
+    const uint32_t warp = threadIdx.x / WARP_SIZE;
+    const uint32_t lanes_before = (1u << lane) - 1;
+    float4* const list_pos = interaction_pos[warp];
+    float* const list_mass = interaction_mass[warp];
+    int32_t* const global_stack = stacks + (blockIdx.x * FORCE_WARPS + warp) * STACK_CAPACITY;
+
+    const float softening_sq = frame->softening_sq;
+    const double acc_dt = frame->acc_factor * dt;
+    const int32_t root_node = n > 1 ? *root : -1;
+    // The retry pass takes the bodies of abandoned groups one by one, and never abandons them
+    const uint32_t groups = retry_pass ? counters->retry_count : (n + WARP_SIZE - 1) / WARP_SIZE;
+    uint32_t* const next_group = retry_pass ? &counters->next_retry : &counters->next_group;
+    const uint32_t abandon_at = retry_pass ? UINT32_MAX : counters->abandon_at;
+    unsigned long long warp_interactions = 0;
+    uint32_t warp_groups = 0;
+
+    while (true) {
+        uint32_t group = 0;
+        if (lane == 0) {
+            group = atomicAdd(next_group, 1);
+        }
+        group = __shfl_sync(FULL_MASK, group, 0);
+        if (group >= groups) {
+            break;
+        }
+        const int32_t first = retry_pass ? retry_bodies[group] : group * WARP_SIZE;
+        const int32_t last = retry_pass ? first : min(first + WARP_SIZE, n) - 1;
+        // Lanes past the last body repeat it
+        const int32_t body = min(first + static_cast<int32_t>(lane), last);
+        const float4 b = body_pos[body];
+
+        // Group bounding box, relative to the first body to keep it exact
+        const float ref_x_hi = __shfl_sync(FULL_MASK, b.x, 0);
+        const float ref_y_hi = __shfl_sync(FULL_MASK, b.y, 0);
+        const float ref_x_lo = __shfl_sync(FULL_MASK, b.z, 0);
+        const float ref_y_lo = __shfl_sync(FULL_MASK, b.w, 0);
+        const float rel_x = (b.x - ref_x_hi) + (b.z - ref_x_lo);
+        const float rel_y = (b.y - ref_y_hi) + (b.w - ref_y_lo);
+        const auto min_op = [](float a, float b) { return fminf(a, b); };
+        const auto max_op = [](float a, float b) { return fmaxf(a, b); };
+        const float box_min_x = Device::warp_reduce(rel_x, min_op);
+        const float box_max_x = Device::warp_reduce(rel_x, max_op);
+        const float box_min_y = Device::warp_reduce(rel_y, min_op);
+        const float box_max_y = Device::warp_reduce(rel_y, max_op);
+        const float box_center_x = 0.5f * (box_min_x + box_max_x);
+        const float box_center_y = 0.5f * (box_min_y + box_max_y);
+        const float box_half_x = 0.5f * (box_max_x - box_min_x);
+        const float box_half_y = 0.5f * (box_max_y - box_min_y);
+
+        Device::KahanSum acc_x, acc_y;
+        int32_t* stack = shared_stacks[warp];
+        int32_t stack_capacity = SHARED_STACK_CAPACITY;
+        int32_t stack_size = 0;
+        int32_t list_size = 0;
+        uint32_t interactions = 0;
+        if (root_node >= 0) {
+            if (lane == 0) {
+                stack[0] = root_node;
             }
-            else {
-                // Body inside multi-body leaf — iterate
-                for (int32_t j = bs; j <= be; ++j) {
-                    if (j == i)
-                        continue;
-                    const Vector2 p = pos[j];
-                    const double drx = p.x - body_x;
-                    const double dry = p.y - body_y;
-                    const double d2 = drx * drx + dry * dry + epsilon_sq;
-                    const double inv_r = rsqrt(d2);
-                    const double inv_r3 = inv_r * inv_r * inv_r;
-                    acc_x += drx * (mass[j] * inv_r3);
-                    acc_y += dry * (mass[j] * inv_r3);
+            stack_size = 1;
+        }
+        __syncwarp();
+
+        while (stack_size > 0 && interactions <= abandon_at) {
+            const int32_t popped = min(stack_size, static_cast<int32_t>(WARP_SIZE));
+            // Every popped node pushes at most 4 children
+            if (stack_size + 3 * popped > stack_capacity) {
+                for (int32_t k = lane; k < stack_size; k += WARP_SIZE) {
+                    global_stack[k] = stack[k];
                 }
+                __syncwarp();
+                stack = global_stack;
+                stack_capacity = STACK_CAPACITY;
+            }
+            stack_size -= popped;
+
+            // Stack items are tree nodes (>= 0) and bodies (~index), the latter always accepted
+            const int32_t item =
+                    static_cast<int32_t>(lane) < popped ? stack[stack_size + lane] : EMPTY_CHILD;
+            __syncwarp();  // the pushes below overwrite the popped items
+            bool accept = item < 0 && item != EMPTY_CHILD;
+            bool open = item >= 0;
+            TreeNode t;
+            t.first = 0;
+            t.last = -1;
+            t.child = make_int4(EMPTY_CHILD, EMPTY_CHILD, EMPTY_CHILD, EMPTY_CHILD);
+            if (open) {
+                t = nodes[item];
+            }
+            else if (accept) {
+                t.com = body_pos[~item];
+                t.mass = body_mass[~item];
+            }
+            const float dx = fmaxf(
+                    fabsf((t.com.x - ref_x_hi) + (t.com.z - ref_x_lo) - box_center_x) - box_half_x,
+                    0.0f);
+            const float dy = fmaxf(
+                    fabsf((t.com.y - ref_y_hi) + (t.com.w - ref_y_lo) - box_center_y) - box_half_y,
+                    0.0f);
+            const bool disjoint = t.last < first || t.first > last;
+            if (open && disjoint && dx * dx + dy * dy > t.open_sq) {
+                accept = true;
+                open = false;
+            }
+
+            // Accepted nodes and bodies go to the interaction list, the children of opened nodes
+            // to the stack
+            const uint32_t accepted = __ballot_sync(FULL_MASK, accept);
+            if (accept) {
+                const int32_t list_at = list_size + __popc(accepted & lanes_before);
+                list_pos[list_at] = t.com;
+                list_mass[list_at] = t.mass;
+            }
+            list_size += __popc(accepted);
+            interactions += __popc(accepted);
+
+            const int4 c = t.child;
+            const uint32_t push_count = open ? (c.x != EMPTY_CHILD) + (c.y != EMPTY_CHILD)
+                                                       + (c.z != EMPTY_CHILD) + (c.w != EMPTY_CHILD)
+                                             : 0;
+            // push_count is 0, 2, 3 or 4, sum its bits across the warp
+            const uint32_t pushes_1 = __ballot_sync(FULL_MASK, push_count & 1);
+            const uint32_t pushes_2 = __ballot_sync(FULL_MASK, push_count & 2);
+            const uint32_t pushes_4 = __ballot_sync(FULL_MASK, push_count & 4);
+            if (open) {
+                int32_t* const push_at = stack + stack_size + __popc(pushes_1 & lanes_before)
+                                         + 2 * __popc(pushes_2 & lanes_before)
+                                         + 4 * __popc(pushes_4 & lanes_before);
+                push_at[0] = c.x;
+                push_at[1] = c.y;
+                if (push_count > 2) {
+                    push_at[2] = c.z;
+                }
+                if (push_count > 3) {
+                    push_at[3] = c.w;
+                }
+            }
+            stack_size += __popc(pushes_1) + 2 * __popc(pushes_2) + 4 * __popc(pushes_4);
+            __syncwarp();
+
+            if (list_size >= INTERACTION_BATCH) {
+                Device::interact(list_pos, list_mass, list_size, b, softening_sq, acc_x, acc_y);
+                list_size = 0;
+                __syncwarp();
+            }
+        }
+
+        if (interactions > abandon_at) {
+            uint32_t retry_at = 0;
+            if (lane == 0) {
+                retry_at = atomicAdd(&counters->retry_count, last - first + 1);
+            }
+            retry_at = __shfl_sync(FULL_MASK, retry_at, 0);
+            if (first + static_cast<int32_t>(lane) <= last) {
+                retry_bodies[retry_at + lane] = first + lane;
             }
             continue;
         }
+        warp_interactions += interactions;
+        warp_groups++;
+        Device::interact(list_pos, list_mass, list_size, b, softening_sq, acc_x, acc_y);
+        __syncwarp();
 
-        // Internal node — opening angle test
-        const double wsq = __ldg(&t_wsq[nid]);
-        // Do not approximate a cell that contains the target body
-        const bool contains_body = i >= bs && i <= be;
-        if (!contains_body && wsq < theta_sq * dist_sq) {
-            const double r2 = dist_sq + epsilon_sq;
-            const double inv_r = rsqrt(r2);
-            const double inv_r3 = inv_r * inv_r * inv_r;
-            const double a = node_mass * inv_r3;
-            acc_x += dx * a;
-            acc_y += dy * a;
-            continue;
+        using Bits = unsigned long long;
+        Bits x_min = UINT64_MAX, x_max = 0, y_min = UINT64_MAX, y_max = 0;
+        if (first + static_cast<int32_t>(lane) <= last) {
+            double2 v = vel[body];
+            double2 x = pos[body];
+            v.x += acc_x.value() * acc_dt;
+            v.y += acc_y.value() * acc_dt;
+            x.x += v.x * dt;
+            x.y += v.y * dt;
+            vel[body] = v;
+            pos[body] = x;
+            if (pos_out) {
+                pos_out[id[body]] = x;
+                vel_out[id[body]] = v;
+            }
+            x_min = x_max = Device::ordered(x.x);
+            y_min = y_max = Device::ordered(x.y);
         }
-
-        // Push non-empty children (contiguous: c0, c0+1, c0+2, c0+3)
-        if (__ldg(&t_bstart[c0 + 3]) >= 0)
-            stack[++top] = c0 + 3;
-        if (__ldg(&t_bstart[c0 + 2]) >= 0)
-            stack[++top] = c0 + 2;
-        if (__ldg(&t_bstart[c0 + 1]) >= 0)
-            stack[++top] = c0 + 1;
-        if (__ldg(&t_bstart[c0]) >= 0)
-            stack[++top] = c0;
+        // Bounding box for the next iteration
+        const auto bits_min = [](Bits a, Bits b) { return min(a, b); };
+        const auto bits_max = [](Bits a, Bits b) { return max(a, b); };
+        x_min = Device::warp_reduce(x_min, bits_min);
+        x_max = Device::warp_reduce(x_max, bits_max);
+        y_min = Device::warp_reduce(y_min, bits_min);
+        y_max = Device::warp_reduce(y_max, bits_max);
+        if (lane == 0) {
+            atomicMin(&counters->bounds[0], x_min);
+            atomicMax(&counters->bounds[1], x_max);
+            atomicMin(&counters->bounds[2], y_min);
+            atomicMax(&counters->bounds[3], y_max);
+        }
     }
-
-    vel[i].x += acc_x * G_dt;
-    vel[i].y += acc_y * G_dt;
+    // Retried bodies are cheaper than groups, they would lower the bar
+    if (lane == 0 && !retry_pass) {
+        atomicAdd(&counters->interactions, warp_interactions);
+        atomicAdd(&counters->groups_done, static_cast<unsigned long long>(warp_groups));
+    }
 }
 
-// ---- Update positions ----
-__global__ void update_positions(Vector2* pos, const Vector2* vel, int32_t n, double dt) {
-    const int32_t i = static_cast<int32_t>(blockIdx.x * blockDim.x + threadIdx.x);
+// Scatters the sorted bodies back to their original order for the copy to the host
+__global__ void unsort_bodies(const double2* __restrict__ pos, const double2* __restrict__ vel,
+        const uint32_t* __restrict__ id, uint32_t n, double2* pos_out, double2* vel_out) {
+    const uint32_t i = blockIdx.x * blockDim.x + threadIdx.x;
     if (i < n) {
-        pos[i].x += vel[i].x * dt;
-        pos[i].y += vel[i].y * dt;
+        const uint32_t dst = id[i];
+        pos_out[dst] = pos[i];
+        vel_out[dst] = vel[i];
     }
 }
-
-// ---- Scatter sorted data back to original body order ----
-__global__ void scatter_to_original_order(const Vector2* sorted_pos, const Vector2* sorted_vel,
-        const int32_t* idx, Vector2* out_pos, Vector2* out_vel, int32_t n) {
-    const int32_t i = static_cast<int32_t>(blockIdx.x * blockDim.x + threadIdx.x);
-    if (i < n) {
-        const int32_t orig = idx[i];
-        out_pos[orig] = sorted_pos[i];
-        out_vel[orig] = sorted_vel[i];
-    }
-}
-
-// ---- Initialize index array to identity ----
-__global__ void init_indices(int32_t* idx, int32_t n) {
-    const int32_t i = static_cast<int32_t>(blockIdx.x * blockDim.x + threadIdx.x);
-    if (i < n)
-        idx[i] = i;
-}
-
 }  // namespace Kernel
 
 
 // ===========================================================================
-// Host-side implementations (called from BarnesHutCuda methods)
+// Host side
 // ===========================================================================
 
-static void alloc_tree_soa(TreeNodesSoA& t, int32_t count) {
-    const size_t d_bytes = sizeof(double) * count;
-    const size_t i_bytes = sizeof(int32_t) * count;
-    CUDA_CHECK(cudaMalloc(&t.mass, d_bytes));
-    CUDA_CHECK(cudaMalloc(&t.com_x, d_bytes));
-    CUDA_CHECK(cudaMalloc(&t.com_y, d_bytes));
-    CUDA_CHECK(cudaMalloc(&t.width_sq, d_bytes));
-    CUDA_CHECK(cudaMalloc(&t.child0, i_bytes));
-    CUDA_CHECK(cudaMalloc(&t.child1, i_bytes));
-    CUDA_CHECK(cudaMalloc(&t.child2, i_bytes));
-    CUDA_CHECK(cudaMalloc(&t.child3, i_bytes));
-    CUDA_CHECK(cudaMalloc(&t.body_start, i_bytes));
-    CUDA_CHECK(cudaMalloc(&t.body_end, i_bytes));
-}
-
-static void free_tree_soa(TreeNodesSoA& t) {
-    CUDA_CHECK(cudaFree(t.mass));
-    CUDA_CHECK(cudaFree(t.com_x));
-    CUDA_CHECK(cudaFree(t.com_y));
-    CUDA_CHECK(cudaFree(t.width_sq));
-    CUDA_CHECK(cudaFree(t.child0));
-    CUDA_CHECK(cudaFree(t.child1));
-    CUDA_CHECK(cudaFree(t.child2));
-    CUDA_CHECK(cudaFree(t.child3));
-    CUDA_CHECK(cudaFree(t.body_start));
-    CUDA_CHECK(cudaFree(t.body_end));
-}
-
 void BarnesHutCuda::init_device_resources() {
-    const int32_t n = static_cast<int32_t>(bodies.n);
-    const auto mass_bytes = sizeof(double) * n;
-    const auto pos_bytes = sizeof(Vector2) * n;
-    const auto vel_bytes = sizeof(Vector2) * n;
-    const auto idx_bytes = sizeof(int32_t) * n;
+    const auto alloc = [](auto*& ptr, size_t count) {
+        CUDA_CHECK(cudaMalloc(&ptr, sizeof(*ptr) * std::max<size_t>(count, 1)));
+    };
 
-    // Body arrays (primary + alt for sorting)
-    CUDA_CHECK(cudaMalloc(&mass_d, mass_bytes));
-    CUDA_CHECK(cudaMalloc(&mass_alt_d, mass_bytes));
-    CUDA_CHECK(cudaMalloc(&pos_d, pos_bytes));
-    CUDA_CHECK(cudaMalloc(&pos_alt_d, pos_bytes));
-    CUDA_CHECK(cudaMalloc(&vel_d, vel_bytes));
-    CUDA_CHECK(cudaMalloc(&vel_alt_d, vel_bytes));
-    CUDA_CHECK(cudaMalloc(&idx_d, idx_bytes));
-    CUDA_CHECK(cudaMalloc(&idx_alt_d, idx_bytes));
+    int device;
+    CUDA_CHECK(cudaGetDevice(&device));
+    int sm_count;
+    CUDA_CHECK(cudaDeviceGetAttribute(&sm_count, cudaDevAttrMultiProcessorCount, device));
+    int force_blocks_per_sm;
+    CUDA_CHECK(cudaOccupancyMaxActiveBlocksPerMultiprocessor(&force_blocks_per_sm,
+            Kernel::compute_forces, FORCE_WARPS * WARP_SIZE, 0));
+    force_blocks = force_blocks_per_sm * sm_count;
 
-    // Morton codes + sort indices
-    CUDA_CHECK(cudaMalloc(&morton_d, sizeof(uint64_t) * n));
-    CUDA_CHECK(cudaMalloc(&morton_alt_d, sizeof(uint64_t) * n));
-    CUDA_CHECK(cudaMalloc(&sort_idx_d, idx_bytes));
-    CUDA_CHECK(cudaMalloc(&sort_idx_alt_d, idx_bytes));
+    CUDA_CHECK(cudaStreamCreateWithFlags(&stream, cudaStreamNonBlocking));
+    CUDA_CHECK(cudaStreamCreateWithFlags(&copy_stream, cudaStreamNonBlocking));
+    CUDA_CHECK(cudaEventCreateWithFlags(&copy_done, cudaEventDisableTiming));
+    for (CUevent_st*& event : step_done) {
+        CUDA_CHECK(cudaEventCreateWithFlags(&event, cudaEventDisableTiming));
+    }
 
-    // Bounding box
-    CUDA_CHECK(cudaMalloc(&bounding_box_d, sizeof(Box)));
+    alloc(pos_d, n);
+    alloc(vel_d, n);
+    alloc(mass_d, n);
+    alloc(id_d, n);
+    alloc(pos_alt_d, n);
+    alloc(vel_alt_d, n);
+    alloc(mass_alt_d, n);
+    alloc(id_alt_d, n);
+    alloc(keys_d, n);
+    alloc(keys_alt_d, n);
+    alloc(order_d, n);
+    alloc(order_alt_d, n);
+    alloc(body_pos_d, n);
+    alloc(key_delta_d, n);
+    alloc(seeds_d, n);
+    alloc(arrivals_d, 2 * static_cast<size_t>(n));
+    alloc(merge_bound_d, n);
+    alloc(nodes_d, n);
+    alloc(root_d, 1);
+    alloc(open_sq_by_level_d, MAX_TREE_DEPTH);
+    alloc(frame_d, 1);
+    alloc(counters_d, 1);
+    alloc(retry_bodies_d, n);
+    alloc(stacks_d, static_cast<size_t>(force_blocks) * FORCE_WARPS * STACK_CAPACITY);
+    alloc(pos_out_d, n);
+    alloc(vel_out_d, n);
+    CUDA_CHECK(cub::DeviceRadixSort::SortPairs(nullptr, sort_temp_bytes, keys_d, keys_alt_d,
+            order_d, order_alt_d, n, 0, KEY_BITS));
+    CUDA_CHECK(cudaMalloc(&sort_temp_d, sort_temp_bytes));
 
-    // Tree nodes (SoA)
-    alloc_tree_soa(tree, max_quads);
-    CUDA_CHECK(cudaMalloc(&node_count_d, sizeof(int32_t)));
-    CUDA_CHECK(cudaMalloc(&node_parent_d, sizeof(int32_t) * max_quads));
+    // Nodes of level l have cells of side 2^-l, levels past KEY_BITS / 2 only split equal keys
+    float open_sq_by_level[MAX_TREE_DEPTH];
+    for (int32_t level = 0; level < MAX_TREE_DEPTH; level++) {
+        const double open_sq = std::ldexp(inv_theta_sq, -2 * std::min(level, KEY_BITS / 2));
+        open_sq_by_level[level] = static_cast<float>(std::min<double>(open_sq, FLT_MAX));
+    }
+    CUDA_CHECK(cudaMemcpy(open_sq_by_level_d, open_sq_by_level, sizeof(open_sq_by_level),
+            cudaMemcpyHostToDevice));
 
-    // Packed AoS for force traversal
-    CUDA_CHECK(cudaMalloc(&force_nodes_d, sizeof(ForceNode) * max_quads));
+    // compute_forces collects the bounding box for the next iteration, the first one's is set here
+    Counters counters{.bounds = {UINT64_MAX, 0, UINT64_MAX, 0}};
+    for (uint64_t i = 0; i < bodies.n; i++) {
+        const auto& p = bodies.pos(i);
+        counters.bounds[0] = std::min(counters.bounds[0], Device::ordered(p.x));
+        counters.bounds[1] = std::max(counters.bounds[1], Device::ordered(p.x));
+        counters.bounds[2] = std::min(counters.bounds[2], Device::ordered(p.y));
+        counters.bounds[3] = std::max(counters.bounds[3], Device::ordered(p.y));
+    }
+    CUDA_CHECK(cudaMemcpy(counters_d, &counters, sizeof(Counters), cudaMemcpyHostToDevice));
 
-    // Work lists store tree nodes across levels, so size them to the node budget.
-    const int32_t wl_size = max_quads;
-    CUDA_CHECK(cudaMalloc(&work_list_d, sizeof(int32_t) * wl_size));
-    CUDA_CHECK(cudaMalloc(&work_list_next_d, sizeof(int32_t) * wl_size));
-    CUDA_CHECK(cudaMalloc(&work_count_d, sizeof(int32_t)));
+    for (uint64_t i = 0; i < bodies.n; i++) {
+        total_mass += bodies.mass(i);
+    }
+    if (!(total_mass > 0.0)) {
+        total_mass = 1.0;  // no gravity at all, any scale works
+    }
+    std::vector<float> mass(n);
+    std::vector<uint32_t> id(n);
+    for (uint32_t i = 0; i < n; i++) {
+        mass[i] = static_cast<float>(bodies.mass(i) / total_mass);
+        id[i] = i;
+    }
+    CUDA_CHECK(cudaMemcpy(pos_d, bodies.pos_data(), sizeof(double2) * n, cudaMemcpyHostToDevice));
+    CUDA_CHECK(cudaMemcpy(vel_d, bodies.vel_data(), sizeof(double2) * n, cudaMemcpyHostToDevice));
+    CUDA_CHECK(cudaMemcpy(mass_d, mass.data(), sizeof(float) * n, cudaMemcpyHostToDevice));
+    CUDA_CHECK(cudaMemcpy(id_d, id.data(), sizeof(uint32_t) * n, cudaMemcpyHostToDevice));
 
-    // Query CUB temp storage size for radix sort
-    cub_temp_bytes = 0;
-    cub::DeviceRadixSort::SortPairs(nullptr, cub_temp_bytes, morton_d, morton_alt_d, sort_idx_d,
-            sort_idx_alt_d, n);
-    CUDA_CHECK(cudaMalloc(&cub_temp_d, cub_temp_bytes));
-
-    // Upload initial body data
-    CUDA_CHECK(cudaMemcpy(mass_d, bodies.mass_data(), mass_bytes, cudaMemcpyHostToDevice));
-    CUDA_CHECK(cudaMemcpy(pos_d, bodies.pos_data(), pos_bytes, cudaMemcpyHostToDevice));
-    CUDA_CHECK(cudaMemcpy(vel_d, bodies.vel_data(), vel_bytes, cudaMemcpyHostToDevice));
-
-    // Initialize index to identity
-    const uint32_t grid = (n + BLOCK_SIZE - 1) / BLOCK_SIZE;
-    Kernel::init_indices<<<grid, BLOCK_SIZE>>>(idx_d, n);
-    CUDA_CHECK(cudaGetLastError());
-    CUDA_CHECK(cudaDeviceSynchronize());
+    if (n == 0) {
+        return;  // nothing to copy back
+    }
+    // Page-locked `bodies` lets the copies back run alongside the simulation
+    host_bodies_pinned =
+            cudaHostRegister(bodies.pos_data(), sizeof(double2) * n, cudaHostRegisterDefault)
+                    == cudaSuccess
+            && cudaHostRegister(bodies.vel_data(), sizeof(double2) * n, cudaHostRegisterDefault)
+                       == cudaSuccess;
+    if (!host_bodies_pinned) {
+        Log::warning("Could not page-lock the bodies, copying them back will stall the GPU");
+        cudaHostUnregister(bodies.pos_data());
+        cudaGetLastError();
+    }
 }
 
 void BarnesHutCuda::release_device_resources() {
-    CUDA_CHECK(cudaFree(mass_d));
-    CUDA_CHECK(cudaFree(mass_alt_d));
-    CUDA_CHECK(cudaFree(pos_d));
-    CUDA_CHECK(cudaFree(pos_alt_d));
-    CUDA_CHECK(cudaFree(vel_d));
-    CUDA_CHECK(cudaFree(vel_alt_d));
-    CUDA_CHECK(cudaFree(idx_d));
-    CUDA_CHECK(cudaFree(idx_alt_d));
-    CUDA_CHECK(cudaFree(morton_d));
-    CUDA_CHECK(cudaFree(morton_alt_d));
-    CUDA_CHECK(cudaFree(sort_idx_d));
-    CUDA_CHECK(cudaFree(sort_idx_alt_d));
-    CUDA_CHECK(cudaFree(cub_temp_d));
-    CUDA_CHECK(cudaFree(bounding_box_d));
-    free_tree_soa(tree);
-    CUDA_CHECK(cudaFree(node_count_d));
-    CUDA_CHECK(cudaFree(node_parent_d));
-    CUDA_CHECK(cudaFree(force_nodes_d));
-    CUDA_CHECK(cudaFree(work_list_d));
-    CUDA_CHECK(cudaFree(work_list_next_d));
-    CUDA_CHECK(cudaFree(work_count_d));
+    if (host_bodies_pinned) {
+        CUDA_CHECK(cudaHostUnregister(bodies.pos_data()));
+        CUDA_CHECK(cudaHostUnregister(bodies.vel_data()));
+    }
+    for (void* ptr : std::initializer_list<void*>{pos_d, vel_d, mass_d, id_d, pos_alt_d, vel_alt_d,
+                 mass_alt_d, id_alt_d, keys_d, keys_alt_d, order_d, order_alt_d, sort_temp_d,
+                 body_pos_d, key_delta_d, seeds_d, arrivals_d, merge_bound_d, nodes_d, root_d,
+                 open_sq_by_level_d, frame_d, counters_d, retry_bodies_d, stacks_d, pos_out_d,
+                 vel_out_d}) {
+        CUDA_CHECK(cudaFree(ptr));
+    }
+    for (CUevent_st* event : step_done) {
+        CUDA_CHECK(cudaEventDestroy(event));
+    }
+    CUDA_CHECK(cudaEventDestroy(copy_done));
+    CUDA_CHECK(cudaStreamDestroy(copy_stream));
+    CUDA_CHECK(cudaStreamDestroy(stream));
 }
 
-void BarnesHutCuda::sync_from_gpu_bodies() {
-    const int32_t n = static_cast<int32_t>(bodies.n);
+void BarnesHutCuda::step() {
+    if (n == 0) {
+        return;
+    }
     const uint32_t grid = (n + BLOCK_SIZE - 1) / BLOCK_SIZE;
 
-    // Scatter sorted GPU data back to original body order
-    Kernel::scatter_to_original_order<<<grid, BLOCK_SIZE>>>(pos_d, vel_d, idx_d, pos_alt_d,
-            vel_alt_d, n);
-    CUDA_CHECK(cudaGetLastError());
-    CUDA_CHECK(cudaDeviceSynchronize());
-
-    CUDA_CHECK(
-            cudaMemcpy(bodies.pos_data(), pos_alt_d, sizeof(Vector2) * n, cudaMemcpyDeviceToHost));
-    CUDA_CHECK(
-            cudaMemcpy(bodies.vel_data(), vel_alt_d, sizeof(Vector2) * n, cudaMemcpyDeviceToHost));
-}
-
-void BarnesHutCuda::compute_bounding_box() {
-    bounding_box = Box{
-            .x_min = std::numeric_limits<double>::max(),
-            .x_max = -std::numeric_limits<double>::max(),
-            .y_min = std::numeric_limits<double>::max(),
-            .y_max = -std::numeric_limits<double>::max(),
-    };
-    CUDA_CHECK(cudaMemcpy(bounding_box_d, &bounding_box, sizeof(Box), cudaMemcpyHostToDevice));
-
-    const uint32_t grid = (bodies.n + BLOCK_SIZE - 1) / BLOCK_SIZE;
-    constexpr uint32_t shared_mem = 4 * BLOCK_SIZE * sizeof(double);
-    Kernel::compute_bounding_box<<<grid, BLOCK_SIZE, shared_mem>>>(pos_d,
-            static_cast<uint32_t>(bodies.n), bounding_box_d);
-    CUDA_CHECK(cudaGetLastError());
-    CUDA_CHECK(cudaDeviceSynchronize());
-    CUDA_CHECK(cudaMemcpy(&bounding_box, bounding_box_d, sizeof(Box), cudaMemcpyDeviceToHost));
-
-    // Square the bounding box
-    const double x_range = bounding_box.x_max - bounding_box.x_min;
-    const double y_range = bounding_box.y_max - bounding_box.y_min;
-    if (x_range > y_range) {
-        const double mid = (bounding_box.y_min + bounding_box.y_max) * 0.5;
-        bounding_box.y_min = mid - x_range * 0.5;
-        bounding_box.y_max = mid + x_range * 0.5;
-    }
-    else {
-        const double mid = (bounding_box.x_min + bounding_box.x_max) * 0.5;
-        bounding_box.x_min = mid - y_range * 0.5;
-        bounding_box.x_max = mid + y_range * 0.5;
-    }
-    // Upload squared bbox for Morton code computation
-    CUDA_CHECK(cudaMemcpy(bounding_box_d, &bounding_box, sizeof(Box), cudaMemcpyHostToDevice));
-}
-
-void BarnesHutCuda::sort_bodies_by_morton() {
-    const int32_t n = static_cast<int32_t>(bodies.n);
-    const uint32_t grid = (n + BLOCK_SIZE - 1) / BLOCK_SIZE;
-
-    // 1. Compute Morton codes
-    Kernel::compute_morton_codes<<<grid, BLOCK_SIZE>>>(pos_d, static_cast<uint32_t>(n),
-            bounding_box_d, morton_d, sort_idx_d);
-    CUDA_CHECK(cudaGetLastError());
-
-    // 2. Radix sort by Morton code
-    cub::DeviceRadixSort::SortPairs(cub_temp_d, cub_temp_bytes, morton_d, morton_alt_d, sort_idx_d,
-            sort_idx_alt_d, n);
-    CUDA_CHECK(cudaGetLastError());
-
-    // 3. Reorder body arrays
-    Kernel::reorder_bodies<<<grid, BLOCK_SIZE>>>(sort_idx_alt_d, pos_d, vel_d, mass_d, idx_d,
-            pos_alt_d, vel_alt_d, mass_alt_d, idx_alt_d, n);
-    CUDA_CHECK(cudaGetLastError());
-
-    // Swap primary ↔ alt so primary holds sorted data
+    Kernel::start_iteration<<<1, 1, 0, stream>>>(epsilon_squared,
+            Constants::Simulation::G * total_mass, counters_d, frame_d);
+    Kernel::compute_keys<<<grid, BLOCK_SIZE, 0, stream>>>(pos_d, n, frame_d, keys_d, order_d);
+    CUDA_CHECK(cub::DeviceRadixSort::SortPairs(sort_temp_d, sort_temp_bytes, keys_d, keys_alt_d,
+            order_d, order_alt_d, n, 0, KEY_BITS, stream));
+    Kernel::reorder_bodies<<<grid, BLOCK_SIZE, 0, stream>>>(order_alt_d, keys_alt_d, frame_d, n,
+            pos_d, vel_d, mass_d, id_d, pos_alt_d, vel_alt_d, mass_alt_d, id_alt_d, body_pos_d,
+            key_delta_d, merge_bound_d);
     std::swap(pos_d, pos_alt_d);
     std::swap(vel_d, vel_alt_d);
     std::swap(mass_d, mass_alt_d);
-    std::swap(idx_d, idx_alt_d);
+    std::swap(id_d, id_alt_d);
 
-    // morton_alt_d now holds sorted Morton codes — swap so morton_d is sorted
-    std::swap(morton_d, morton_alt_d);
-
-    CUDA_CHECK(cudaDeviceSynchronize());
-}
-
-void BarnesHutCuda::build_quad_tree() {
-    const int32_t n = static_cast<int32_t>(bodies.n);
-
-    // Initialize root node (index 0)
-    const double root_width_sq = std::pow(bounding_box.x_max - bounding_box.x_min, 2.0);
-
-    // Reset node allocator: root = 0, next alloc starts at 1
-    int32_t alloc_start = 1;
-    CUDA_CHECK(cudaMemcpy(node_count_d, &alloc_start, sizeof(int32_t), cudaMemcpyHostToDevice));
-
-    // Set root node fields
-    int32_t zero_i = 0;
-    int32_t minus_one = -1;
-    int32_t n_minus_1 = n - 1;
-
-    CUDA_CHECK(
-            cudaMemcpy(tree.width_sq + 0, &root_width_sq, sizeof(double), cudaMemcpyHostToDevice));
-    CUDA_CHECK(cudaMemcpy(tree.child0 + 0, &minus_one, sizeof(int32_t), cudaMemcpyHostToDevice));
-    CUDA_CHECK(cudaMemcpy(tree.child1 + 0, &minus_one, sizeof(int32_t), cudaMemcpyHostToDevice));
-    CUDA_CHECK(cudaMemcpy(tree.child2 + 0, &minus_one, sizeof(int32_t), cudaMemcpyHostToDevice));
-    CUDA_CHECK(cudaMemcpy(tree.child3 + 0, &minus_one, sizeof(int32_t), cudaMemcpyHostToDevice));
-    CUDA_CHECK(cudaMemcpy(tree.body_start + 0, &zero_i, sizeof(int32_t), cudaMemcpyHostToDevice));
-    CUDA_CHECK(cudaMemcpy(tree.body_end + 0, &n_minus_1, sizeof(int32_t), cudaMemcpyHostToDevice));
-
-    // ---------------------------------------------------------------
-    // Phase 1: Build topology level-by-level.
-    // All work lists stored contiguously in work_list_d.
-    // Only copy back work_count (one int32_t) per level.
-    // ---------------------------------------------------------------
-
-    // Level offsets: level_offsets[i] = start index within work_list_d for level i
-    // level_counts[i] = number of work items at level i
-    std::vector<int32_t> level_offsets;
-    std::vector<int32_t> level_counts;
-
-    // Seed root at offset 0 in work_list_d
-    int32_t root_idx = 0;
-    CUDA_CHECK(cudaMemcpy(work_list_d, &root_idx, sizeof(int32_t), cudaMemcpyHostToDevice));
-
-    int32_t cur_offset = 0;
-    int32_t work_count = 1;
-
-    for (int32_t level = 0; level < 31; ++level) {
-        if (work_count == 0)
-            break;
-
-        level_offsets.push_back(cur_offset);
-        level_counts.push_back(work_count);
-
-        // Next level's work items will be written starting after all existing items
-        const int32_t next_offset = cur_offset + work_count;
-
-        CUDA_CHECK(cudaMemset(work_count_d, 0, sizeof(int32_t)));
-
-        const uint32_t topo_grid = (work_count + BLOCK_SIZE - 1) / BLOCK_SIZE;
-        Kernel::build_tree_topology<<<topo_grid, BLOCK_SIZE>>>(morton_d, tree.width_sq, tree.child0,
-                tree.child1, tree.child2, tree.child3, tree.body_start, tree.body_end,
-                work_list_d + cur_offset, work_count, work_list_d + next_offset, work_count_d,
-                node_count_d, max_quads, level);
-        CUDA_CHECK(cudaGetLastError());
-        CUDA_CHECK(cudaDeviceSynchronize());
-
-        CUDA_CHECK(cudaMemcpy(&work_count, work_count_d, sizeof(int32_t), cudaMemcpyDeviceToHost));
-        cur_offset = next_offset;
+    if (n > 1) {
+        Kernel::build_lower_nodes<<<grid, BLOCK_SIZE, 0, stream>>>(n, key_delta_d, body_pos_d,
+                mass_d, open_sq_by_level_d, counters_d, seeds_d, nodes_d, root_d);
+        Kernel::build_upper_nodes<<<grid, BLOCK_SIZE, 0, stream>>>(n, key_delta_d, body_pos_d,
+                open_sq_by_level_d, counters_d, seeds_d, arrivals_d, merge_bound_d, nodes_d,
+                root_d);
+    }
+    // Stage the bodies for the copy to the host, unless the previous copy is still in flight
+    const bool copy = cudaEventQuery(copy_done) == cudaSuccess;
+    for (const bool retry_pass : {false, true}) {
+        Kernel::compute_forces<<<force_blocks, FORCE_WARPS * WARP_SIZE, 0, stream>>>(nodes_d,
+                body_pos_d, mass_d, frame_d, root_d, id_d, n, sim_cfg.timestep, retry_pass,
+                counters_d, retry_bodies_d, stacks_d, pos_d, vel_d, copy ? pos_out_d : nullptr,
+                copy ? vel_out_d : nullptr);
+    }
+    CUDA_CHECK(cudaGetLastError());
+    if (copy) {
+        copy_bodies_to_host_async();
     }
 
-    // ---------------------------------------------------------------
-    // Phase 2: Compute COM bottom-up.
-    // Process levels from deepest to shallowest.
-    // At each level, launch compute_leaf_com (skips internals) and
-    // propagate_com_up (skips leaves). Both kernels self-filter
-    // using child0 — no host-side node classification needed.
-    // ---------------------------------------------------------------
-
-    const int32_t num_levels = static_cast<int32_t>(level_offsets.size());
-    for (int32_t lvl = num_levels - 1; lvl >= 0; --lvl) {
-        const int32_t off = level_offsets[lvl];
-        const int32_t cnt = level_counts[lvl];
-        const int32_t* level_nodes = work_list_d + off;
-
-        // Leaf COM: one block per node, kernel skips internal nodes
-        constexpr uint32_t leaf_block = 128;
-        constexpr uint32_t leaf_smem = 3 * leaf_block * sizeof(double);
-        Kernel::compute_leaf_com<<<cnt, leaf_block, leaf_smem>>>(pos_d, mass_d, tree.mass,
-                tree.com_x, tree.com_y, level_nodes, cnt, tree.body_start, tree.body_end,
-                tree.child0);
-        CUDA_CHECK(cudaGetLastError());
-
-        // Propagate COM: one thread per node, kernel skips leaves
-        const uint32_t prop_grid = (cnt + BLOCK_SIZE - 1) / BLOCK_SIZE;
-        Kernel::propagate_com_up<<<prop_grid, BLOCK_SIZE>>>(tree.mass, tree.com_x, tree.com_y,
-                tree.child0, tree.child1, tree.child2, tree.child3, tree.body_start, level_nodes,
-                cnt);
-        CUDA_CHECK(cudaGetLastError());
+    // Keep one iteration queued behind the running one, so the GPU never waits for the host
+    CUDA_CHECK(cudaEventRecord(step_done[queued_steps % 2], stream));
+    if (queued_steps > 0) {
+        CUDA_CHECK(cudaEventSynchronize(step_done[(queued_steps - 1) % 2]));
     }
-
-    CUDA_CHECK(cudaDeviceSynchronize());
+    queued_steps++;
 }
 
-void BarnesHutCuda::compute_forces() {
-    const int32_t n = static_cast<int32_t>(bodies.n);
-    const double G_dt = Constants::Simulation::G * sim_cfg.timestep;
-
-    const uint32_t grid = (n + BLOCK_SIZE - 1) / BLOCK_SIZE;
-    Kernel::compute_force<<<grid, BLOCK_SIZE>>>(tree.mass, tree.com_x, tree.com_y, tree.width_sq,
-            tree.child0, tree.body_start, tree.body_end, pos_d, mass_d, vel_d, n, epsilon_squared,
-            G_dt, theta_sq);
-    CUDA_CHECK(cudaGetLastError());
-    CUDA_CHECK(cudaDeviceSynchronize());
+// Copies the bodies staged in their original order back to `bodies`, alongside the simulation
+void BarnesHutCuda::copy_bodies_to_host_async() {
+    CUDA_CHECK(cudaEventRecord(copy_done, stream));
+    CUDA_CHECK(cudaStreamWaitEvent(copy_stream, copy_done));
+    CUDA_CHECK(cudaMemcpyAsync(bodies.pos_data(), pos_out_d, sizeof(double2) * n,
+            cudaMemcpyDeviceToHost, copy_stream));
+    CUDA_CHECK(cudaMemcpyAsync(bodies.vel_data(), vel_out_d, sizeof(double2) * n,
+            cudaMemcpyDeviceToHost, copy_stream));
+    CUDA_CHECK(cudaEventRecord(copy_done, copy_stream));
 }
 
-void BarnesHutCuda::update_positions() {
-    const int32_t n = static_cast<int32_t>(bodies.n);
-    const uint32_t grid = (n + BLOCK_SIZE - 1) / BLOCK_SIZE;
-    Kernel::update_positions<<<grid, BLOCK_SIZE>>>(pos_d, vel_d, n, sim_cfg.timestep);
+void BarnesHutCuda::sync_bodies_to_host() {
+    if (n == 0) {
+        return;
+    }
+    CUDA_CHECK(cudaStreamSynchronize(copy_stream));
+    Kernel::unsort_bodies<<<(n + BLOCK_SIZE - 1) / BLOCK_SIZE, BLOCK_SIZE, 0, stream>>>(pos_d,
+            vel_d, id_d, n, pos_out_d, vel_out_d);
     CUDA_CHECK(cudaGetLastError());
-    CUDA_CHECK(cudaDeviceSynchronize());
+    CUDA_CHECK(cudaMemcpyAsync(bodies.pos_data(), pos_out_d, sizeof(double2) * n,
+            cudaMemcpyDeviceToHost, stream));
+    CUDA_CHECK(cudaMemcpyAsync(bodies.vel_data(), vel_out_d, sizeof(double2) * n,
+            cudaMemcpyDeviceToHost, stream));
+    CUDA_CHECK(cudaStreamSynchronize(stream));
 }

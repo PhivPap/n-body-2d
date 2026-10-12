@@ -1,12 +1,15 @@
 #include "Simulation/BarnesHutCuda.hpp"
 
-#include <algorithm>
 #include <limits>
 
 
 BarnesHutCuda::BarnesHutCuda(Config::Simulation& sim_cfg, Bodies& bodies)
-        : Simulation(sim_cfg, bodies), theta_sq(sim_cfg.theta * sim_cfg.theta),
-          max_quads(static_cast<int32_t>(bodies.n) * 5) {
+        : Simulation(sim_cfg, bodies), n(static_cast<uint32_t>(bodies.n)),
+          inv_theta_sq(sim_cfg.theta > 0.0 ? 1.0 / (sim_cfg.theta * sim_cfg.theta)
+                                           : std::numeric_limits<double>::max()) {
+    // The tree refers to bodies by 32-bit signed indices
+    if (bodies.n > static_cast<uint64_t>(std::numeric_limits<int32_t>::max()))
+        throw std::runtime_error("Too many bodies for Barnes-Hut GPU");
     init_device_resources();
 }
 
@@ -25,16 +28,16 @@ void BarnesHutCuda::on_run() {
 void BarnesHutCuda::on_pause() {
     stop = true;
     sim_thread.join();
+    sync_bodies_to_host();
 }
 
 void BarnesHutCuda::simulate() {
     while (!should_stop()) {
-        compute_bounding_box();
-        sort_bodies_by_morton();
-        build_quad_tree();
-        compute_forces();
-        update_positions();
-        sync_from_gpu_bodies();
+        step();
         post_iteration();
+        // `bodies` must hold the final state before should_stop() reports the simulation finished
+        if (iteration >= sim_cfg.iterations) {
+            sync_bodies_to_host();
+        }
     }
 }
