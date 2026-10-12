@@ -1,6 +1,7 @@
 #include "Body/Body.hpp"
 
 #include <cassert>
+#include <cmath>
 #include <unordered_set>
 
 #include "Logger/Logger.hpp"
@@ -27,7 +28,27 @@ bool Bodies::validate() const {
         Log::error("Body id uniqueness constraint violated");
     }
 
-    // ...
+    // Logs the first few invalid bodies (this file isn't built with -ffast-math, which would
+    // assume that every value is finite)
+    constexpr uint64_t MAX_LOGGED = 10;
+    uint64_t invalid = 0;
+    for (uint64_t i = 0; i < n; i++) {
+        const bool finite = std::isfinite(mass(i)) && std::isfinite(pos(i).x)
+                            && std::isfinite(pos(i).y) && std::isfinite(vel(i).x)
+                            && std::isfinite(vel(i).y);
+        if (!finite || mass(i) < 0) {
+            if (invalid++ < MAX_LOGGED) {
+                Log::error("Body #{} `{}` has a negative mass or a value that isn't finite", i,
+                        id(i));
+            }
+        }
+    }
+    if (invalid > MAX_LOGGED) {
+        Log::error("... and {} more invalid bodies", invalid - MAX_LOGGED);
+    }
+    if (invalid > 0) {
+        ok = false;
+    }
 
     return ok;
 }
