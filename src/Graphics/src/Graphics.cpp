@@ -37,6 +37,18 @@ void main() {
 }
 )glsl";
 
+// The selection as the stats panel shows it
+static std::optional<StatsDisplayedData::Selection> panel_selection(
+        const std::optional<Selector::SelectionStats>& selection) {
+    if (!selection) {
+        return std::nullopt;
+    }
+    return StatsDisplayedData::Selection{.num_selected = selection->n,
+            .total_mass = selection->total_mass,
+            .center_of_mass = selection->center_of_mass,
+            .weighted_velocity = selection->weighted_velocity};
+}
+
  Graphics::Graphics(const Config& cfg, const Bodies& bodies)
         : graphics_cfg(cfg.graphics), bodies(bodies), body_positions_cache(bodies.n),
           body_vertex_array(sf::PrimitiveType::Points, bodies.n),
@@ -182,9 +194,9 @@ void Graphics::draw_bodies() {
             sf::BlendMode(sf::BlendMode::Factor::One, sf::BlendMode::Factor::OneMinusSrcAlpha));
 }
 
+// The stats panel shows the selection's stats at the panel refresh rate
 void Graphics::update_selection_tracking() {
     if (!selector.has_selection()) {
-        stats_panel.write_handle()->opt_selection = std::nullopt;
         cached_selection_stats = std::nullopt;
         return;
     }
@@ -195,11 +207,6 @@ void Graphics::update_selection_tracking() {
         vp.pan_coords(new_selection_stats.center_of_mass - cached_selection_stats->center_of_mass);
     }
 
-    stats_panel.write_handle()->opt_selection = StatsDisplayedData::Selection{
-            .num_selected = new_selection_stats.n,
-            .total_mass = new_selection_stats.total_mass,
-            .center_of_mass = new_selection_stats.center_of_mass,
-            .weighted_velocity = new_selection_stats.weighted_velocity};
     cached_selection_stats = new_selection_stats;
 }
 
@@ -336,7 +343,9 @@ void Graphics::release_select(bool skip_select) {
         action_log.log("Cleared selection");
     }
     opt_select_grabbed_pos = std::nullopt;
-    cached_selection_stats = std::nullopt;
+    cached_selection_stats = selector.has_selection() ? std::optional(selector.compute_stats())
+                                                      : std::nullopt;
+    stats_panel.write_handle()->opt_selection = panel_selection(cached_selection_stats);
 }
 
 void Graphics::body_size_increase() {
@@ -462,6 +471,7 @@ void Graphics::update_simulation_stats(const SimulationStats& sim_stats) {
         write_handle->elapsed_s = sim_stats.real_elapsed_s;
         write_handle->simulated_time_s = sim_stats.simulated_elapsed_s;
         write_handle->simulation_rate = sim_stats.ips * sim_stats.timestep_s;
+        write_handle->opt_selection = panel_selection(cached_selection_stats);
     }
 }
 

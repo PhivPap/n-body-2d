@@ -17,6 +17,7 @@ void PanelManager::draw(sf::RenderTarget& target, sf::RenderStates states) const
         if (!panel->is_visible()) {
             continue;
         }
+        panel->update();
 
         sf::Vector2f offset;
         const auto panel_size = panel->get_size();

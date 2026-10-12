@@ -1,5 +1,7 @@
 #pragma once
 
+#include <optional>
+
 #include "AssetManager/AssetManager.hpp"
 #include "SFML/Graphics.hpp"
 #include "SFML/System.hpp"
@@ -11,6 +13,8 @@ public:
     virtual sf::Vector2f get_size() const = 0;
     virtual bool is_visible() const = 0;
     virtual void set_visible(bool visible) = 0;
+    // Re-renders the panel if it is visible and its data changed since it was last rendered
+    virtual void update() = 0;
     virtual void clear() = 0;
 
 protected:
@@ -42,6 +46,7 @@ public:
     void set_visible(bool visible);
     bool is_visible() const;
     sf::Vector2f get_size() const;
+    void update() override;
 
 protected:
     sf::Text text;
@@ -55,6 +60,7 @@ private:
 
     sf::Sprite sprite;
     bool visible;
+    std::optional<DisplayedData> baked_data;  // what the texture shows
 
     void bake();
     void draw(sf::RenderTarget& target, sf::RenderStates states) const override;
@@ -65,9 +71,7 @@ template <typename Derived, typename DisplayedData>
 PanelBase<Derived, DisplayedData>::WriteHandle::WriteHandle(PanelBase* panel) : panel(panel) {}
 
 template <typename Derived, typename DisplayedData>
-PanelBase<Derived, DisplayedData>::WriteHandle::~WriteHandle() {
-    panel->bake();
-}
+PanelBase<Derived, DisplayedData>::WriteHandle::~WriteHandle() = default;
 
 template <typename Derived, typename DisplayedData>
 PanelBase<Derived, DisplayedData>::WriteHandle::WriteHandle(WriteHandle&& wh) noexcept
@@ -100,7 +104,6 @@ PanelBase<Derived, DisplayedData>::PanelBase(uint32_t width)
     texture.setSmooth(false);
     sprite.setScale({1.0f, -1.0f});
     sprite.setPosition({0.0f, 1.0f});
-    bake();
 }
 
 template <typename Derived, typename DisplayedData>
@@ -113,9 +116,6 @@ PanelBase<Derived, DisplayedData>::write_handle() {
 template <typename Derived, typename DisplayedData>
 void PanelBase<Derived, DisplayedData>::set_visible(bool visible) {
     this->visible = visible;
-    if (visible) {
-        bake();
-    }
 }
 
 template <typename Derived, typename DisplayedData>
@@ -126,6 +126,14 @@ bool PanelBase<Derived, DisplayedData>::is_visible() const {
 template <typename Derived, typename DisplayedData>
 sf::Vector2f PanelBase<Derived, DisplayedData>::get_size() const {
     return sf::Vector2f(texture.getSize());
+}
+
+template <typename Derived, typename DisplayedData>
+void PanelBase<Derived, DisplayedData>::update() {
+    if (visible && baked_data != displayed_data) {
+        bake();
+        baked_data = displayed_data;
+    }
 }
 
 template <typename Derived, typename DisplayedData>
