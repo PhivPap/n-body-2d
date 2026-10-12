@@ -49,7 +49,6 @@ void Quadtree::fill_tree_recursive(uint32_t quad_idx) {
         const auto body_idx = quad->body_idxs.front();
         quad->center_of_mass = bodies->pos(body_idx);
         quad->total_mass = bodies->mass(body_idx);
-        quad->momentum = bodies->vel(body_idx) * bodies->mass(body_idx);
         quad->body_idxs.clear();
         return;
     }
@@ -126,9 +125,6 @@ void Quadtree::fill_tree_recursive(uint32_t quad_idx) {
                                    + bottom_left->center_of_mass * bottom_left->total_mass
                                    + top_right->center_of_mass * top_right->total_mass)
                            / quad->total_mass;
-
-    quad->momentum = top_left->momentum + top_right->momentum + bottom_left->momentum
-                     + bottom_right->momentum;
 }
 
 void Quadtree::build_tree(const Bodies& bodies) {

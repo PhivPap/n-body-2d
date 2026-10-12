@@ -33,7 +33,6 @@ public:
     Graphics(Config::Graphics& graphics_cfg, const Bodies& bodies);
     Stats get_stats() const;
     sf::RenderWindow& get_window();
-    CommandsPanel& get_commands_panel();
     ConfigPanel& get_config_panel();
     StatsPanel& get_stats_panel();
     void resize_view(sf::Vector2f new_size);

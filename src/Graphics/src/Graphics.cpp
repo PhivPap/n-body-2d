@@ -79,10 +79,6 @@ sf::RenderWindow& Graphics::get_window() {
     return window;
 }
 
-CommandsPanel& Graphics::get_commands_panel() {
-    return commands_panel;
-}
-
 ConfigPanel& Graphics::get_config_panel() {
     return config_panel;
 }
