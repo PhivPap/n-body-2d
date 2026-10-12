@@ -262,7 +262,7 @@ def periapsis_time_scale(mu, r_periapsis):
 
 
 def orbit_dt_limit(mu, a, e):
-    """Largest timestep that keeps an orbit healthy under the simulator's symplectic Euler."""
+    """Largest timestep that keeps an orbit healthy under the simulator's leapfrog."""
     return min(orbital_period(mu, a) / STEPS_PER_ORBIT,
             PERIAPSIS_STEP_FRACTION * periapsis_time_scale(mu, a * (1 - e)))
 

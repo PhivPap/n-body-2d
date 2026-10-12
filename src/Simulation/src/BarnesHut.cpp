@@ -46,7 +46,9 @@ void BarnesHut::on_pause() {
 
 // An exception mustn't skip a barrier, the other threads would wait for this one forever. The
 // master rethrows the first exception of a step after the last barrier.
-void BarnesHut::step() {
+void BarnesHut::step(double kick, double drift) {
+    step_kick = kick;
+    step_drift = drift;
     try {
         sw_tree.resume();
         qtree.build_tree(bodies);
@@ -110,7 +112,7 @@ void BarnesHut::record_step_error() {
 
 void BarnesHut::update_positions(uint64_t begin_idx, uint64_t end_idx) {
     for (uint64_t idx = begin_idx; idx < end_idx; idx++) {
-        bodies.pos(idx) += bodies.vel(idx) * timestep;
+        bodies.pos(idx) += bodies.vel(idx) * step_drift;
     }
 }
 
@@ -166,7 +168,7 @@ void BarnesHut::update_velocity(uint64_t body_idx) {
         }
     }
 
-    bodies.vel(body_idx) += acc * timestep;
+    bodies.vel(body_idx) += acc * step_kick;
 }
 
 sf::Vector2<double> BarnesHut::body_to_quad_acceleration(uint64_t body_idx, const Quad& quad) {

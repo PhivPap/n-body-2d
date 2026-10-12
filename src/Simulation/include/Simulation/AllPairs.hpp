@@ -9,7 +9,7 @@ public:
     ~AllPairsSim() override;
 
 private:
-    void step() override;
-    void update_positions();
-    void update_velocities();
+    void step(double kick, double drift) override;
+    void update_positions(double drift);
+    void update_velocities(double kick);
 };

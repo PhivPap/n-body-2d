@@ -19,6 +19,8 @@ private:
     const uint64_t master_offset;
     std::barrier<> sync_point;
     std::atomic<bool> worker_stop;
+    double step_kick = 0.0;  // of the current step, for the workers
+    double step_drift = 0.0;
     bool tree_built = false;
     std::mutex step_error_mtx;
     std::exception_ptr step_error;
@@ -28,7 +30,7 @@ private:
 
     void on_run() override;
     void on_pause() override;
-    void step() override;
+    void step(double kick, double drift) override;
     void worker_task(uint32_t worker_id);
     void record_step_error();
     void update_positions(uint64_t begin_idx, uint64_t end_idx);
