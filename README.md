@@ -40,6 +40,18 @@ If you cloned without `--recursive`, run `git submodule update --init --recursiv
 build is an optimized release build for your own CPU (`-march=native`) unless you ask for
 another build type, e.g. `-DCMAKE_BUILD_TYPE=Debug`.
 
+### Tests
+
+```sh
+ctest --test-dir build --output-on-failure   # after building, ~10 s
+```
+
+The tests check config parsing, CSV files, and the physics of every algorithm: a circular orbit
+stays circular, the Barnes-Hut trees with `theta` 0 match All Pairs, pausing doesn't change the
+result, and massless or coincident bodies are handled. The GPU algorithm's tests need a CUDA build
+(`-E gpu` skips them). If CMake finds Python 3 with numpy and scipy, the `scenarios` tests also
+run the scenario generator's `--verify` on a few scenarios.
+
 ## Run
 
 ```sh
