@@ -8,7 +8,10 @@
 #include "Logger/Time.hpp"
 
 
-volatile std::sig_atomic_t Controller::sigint_flag = 0;
+// A signal handler may only use lock-free atomics, and not volatile std::sig_atomic_t from another
+// thread, which it may run on
+static_assert(std::atomic<bool>::is_always_lock_free);
+std::atomic<bool> Controller::sigint_flag = false;
 
 Controller::Controller(const Config& cfg, Simulation& sim, Graphics& graphics)
         : sim(sim), graphics(graphics),

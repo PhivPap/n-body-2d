@@ -30,8 +30,6 @@ target_compile_options(${PROJECT_NAME} PRIVATE $<$<COMPILE_LANGUAGE:CXX>:-ffast-
 
 # GPU Barnes-Hut
 if(NBODY_CUDA)
-    find_package(CUDAToolkit REQUIRED)
-
     target_sources(${PROJECT_NAME} PRIVATE
             ${CMAKE_CURRENT_LIST_DIR}/src/BarnesHutCuda.cpp
             ${CMAKE_CURRENT_LIST_DIR}/src/BarnesHutCuda.cu)
@@ -40,5 +38,4 @@ if(NBODY_CUDA)
         $<$<COMPILE_LANGUAGE:CUDA>:--extra-device-vectorization>
         $<$<COMPILE_LANGUAGE:CUDA>:-Xcompiler=-march=native,-ffast-math>
     )
-    target_link_libraries(${PROJECT_NAME} PRIVATE CUDA::cudart)
 endif()

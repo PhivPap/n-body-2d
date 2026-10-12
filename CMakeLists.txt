@@ -1,6 +1,6 @@
 # Top-level CMakeLists.txt
 
-cmake_minimum_required(VERSION 3.23)
+cmake_minimum_required(VERSION 3.24)
 project(n-body-2d)
 
 # Set the C++ standard
@@ -13,24 +13,27 @@ if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
 endif()
 
 # CUDA, needed by the GPU Barnes-Hut only. The CUDA code is compiled for the GPU found at
-# configure time.
+# configure time, unless NBODY_CUDA_ARCHITECTURES names others (e.g. 89 or all-major).
 include(CheckLanguage)
 check_language(CUDA)
 if(CMAKE_CUDA_COMPILER)
-    option(NBODY_CUDA "Build the GPU Barnes-Hut (needs the CUDA toolkit and a GPU)" ON)
+    option(NBODY_CUDA "Build the GPU Barnes-Hut (needs the CUDA toolkit)" ON)
 else()
-    option(NBODY_CUDA "Build the GPU Barnes-Hut (needs the CUDA toolkit and a GPU)" OFF)
+    option(NBODY_CUDA "Build the GPU Barnes-Hut (needs the CUDA toolkit)" OFF)
 endif()
+set(NBODY_CUDA_ARCHITECTURES native CACHE STRING "CUDA architectures of the GPU Barnes-Hut")
 if(NBODY_CUDA)
-    set(CMAKE_CUDA_ARCHITECTURES native)
+    set(CMAKE_CUDA_ARCHITECTURES ${NBODY_CUDA_ARCHITECTURES})
+    set(CMAKE_CUDA_RUNTIME_LIBRARY Shared)
     enable_language(CUDA)
 endif()
 
-# Link time optimization of release builds
+# Link time optimization, except in Debug builds
 include(CheckIPOSupported)
-check_ipo_supported(RESULT ipo_supported OUTPUT ipo_output)
+check_ipo_supported(RESULT ipo_supported OUTPUT ipo_output LANGUAGES CXX)
 if(ipo_supported)
-    set(CMAKE_INTERPROCEDURAL_OPTIMIZATION_RELEASE TRUE)
+    set(CMAKE_INTERPROCEDURAL_OPTIMIZATION TRUE)
+    set(CMAKE_INTERPROCEDURAL_OPTIMIZATION_DEBUG FALSE)
 else()
     message(WARNING "LTO is not supported: ${ipo_output}")
 endif()
@@ -84,6 +87,9 @@ add_subdirectory(${SRC_DIR}/Controller)
 
 # Add executable
 add_executable(${PROJECT_NAME} ${SRC_DIR}/main.cpp)
+
+# Flush denormals to zero, like the whole program did when it was all built with -ffast-math
+target_link_options(${PROJECT_NAME} PRIVATE $<$<CXX_COMPILER_ID:GNU>:-mdaz-ftz>)
 
 # Link libraries & Set include paths
 target_link_libraries(${PROJECT_NAME} PRIVATE lib-simulation)
