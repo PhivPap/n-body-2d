@@ -190,7 +190,7 @@ bool Config::Simulation::parse_simtype() {
         std::string s;
         s.reserve(sv.size());
         for (char c : sv) {
-            s += std::tolower(c);
+            s += std::tolower(static_cast<unsigned char>(c));
         }
         return s;
     };

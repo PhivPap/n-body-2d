@@ -1,6 +1,6 @@
 #pragma once
 
-#include <csignal>
+#include <atomic>
 
 #include "Config/Config.hpp"
 #include "Graphics/Graphics.hpp"
@@ -10,7 +10,7 @@
 
 class Controller {
 public:
-    static volatile std::sig_atomic_t sigint_flag;
+    static std::atomic<bool> sigint_flag;  // set by the SIGINT handler
     
     Controller(const Config& cfg, Simulation& sim, Graphics& graphics);
     void run();

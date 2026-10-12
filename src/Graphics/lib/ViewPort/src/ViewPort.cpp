@@ -16,6 +16,7 @@ void ViewPort::init_rect() {
 
 void ViewPort::compute_rect_size() {
     rect.size = sf::Vector2<double>(window_res) * pixel_scale;
+    pixels_per_meter = 1.0 / pixel_scale;
 }
 
 void ViewPort::zoom(Zoom direction, sf::Vector2f cursor_pos) {
@@ -66,8 +67,7 @@ void ViewPort::center_on_coords(sf::Vector2<double> coords) {
 }
 
 sf::Vector2f ViewPort::coords_to_pos_on_viewport(const sf::Vector2<double>& coords) const {
-    const auto relative_pos = (coords - rect.position).componentWiseDiv(rect.size);
-    return window_res.componentWiseMul(sf::Vector2f(relative_pos));
+    return sf::Vector2f((coords - rect.position) * pixels_per_meter);
 }
 
 sf::Vector2<double> ViewPort::pos_on_viewport_to_coords(const sf::Vector2f& pos) const {

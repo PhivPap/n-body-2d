@@ -25,6 +25,7 @@ public:
 private:
     sf::Vector2f window_res;
     double pixel_scale;
+    double pixels_per_meter;  // 1 / pixel_scale, coords_to_pos_on_viewport() runs for every body
     sf::Rect<double> rect;
 
     void init_rect();
