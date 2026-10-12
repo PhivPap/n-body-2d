@@ -14,30 +14,8 @@ BarnesHutCuda::BarnesHutCuda(Config::Simulation& sim_cfg, Bodies& bodies)
 }
 
 BarnesHutCuda::~BarnesHutCuda() {
-    if (sim_thread.joinable()) {
-        on_pause();
+    if (get_state() == State::RUNNING) {
+        pause();
     }
     release_device_resources();
-}
-
-void BarnesHutCuda::on_run() {
-    stop = false;
-    sim_thread = std::thread(&BarnesHutCuda::simulate, this);
-}
-
-void BarnesHutCuda::on_pause() {
-    stop = true;
-    sim_thread.join();
-    sync_bodies_to_host();
-}
-
-void BarnesHutCuda::simulate() {
-    while (!should_stop()) {
-        step();
-        post_iteration();
-        // `bodies` must hold the final state before should_stop() reports the simulation finished
-        if (iteration >= sim_cfg.iterations) {
-            sync_bodies_to_host();
-        }
-    }
 }

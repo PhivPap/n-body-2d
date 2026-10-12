@@ -14,7 +14,6 @@ private:
     const uint16_t n_threads;
     const double theta_sq;
     Quadtree qtree;
-    std::thread master;
     std::vector<std::thread> workers;
     const uint64_t worker_chunk;
     const uint64_t master_offset;
@@ -26,7 +25,7 @@ private:
 
     void on_run() override;
     void on_pause() override;
-    void simulate();
+    void step() override;
     void worker_task(uint32_t worker_id);
     void update_positions(uint64_t begin_idx, uint64_t end_idx);
     void update_velocities(uint64_t begin_idx, uint64_t end_idx);

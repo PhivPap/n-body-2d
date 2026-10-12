@@ -15,8 +15,8 @@ BarnesHut::BarnesHut(Config::Simulation& sim_cfg, Bodies& bodies)
 }
 
 BarnesHut::~BarnesHut() {
-    if (master.joinable()) {
-        on_pause();
+    if (get_state() == State::RUNNING) {
+        pause();
     }
 
     StopWatch sw_total = sw_tree + sw_vel + sw_pos;
@@ -25,18 +25,15 @@ BarnesHut::~BarnesHut() {
     Log::debug("Pos:  [{}] ({})", sw_pos, sw_pos / sw_total);
 }
 
+// The simulation thread is the master, the workers wait for its steps
 void BarnesHut::on_run() {
-    stop = false;
     worker_stop = false;
-    master = std::thread(&BarnesHut::simulate, this);
     for (uint32_t i = 0; i + 1 < n_threads; i++) {
         workers.emplace_back(&BarnesHut::worker_task, this, i);
     }
 }
 
 void BarnesHut::on_pause() {
-    stop = true;
-    master.join();
     worker_stop = true;
     std::ignore = sync_point.arrive();
     for (auto& worker : workers) {
@@ -45,27 +42,22 @@ void BarnesHut::on_pause() {
     workers.clear();
 }
 
-void BarnesHut::simulate() {
-    while (!should_stop()) {
-        // computeBoundingBox(bodies.size(), bodies.data());
+void BarnesHut::step() {
+    sw_tree.resume();
+    qtree.build_tree(bodies);
+    sw_tree.pause();
 
-        sw_tree.resume();
-        qtree.build_tree(bodies);
-        sw_tree.pause();
+    sync_point.arrive_and_wait();
 
-        sync_point.arrive_and_wait();
+    sw_vel.resume();
+    update_velocities(master_offset, bodies.n);
+    sw_vel.pause();
 
-        sw_vel.resume();
-        update_velocities(master_offset, bodies.n);
-        sw_vel.pause();
+    sw_pos.resume();
+    update_positions(master_offset, bodies.n);
+    sw_pos.pause();
 
-        sw_pos.resume();
-        update_positions(master_offset, bodies.n);
-        sw_pos.pause();
-
-        sync_point.arrive_and_wait();
-        post_iteration();
-    }
+    sync_point.arrive_and_wait();
 }
 
 void BarnesHut::worker_task(uint32_t worker_id) {

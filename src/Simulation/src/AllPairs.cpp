@@ -5,27 +5,14 @@ AllPairsSim::AllPairsSim(Config::Simulation& sim_cfg, Bodies& bodies)
         : Simulation(sim_cfg, bodies) {}
 
 AllPairsSim::~AllPairsSim() {
-    if (sim_thread.joinable()) {
-        on_pause();
+    if (get_state() == State::RUNNING) {
+        pause();
     }
 }
 
-void AllPairsSim::on_run() {
-    stop = false;
-    sim_thread = std::thread(&AllPairsSim::simulate, this);
-}
-
-void AllPairsSim::on_pause() {
-    stop = true;
-    sim_thread.join();
-}
-
-void AllPairsSim::simulate() {
-    while (!should_stop()) {
-        update_positions();
-        update_velocities();
-        post_iteration();
-    }
+void AllPairsSim::step() {
+    update_positions();
+    update_velocities();
 }
 
 void AllPairsSim::update_positions() {

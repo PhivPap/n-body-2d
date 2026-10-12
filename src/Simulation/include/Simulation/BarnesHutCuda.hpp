@@ -23,7 +23,6 @@ public:
     ~BarnesHutCuda() override;
 
 private:
-    std::thread sim_thread;
     const uint32_t n;
     const double inv_theta_sq;
     double total_mass = 0.0;
@@ -75,13 +74,9 @@ private:
     double2* pos_out_d = nullptr;
     double2* vel_out_d = nullptr;
 
-    void on_run() override;
-    void on_pause() override;
-    void simulate();
-
     void init_device_resources();
     void release_device_resources();
-    void step();
+    void step() override;
     void copy_bodies_to_host_async();
-    void sync_bodies_to_host();
+    void sync_bodies_to_host() override;
 };
