@@ -51,6 +51,8 @@ dwarf planets, large asteroids and Halley's comet. To look at a planet's moons, 
 around the planet, press F to follow it and zoom in with the mouse wheel.
 
 - The simulation starts right away. Close the window (or press Ctrl+C in the terminal) to stop.
+- With `Graphics.enabled` set to `false` in the config it runs without a window, logging its
+  progress, until it reaches `iterations` or you press Ctrl+C.
 - On exit, the final state of every body is written to the config's `universe_outfile` (here
   `scenarios/output.csv`, replaced on every run), in the same format as the input.
 - Paths in a config are relative to the config file, so you can start the simulator from any
@@ -163,7 +165,7 @@ doesn't know are ignored.
 | `panel_update_hz`       | How often the panels refresh                               |
 | `selection`             | `show`, `show_center_of_mass` and `follow`: the selection settings at startup |
 | `trails_fade_time_s`    | Seconds a trail takes to fade (0 for no trails)            |
-| `enabled`               | Not used yet                                               |
+| `enabled`               | Open a window. `false` runs headless until `iterations` or Ctrl+C |
 
 ## Universe files
 

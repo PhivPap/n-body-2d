@@ -1,3 +1,4 @@
+#include <optional>
 #include <signal.h>
 #include <thread>
 #include <unistd.h>
@@ -48,12 +49,19 @@ int main(int argc, const char* argv[]) {
         Bodies bodies = IO::parse_csv(cfg.io.universe_infile.string(), cfg.io.echo_bodies);
 
         std::unique_ptr<Simulation> sim = create_sim(cfg.sim, bodies);
-        Graphics graphics(cfg, bodies);
-        Controller controller(cfg, *sim.get(), graphics);
+        std::optional<Graphics> graphics;
+        if (cfg.graphics.enabled) {
+            graphics.emplace(cfg, bodies);
+        }
 
         signal(SIGINT, sigint_handler);
 
-        controller.run();
+        if (graphics) {
+            Controller(cfg, *sim, *graphics).run();
+        }
+        else {
+            Controller::run_headless(*sim);
+        }
 
         // Also after a simulation error: `bodies` holds the last state it reached
         IO::write_csv(cfg.io.universe_outfile.string(), bodies);
