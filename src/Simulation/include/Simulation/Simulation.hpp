@@ -40,11 +40,6 @@ protected:
     const Config::Simulation& sim_cfg;
     Bodies& bodies;
     const double epsilon_squared;
-    std::atomic<double> requested_timestep;
-    double timestep;  // of the current iteration
-    uint64_t iteration = 0;
-    std::atomic<bool> finished{false};
-    BufferedMeanCalculator<float, 60> ips_calculator{};
 
     static double compute_plummer_softening(const Bodies& bodies, const Config::Simulation& sim_cfg,
             double max_samples = Constants::Simulation::MAX_PAIRWISE_SOFTENING_COMPUTATIONS);
@@ -68,6 +63,11 @@ protected:
 
 
 private:
+    std::atomic<double> requested_timestep;
+    double timestep;  // of the current iteration
+    uint64_t iteration = 0;
+    std::atomic<bool> finished{false};
+    BufferedMeanCalculator<float, 60> ips_calculator{};
     std::mutex state_mtx;
     std::mutex stats_mtx;
     State state{State::PAUSED};

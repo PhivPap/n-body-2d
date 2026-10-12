@@ -1009,6 +1009,13 @@ void BarnesHutCuda::copy_bodies_to_host_async() {
     CUDA_CHECK(cudaEventRecord(copy_done, copy_stream));
 }
 
+// After an error, the simulation thread didn't sync the bodies: wait for any copy to them still in
+// flight before they are read, ignoring errors
+void BarnesHutCuda::on_pause() {
+    cudaStreamSynchronize(copy_stream);
+    cudaGetLastError();
+}
+
 void BarnesHutCuda::sync_bodies_to_host() {
     if (n == 0) {
         return;

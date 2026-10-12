@@ -119,14 +119,21 @@ BarnesHut::~BarnesHut() {
 // The simulation thread is thread 0, the workers wait for its parallel() calls
 void BarnesHut::on_run() {
     worker_stop = false;
-    for (uint32_t thread = 1; thread < n_threads; thread++) {
-        workers.emplace_back(&BarnesHut::worker_task, this, thread);
+    try {
+        for (uint32_t thread = 1; thread < n_threads; thread++) {
+            workers.emplace_back(&BarnesHut::worker_task, this, thread);
+        }
+    }
+    catch (...) {
+        on_pause();
+        throw;
     }
 }
 
 void BarnesHut::on_pause() {
     worker_stop = true;
-    std::ignore = sync_point.arrive();
+    // The workers wait at the barrier: arrive for the master and for any worker that didn't start
+    std::ignore = sync_point.arrive(n_threads - workers.size());
     for (auto& worker : workers) {
         worker.join();
     }

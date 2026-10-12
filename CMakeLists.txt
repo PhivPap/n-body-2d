@@ -14,6 +14,7 @@ endif()
 
 # CUDA, needed by the GPU Barnes-Hut only. The CUDA code is compiled for the GPU found at
 # configure time, unless NBODY_CUDA_ARCHITECTURES names others (e.g. 89 or all-major).
+# CMAKE_CUDA_ARCHITECTURES is overridden: older build directories cached CMake's default.
 include(CheckLanguage)
 check_language(CUDA)
 if(CMAKE_CUDA_COMPILER)
