@@ -19,6 +19,7 @@ public:
     Selector(const Bodies& bodies, const std::vector<sf::Vector2<double>>& body_positions_cache, 
             sf::VertexArray& body_vertex_array);
     void select(const sf::Rect<float>& region);
+    void set_show(bool show);
     void clear();
     bool has_selection() const;
     uint32_t num_selected() const;
@@ -29,4 +30,5 @@ private:
     const std::vector<sf::Vector2<double>>& body_positions_cache;
     sf::VertexArray& body_vertex_array;
     std::vector<uint32_t> selected_body_indices;
+    bool show = true;  // selected bodies get SELECT_COLOR
 };

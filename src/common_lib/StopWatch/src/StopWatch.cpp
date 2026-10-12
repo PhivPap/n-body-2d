@@ -7,7 +7,7 @@
 
 StopWatch::StopWatch(State state) : state(state) {
     if (state == State::RUNNING) {
-        last_start = std::chrono::high_resolution_clock::now();
+        last_start = std::chrono::steady_clock::now();
     }
 }
 
@@ -44,7 +44,7 @@ void StopWatch::resume() {
         Log::warning("StopWatch::resume() called on running StopWatch");
         return;
     }
-    last_start = std::chrono::high_resolution_clock::now();
+    last_start = std::chrono::steady_clock::now();
     state = State::RUNNING;
 }
 
@@ -54,15 +54,15 @@ void StopWatch::pause() {
         return;
     }
     previously_elapsed += std::chrono::duration_cast<decltype(previously_elapsed)>(
-            std::chrono::high_resolution_clock::now() - last_start);
+            std::chrono::steady_clock::now() - last_start);
     state = State::PAUSED;
 }
 
 void StopWatch::reset(State state) {
     this->state = state;
-    previously_elapsed.zero();
+    previously_elapsed = SecondsF64::zero();
     if (state == State::RUNNING) {
-        last_start = std::chrono::high_resolution_clock::now();
+        last_start = std::chrono::steady_clock::now();
     }
 }
 

@@ -20,7 +20,7 @@ void sigint_handler(int signum) {
     assert(signum == SIGINT);
     constexpr std::string_view txt1 = "\nInterrupted (SIGINT)\n";
     std::ignore = write(STDERR_FILENO, txt1.data(), txt1.size());
-    Controller::sigint_flag = true;
+    Controller::sigint_flag = 1;
 }
 
 std::unique_ptr<Simulation> create_sim(Config::Simulation& sim_cfg, Bodies& bodies) {

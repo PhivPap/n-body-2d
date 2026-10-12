@@ -1,5 +1,7 @@
 #pragma once
 
+#include <csignal>
+
 #include "Config/Config.hpp"
 #include "Graphics/Graphics.hpp"
 #include "RLCaller/RLCaller.hpp"
@@ -8,7 +10,7 @@
 
 class Controller {
 public:
-    static volatile bool sigint_flag;
+    static volatile std::sig_atomic_t sigint_flag;
     
     Controller(const Config& cfg, Simulation& sim, Graphics& graphics);
     void run();

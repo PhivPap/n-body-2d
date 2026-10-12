@@ -49,6 +49,7 @@ void main() {
     for (uint64_t i = 0; i < body_vertex_array.getVertexCount(); i++) {
         body_vertex_array[i].color = Constants::Graphics::BODY_COLOR;
     }
+    selector.set_show(graphics_cfg.selection_show);
 
     glEnable(GL_PROGRAM_POINT_SIZE);
     glEnable(GL_POINT_SPRITE);  // gl_PointCoord is undefined without it (compatibility profile)
@@ -378,6 +379,7 @@ void Graphics::toggle_grid() {
 
 void Graphics::toggle_selection_show() {
     graphics_cfg.selection_show = !graphics_cfg.selection_show;
+    selector.set_show(graphics_cfg.selection_show);
     config_panel.write_handle()->selection_show = graphics_cfg.selection_show;
     action_log.log(fmt::format("Selection overlay: {}", graphics_cfg.selection_show ? "Enabled" : "Disabled"));
 }

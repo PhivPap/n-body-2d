@@ -187,14 +187,14 @@ std::string_view Config::Simulation::simtype_to_string(SimType simtype) {
 
 bool Config::Simulation::parse_simtype() {
     const auto to_lower = [](std::string_view sv) {
-        std::string s(sv.size(), 0);
+        std::string s;
+        s.reserve(sv.size());
         for (char c : sv) {
             s += std::tolower(c);
         }
         return s;
     };
     const auto simtype_str_lower = to_lower(simtype_str);
-    Log::debug("`{}`", simtype_str_lower);
 
     bool ok = true;
     if (simtype_str_lower == to_lower(simtype_to_string(SimType::ALL_PAIRS))) {
@@ -240,9 +240,9 @@ bool Config::Simulation::validate() {
     }
     if (!parse_simtype()) {
         ok = false;
-        Log::error("Config::Simulation::simtype `{}` is not one of the valid options `{}`, `{}`",
-                simtype_str, simtype_to_string(SimType::BARNES_HUT),
-                simtype_to_string(SimType::ALL_PAIRS));
+        Log::error("Config::Simulation::algorithm `{}` is not one of `{}`, `{}`, `{}`", simtype_str,
+                simtype_to_string(SimType::ALL_PAIRS), simtype_to_string(SimType::BARNES_HUT),
+                simtype_to_string(SimType::BARNES_HUT_GPU));
     }
     if (!in_range(theta, THETA_RANGE)) {
         ok = false;
@@ -250,7 +250,7 @@ bool Config::Simulation::validate() {
     }
     if (!in_range(softening_factor, SOFTENING_FACTOR_RANGE)) {
         ok = false;
-        Log::error("Config::Simuation::softening_factor {} not withing allowed range {}",
+        Log::error("Config::Simulation::softening_factor {} not within allowed range {}",
                 softening_factor, SOFTENING_FACTOR_RANGE);
     }
     if (!in_range(threads, THREADS_RANGE)) {

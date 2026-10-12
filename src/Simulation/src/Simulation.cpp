@@ -57,7 +57,7 @@ void Simulation::set_timestep(double timestep) {
 bool Simulation::should_stop() {
     if (iteration >= sim_cfg.iterations) {
         finished = true;
-        Log::info("Simulation finshed");
+        Log::info("Simulation finished");
         return true;
     }
     return stop;
