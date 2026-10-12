@@ -7,7 +7,7 @@
 #include "Logger/Logger.hpp"
 
 
-volatile bool Controller::sigint_flag = false;
+volatile std::sig_atomic_t Controller::sigint_flag = 0;
 
 Controller::Controller(const Config& cfg, Simulation& sim, Graphics& graphics)
         : sim(sim), graphics(graphics), timestep(cfg.sim.timestep),

@@ -1,5 +1,6 @@
 #include "Body/Body.hpp"
 
+#include <cassert>
 #include <unordered_set>
 
 #include "Logger/Logger.hpp"
@@ -23,7 +24,7 @@ bool Bodies::validate() const {
 
     if (!validate_ids()) {
         ok = false;
-        Log::error("Body id uniqueness constrain violated");
+        Log::error("Body id uniqueness constraint violated");
     }
 
     // ...
@@ -32,42 +33,42 @@ bool Bodies::validate() const {
 }
 
 std::string& Bodies::id(uint64_t index) {
-    assert(index <= n);
+    assert(index < n);
     return id_[index];
 }
 
 const std::string& Bodies::id(uint64_t index) const {
-    assert(index <= n);
+    assert(index < n);
     return id_[index];
 }
 
 double& Bodies::mass(uint64_t index) {
-    assert(index <= n);
+    assert(index < n);
     return mass_[index];
 }
 
 const double& Bodies::mass(uint64_t index) const {
-    assert(index <= n);
+    assert(index < n);
     return mass_[index];
 }
 
 sf::Vector2<double>& Bodies::pos(uint64_t index) {
-    assert(index <= n);
+    assert(index < n);
     return pos_[index];
 }
 
 const sf::Vector2<double>& Bodies::pos(uint64_t index) const {
-    assert(index <= n);
+    assert(index < n);
     return pos_[index];
 }
 
 sf::Vector2<double>& Bodies::vel(uint64_t index) {
-    assert(index <= n);
+    assert(index < n);
     return vel_[index];
 }
 
 const sf::Vector2<double>& Bodies::vel(uint64_t index) const {
-    assert(index <= n);
+    assert(index < n);
     return vel_[index];
 }
 

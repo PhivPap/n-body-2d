@@ -17,11 +17,20 @@ void Selector::select(const sf::Rect<float>& region) {
     for (uint64_t i = 0; i < bodies.n; i++) {
         if (region.contains(body_vertex_array[i].position)) {
             selected_body_indices.push_back(i);
-            body_vertex_array[i].color = Constants::Graphics::SELECT_COLOR;
+            body_vertex_array[i].color =
+                    show ? Constants::Graphics::SELECT_COLOR : Constants::Graphics::BODY_COLOR;
         }
         else {
             body_vertex_array[i].color = Constants::Graphics::BODY_COLOR;
         }
+    }
+}
+
+void Selector::set_show(bool show) {
+    this->show = show;
+    for (const uint32_t index : selected_body_indices) {
+        body_vertex_array[index].color =
+                show ? Constants::Graphics::SELECT_COLOR : Constants::Graphics::BODY_COLOR;
     }
 }
 

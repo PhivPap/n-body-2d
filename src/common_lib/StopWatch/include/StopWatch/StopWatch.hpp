@@ -31,7 +31,7 @@ private:
     using SecondsF64 = std::chrono::duration<double>;
 
     State state;
-    std::chrono::time_point<std::chrono::high_resolution_clock> last_start;
+    std::chrono::time_point<std::chrono::steady_clock> last_start;
     SecondsF64 previously_elapsed{0};
 
     template <uint8_t DECIMALS = 3>
@@ -63,7 +63,7 @@ TargetDuration StopWatch::duration() const {
     return state == State::RUNNING
                    ? std::chrono::duration_cast<TargetDuration>(
                              previously_elapsed
-                             + (std::chrono::high_resolution_clock::now() - last_start))
+                             + (std::chrono::steady_clock::now() - last_start))
                    : std::chrono::duration_cast<TargetDuration>(previously_elapsed);
 }
 
