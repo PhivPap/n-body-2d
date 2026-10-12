@@ -12,7 +12,7 @@
 Simulation::Simulation(const Config::Simulation& sim_cfg, Bodies& bodies)
         : sim_cfg(sim_cfg), bodies(bodies),
           epsilon_squared(std::max(
-                  std::pow(compute_plummer_softening(bodies, sim_cfg.softening_factor), 2),
+                  std::pow(compute_plummer_softening(bodies, sim_cfg), 2),
                   Constants::Simulation::MIN_EPSILON_SQUARED)),
           requested_timestep(sim_cfg.timestep), timestep(sim_cfg.timestep) {}
 
@@ -106,8 +106,14 @@ sf::Vector2<double> Simulation::pull(const sf::Vector2<double>& pos_a,
            * (pos_b - pos_a);
 }
 
-double Simulation::compute_plummer_softening(const Bodies& bodies, double factor,
-        double max_samples) {
+double Simulation::compute_plummer_softening(const Bodies& bodies,
+        const Config::Simulation& sim_cfg, double max_samples) {
+    if (sim_cfg.softening_length_m) {
+        Log::info("Plummer softening (epsilon): {}",
+                Log::Distance::from(*sim_cfg.softening_length_m));
+        return *sim_cfg.softening_length_m;
+    }
+    const double factor = *sim_cfg.softening_factor;
     if (factor == 0.0) {
         Log::info("Plummer softening disabled (softening_factor=0)");
         return 0.0;
@@ -129,7 +135,7 @@ double Simulation::compute_plummer_softening(const Bodies& bodies, double factor
     };
 
     const auto estimate_avg_pairwise_distance = [&bodies, samples = max_samples]() -> double {
-        std::mt19937_64 rng(std::chrono::steady_clock::now().time_since_epoch().count());
+        std::mt19937_64 rng(0);  // the same softening every run
         std::uniform_int_distribution<size_t> uniform(0, bodies.n - 1);
         double dist_sum = 0.0;
         for (uint64_t s = 0; s < samples; s++) {

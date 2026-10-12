@@ -8,7 +8,8 @@ struct ConfigDisplayedData {
     std::string algorithm;
     double theta;
     bool show_theta;
-    double softening_factor;
+    std::optional<double> softening_factor;
+    std::optional<double> softening_length_m;
     uint32_t threads;
     bool show_threads;
     sf::Vector2<double> viewport_m;

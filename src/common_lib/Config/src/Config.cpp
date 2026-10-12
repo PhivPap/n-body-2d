@@ -1,5 +1,6 @@
 #include "Config/Config.hpp"
 
+#include <cmath>
 #include <filesystem>
 #include <fstream>
 #include <system_error>
@@ -29,11 +30,15 @@ Config::Config(const fs::path& path) {
                 .echo_bodies = j_io.at("echo_bodies")};
 
         const auto j_sim = json_cfg.at("Simulation");
+        const auto optional_number = [&j_sim](const char* key) -> std::optional<double> {
+            return j_sim.contains(key) ? std::optional(j_sim.at(key).get<double>()) : std::nullopt;
+        };
         sim = Simulation{.timestep = j_sim.at("timestep"),
                 .iterations = j_sim.at("iterations"),
                 .simtype_str = j_sim.at("algorithm"),
                 .theta = j_sim.at("theta"),
-                .softening_factor = j_sim.at("softening_factor"),
+                .softening_factor = optional_number("softening_factor"),
+                .softening_length_m = optional_number("softening_length_m"),
                 .threads = j_sim.at("threads")};
 
         const auto j_graphics = json_cfg.at("Graphics");
@@ -225,9 +230,13 @@ std::string Config::Simulation::to_string() const {
     algorithm:           `{}`
     theta:               {}
     softening_factor:    {}
+    softening_length_m:  {}
     threads:             {})";
-    return fmt::format(fmt_str, timestep, iterations, simtype_str, theta, softening_factor,
-            threads);
+    const auto optional_str = [](const std::optional<double>& x) {
+        return x ? fmt::format("{}", *x) : "-";
+    };
+    return fmt::format(fmt_str, timestep, iterations, simtype_str, theta,
+            optional_str(softening_factor), optional_str(softening_length_m), threads);
 }
 
 bool Config::Simulation::validate() {
@@ -254,10 +263,18 @@ bool Config::Simulation::validate() {
         ok = false;
         Log::error("Config::Simulation::theta {} not within allowed range {}", theta, THETA_RANGE);
     }
-    if (!in_range(softening_factor, SOFTENING_FACTOR_RANGE)) {
+    if (softening_factor.has_value() == softening_length_m.has_value()) {
+        ok = false;
+        Log::error("Config::Simulation needs one of softening_factor and softening_length_m");
+    }
+    if (softening_factor && !in_range(*softening_factor, SOFTENING_FACTOR_RANGE)) {
         ok = false;
         Log::error("Config::Simulation::softening_factor {} not within allowed range {}",
-                softening_factor, SOFTENING_FACTOR_RANGE);
+                *softening_factor, SOFTENING_FACTOR_RANGE);
+    }
+    if (softening_length_m && !(std::isfinite(*softening_length_m) && *softening_length_m >= 0)) {
+        ok = false;
+        Log::error("Config::Simulation::softening_length_m {} must be >= 0", *softening_length_m);
     }
     if (!in_range(threads, THREADS_RANGE)) {
         ok = false;

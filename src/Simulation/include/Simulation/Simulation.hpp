@@ -47,7 +47,7 @@ protected:
     std::atomic<bool> finished{false};
     BufferedMeanCalculator<float, 60> ips_calculator{};
 
-    static double compute_plummer_softening(const Bodies& bodies, double factor,
+    static double compute_plummer_softening(const Bodies& bodies, const Config::Simulation& sim_cfg,
             double max_samples = Constants::Simulation::MAX_PAIRWISE_SOFTENING_COMPUTATIONS);
     static double distance(const sf::Vector2<double>& pos_a, const sf::Vector2<double>& pos_b);
     static double distance_squared(const sf::Vector2<double>& pos_a,

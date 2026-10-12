@@ -13,7 +13,7 @@ void ConfigPanel::set_panel_text() {
         " Timestep:      {}\n"
         " Algorithm:     {}\n"
         "{}" // Theta only relevant for Barnes-Hut
-        " Soft. Factor:  {:.5f}\n"
+        "{}" // Softening as configured: a length or a factor
         "{}" // Threads only relevant for threaded algorithms
         " View[W x H]:   {} x {}\n"
         " Window[W x H]: {}px x {}px\n"
@@ -26,7 +26,9 @@ void ConfigPanel::set_panel_text() {
         Log::Time::from(d.timestep_s),
         d.algorithm,
         displayed_data.show_theta ? fmt::format(" Theta:         {}\n", d.theta) : "",
-        d.softening_factor,
+        d.softening_length_m
+                ? fmt::format(" Softening:     {}\n", Log::Distance::from(*d.softening_length_m))
+                : fmt::format(" Soft. Factor:  {:.5f}\n", d.softening_factor.value_or(0.0)),
         displayed_data.show_threads ? fmt::format(" Threads (sim):  {}\n", d.threads) : "",
         Log::Distance::from(d.viewport_m.x),
         Log::Distance::from(d.viewport_m.y),
