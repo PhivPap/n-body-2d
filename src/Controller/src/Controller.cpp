@@ -188,14 +188,14 @@ void Controller::run() {
     StopWatch sw;
     sim.run();
     sf::RenderWindow& window = graphics.get_window();
-    while (!sim.is_finished()) {
-        if (sigint_flag || !window.isOpen()) {
-            sim.pause();
-            break;
-        }
+    while (!sim.is_finished() && !sigint_flag && window.isOpen()) {
         handle_events(window);
         stats_update_rate_limiter.try_call(std::bind(&Controller::update_panels, this));
         graphics.draw_frame();
+    }
+    // Also joins the threads of a finished simulation
+    if (sim.get_state() == Simulation::State::RUNNING) {
+        sim.pause();
     }
     Log::debug("Sim done: [{}]", sw);
 }

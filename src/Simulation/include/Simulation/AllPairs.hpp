@@ -9,11 +9,7 @@ public:
     ~AllPairsSim() override;
 
 private:
-    std::thread sim_thread;
-
-    void on_run() override;
-    void on_pause() override;
-    void simulate();
+    void step() override;
     void update_positions();
     void update_velocities();
 };

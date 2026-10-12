@@ -1,6 +1,7 @@
 #pragma once
 
 #include <mutex>
+#include <thread>
 
 #include "Body/Body.hpp"
 #include "BufferedMeanCalculator/BufferedMeanCalculator.hpp"
@@ -37,7 +38,6 @@ protected:
     std::atomic<double> requested_timestep;
     uint64_t iteration = 0;
     std::atomic<bool> finished{false};
-    std::atomic<bool> stop{false};
     BufferedMeanCalculator<float, 60> ips_calculator{};
 
     static double compute_plummer_softening(const Bodies& bodies, double factor,
@@ -46,10 +46,15 @@ protected:
     static double distance_squared(const sf::Vector2<double>& pos_a,
             const sf::Vector2<double>& pos_b);
 
-    bool should_stop();
-    void post_iteration();
-    virtual void on_run() = 0;
-    virtual void on_pause() = 0;
+    // One iteration, on the simulation thread that run() starts and pause() joins. Derived
+    // destructors must pause a running simulation, as the thread uses them.
+    virtual void step() = 0;
+    // Brings `bodies` up to date, on the simulation thread before it stops
+    virtual void sync_bodies_to_host() {}
+    // On the thread calling run() or pause(), before the simulation thread starts or after it
+    // stopped
+    virtual void on_run() {}
+    virtual void on_pause() {}
     sf::Vector2<double> force(const sf::Vector2<double>& pos_a, const sf::Vector2<double>& pos_b,
             double mass_a, double mass_b) const;
 
@@ -61,6 +66,10 @@ private:
     Stats stats{};
     StopWatch sw{StopWatch::State::PAUSED};
     RLCaller stats_update_rate_limiter{Constants::Simulation::STATS_UPDATE_TIMER};
+    std::thread sim_thread;
+    std::atomic<bool> stop{false};
 
+    void simulate();
+    void post_iteration();
     void update_stats();
 };

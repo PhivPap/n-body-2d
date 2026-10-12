@@ -1,5 +1,6 @@
 #include "Simulation/Simulation.hpp"
 
+#include <cassert>
 #include <random>
 #include <stack>
 
@@ -13,7 +14,9 @@ Simulation::Simulation(Config::Simulation& sim_cfg, Bodies& bodies)
           epsilon_squared(std::pow(compute_plummer_softening(bodies, sim_cfg.softening_factor), 2)),
           requested_timestep(sim_cfg.timestep) {}
 
-Simulation::~Simulation() {}
+Simulation::~Simulation() {
+    assert(!sim_thread.joinable());  // derived destructors pause a running simulation
+}
 
 Simulation::State Simulation::get_state() {
     std::lock_guard state_lock(state_mtx);
@@ -36,7 +39,9 @@ void Simulation::run() {
         return;
     }
     state = State::RUNNING;
+    stop = false;
     on_run();
+    sim_thread = std::thread(&Simulation::simulate, this);
     sw.resume();
 }
 
@@ -47,6 +52,8 @@ void Simulation::pause() {
         return;
     }
     state = State::PAUSED;
+    stop = true;
+    sim_thread.join();
     on_pause();
     sw.pause();
 }
@@ -55,13 +62,17 @@ void Simulation::set_timestep(double timestep) {
     requested_timestep.store(timestep, std::memory_order::relaxed);
 }
 
-bool Simulation::should_stop() {
+void Simulation::simulate() {
+    while (!stop && iteration < sim_cfg.iterations) {
+        step();
+        post_iteration();
+    }
+    // `bodies` must hold the final state before the simulation is reported finished
+    sync_bodies_to_host();
     if (iteration >= sim_cfg.iterations) {
         finished = true;
         Log::info("Simulation finished");
-        return true;
     }
-    return stop;
 }
 
 void Simulation::post_iteration() {
