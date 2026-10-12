@@ -265,7 +265,8 @@ bool Config::Simulation::validate() {
     }
     if (softening_factor.has_value() == softening_length_m.has_value()) {
         ok = false;
-        Log::error("Config::Simulation needs one of softening_factor and softening_length_m");
+        Log::error(
+                "Config::Simulation needs exactly one of softening_factor and softening_length_m");
     }
     if (softening_factor && !in_range(*softening_factor, SOFTENING_FACTOR_RANGE)) {
         ok = false;

@@ -63,7 +63,8 @@ int main(int argc, const char* argv[]) {
             Controller::run_headless(*sim);
         }
 
-        // Also after a simulation error: `bodies` holds the last state it reached
+        // Also after a simulation error: `bodies` holds the last state it reached (whose
+        // velocities may then lag its positions by half a step)
         IO::write_csv(cfg.io.universe_outfile.string(), bodies);
         sim->rethrow_error();
     }

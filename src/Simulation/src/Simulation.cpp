@@ -40,11 +40,18 @@ void Simulation::run() {
         Log::warning("Cannot run simulation, it is not paused");
         return;
     }
-    state = State::RUNNING;
     stop = false;
     on_run();
-    sim_thread = std::thread(&Simulation::simulate, this);
-    sw.resume();
+    sw.resume();  // before the thread, which reads it for the stats
+    try {
+        sim_thread = std::thread(&Simulation::simulate, this);
+    }
+    catch (...) {
+        sw.pause();
+        on_pause();
+        throw;
+    }
+    state = State::RUNNING;
 }
 
 void Simulation::pause() {
@@ -75,6 +82,7 @@ void Simulation::rethrow_error() const {
 }
 
 void Simulation::simulate() {
+    timestep = requested_timestep.load(std::memory_order::relaxed);
     try {
         // Leapfrog (kick, drift, kick), with each step's last half kick done with the next step's
         // first: the velocities lag the positions by half a step in between

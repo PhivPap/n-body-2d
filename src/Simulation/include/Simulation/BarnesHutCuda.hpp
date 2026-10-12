@@ -79,4 +79,5 @@ private:
     void step(double kick, double drift) override;
     void copy_bodies_to_host_async();
     void sync_bodies_to_host() override;
+    void on_pause() override;
 };
