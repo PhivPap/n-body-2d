@@ -4,11 +4,6 @@ project(lib-simulation)
 set(CMAKE_CUDA_STANDARD 20)
 set(CMAKE_CUDA_STANDARD_REQUIRED ON)
 
-set(LOCAL_LIB_DIR "${CMAKE_CURRENT_SOURCE_DIR}/lib")
-
-# Add local lib directories
-add_subdirectory(${LOCAL_LIB_DIR}/Quadtree)
-
 # Add library
 add_library(${PROJECT_NAME} 
         ${CMAKE_CURRENT_LIST_DIR}/src/Simulation.cpp 
@@ -20,7 +15,6 @@ target_include_directories(${PROJECT_NAME} PUBLIC ${CMAKE_CURRENT_LIST_DIR}/incl
 target_link_libraries(${PROJECT_NAME} PUBLIC lib-config)
 target_link_libraries(${PROJECT_NAME} PUBLIC lib-body)
 target_link_libraries(${PROJECT_NAME} PUBLIC lib-rlcaller)
-target_link_libraries(${PROJECT_NAME} PUBLIC lib-simulation-quadtree)
 target_link_libraries(${PROJECT_NAME} PUBLIC lib-stopwatch)
 target_link_libraries(${PROJECT_NAME} PUBLIC lib-constants)
 target_link_libraries(${PROJECT_NAME} PUBLIC lib-buffered-mean-calculator)

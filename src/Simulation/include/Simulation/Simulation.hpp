@@ -8,7 +8,6 @@
 #include "BufferedMeanCalculator/BufferedMeanCalculator.hpp"
 #include "Config/Config.hpp"
 #include "Constants/Constants.hpp"
-#include "Quadtree/Quadtree.hpp"
 #include "RLCaller/RLCaller.hpp"
 #include "StopWatch/StopWatch.hpp"
 

@@ -6,7 +6,7 @@
         "echo_bodies": false
     },
     "Simulation": {
-        "timestep": 16.1,
+        "timestep": 12.2,
         "iterations": 10000000000,
         "theta": 0.3,
         "algorithm": "All Pairs",
@@ -38,8 +38,8 @@
         "bodies": 44,
         "timestep_max_s": 91.88,
         "timestep_limited_by": "Phobos around Mars",
-        "expected_iterations_per_s": 775000.0,
-        "simulated_seconds_per_second": 12500000.0,
+        "expected_iterations_per_s": 1020000.0,
+        "simulated_seconds_per_second": 12400000.0,
         "tips": [
             "Right-drag around a planet to select it with its moons, press F to follow it and C to centre it, then zoom in with the mouse wheel.",
             "Slow time down (Left arrow) to watch the moons; the speed-up limit (timestep_max_s) is set by Phobos."
