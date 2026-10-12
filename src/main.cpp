@@ -55,7 +55,9 @@ int main(int argc, const char* argv[]) {
 
         controller.run();
 
+        // Also after a simulation error: `bodies` holds the last state it reached
         IO::write_csv(cfg.io.universe_outfile.string(), bodies);
+        sim->rethrow_error();
     }
     catch (const std::exception& e) {
         Log::error("{}", e.what());

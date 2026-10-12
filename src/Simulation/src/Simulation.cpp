@@ -62,16 +62,28 @@ void Simulation::set_timestep(double timestep) {
     requested_timestep.store(timestep, std::memory_order::relaxed);
 }
 
-void Simulation::simulate() {
-    while (!stop && iteration < sim_cfg.iterations) {
-        step();
-        post_iteration();
+void Simulation::rethrow_error() const {
+    if (error) {
+        std::rethrow_exception(error);
     }
-    // `bodies` must hold the final state before the simulation is reported finished
-    sync_bodies_to_host();
-    if (iteration >= sim_cfg.iterations) {
+}
+
+void Simulation::simulate() {
+    try {
+        while (!stop && iteration < sim_cfg.iterations) {
+            step();
+            post_iteration();
+        }
+        // `bodies` must hold the final state before the simulation is reported finished
+        sync_bodies_to_host();
+    }
+    catch (...) {
+        // The main thread finds the simulation finished, pauses it and rethrows the error
+        error = std::current_exception();
+    }
+    if (error || iteration >= sim_cfg.iterations) {
         finished = true;
-        Log::info("Simulation finished");
+        Log::info("Simulation {}", error ? "stopped by an error" : "finished");
     }
 }
 

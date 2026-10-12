@@ -10,7 +10,13 @@ BarnesHutCuda::BarnesHutCuda(Config::Simulation& sim_cfg, Bodies& bodies)
     // The tree refers to bodies by 32-bit signed indices
     if (bodies.n > static_cast<uint64_t>(std::numeric_limits<int32_t>::max()))
         throw std::runtime_error("Too many bodies for Barnes-Hut GPU");
-    init_device_resources();
+    try {
+        init_device_resources();
+    }
+    catch (...) {
+        release_device_resources();
+        throw;
+    }
 }
 
 BarnesHutCuda::~BarnesHutCuda() {

@@ -7,6 +7,7 @@
 #include <cub/cub.cuh>
 #include <cuda/atomic>
 #include <cuda_runtime.h>
+#include <stdexcept>
 #include <vector>
 
 #include "Logger/Logger.hpp"
@@ -16,8 +17,8 @@
     do {                                                                                           \
         cudaError_t err = (call);                                                                  \
         if (err != cudaSuccess) {                                                                  \
-            Log::error("CUDA error at {}:{}: {}", __FILE__, __LINE__, cudaGetErrorString(err));    \
-            ::exit(EXIT_FAILURE);                                                                  \
+            throw std::runtime_error(fmt::format("CUDA error at {}:{}: {}", __FILE__, __LINE__,    \
+                    cudaGetErrorString(err)));                                                     \
         }                                                                                          \
     } while (0)
 
@@ -913,24 +914,40 @@ void BarnesHutCuda::init_device_resources() {
     }
 }
 
+// Doesn't throw: it runs in the destructor, possibly after a CUDA error or a partial init
 void BarnesHutCuda::release_device_resources() {
+    cudaError_t first_error = cudaSuccess;
+    const auto check = [&first_error](cudaError_t err) {
+        if (first_error == cudaSuccess) {
+            first_error = err;
+        }
+    };
     if (host_bodies_pinned) {
-        CUDA_CHECK(cudaHostUnregister(bodies.pos_data()));
-        CUDA_CHECK(cudaHostUnregister(bodies.vel_data()));
+        check(cudaHostUnregister(bodies.pos_data()));
+        check(cudaHostUnregister(bodies.vel_data()));
     }
     for (void* ptr : std::initializer_list<void*>{pos_d, vel_d, mass_d, id_d, pos_alt_d, vel_alt_d,
                  mass_alt_d, id_alt_d, keys_d, keys_alt_d, order_d, order_alt_d, sort_temp_d,
                  body_pos_d, key_delta_d, seeds_d, arrivals_d, merge_bound_d, nodes_d, root_d,
                  open_sq_by_level_d, frame_d, counters_d, retry_bodies_d, stacks_d, pos_out_d,
                  vel_out_d}) {
-        CUDA_CHECK(cudaFree(ptr));
+        if (ptr) {
+            check(cudaFree(ptr));
+        }
     }
-    for (CUevent_st* event : step_done) {
-        CUDA_CHECK(cudaEventDestroy(event));
+    for (CUevent_st* event : {step_done[0], step_done[1], copy_done}) {
+        if (event) {
+            check(cudaEventDestroy(event));
+        }
     }
-    CUDA_CHECK(cudaEventDestroy(copy_done));
-    CUDA_CHECK(cudaStreamDestroy(copy_stream));
-    CUDA_CHECK(cudaStreamDestroy(stream));
+    for (CUstream_st* s : {copy_stream, stream}) {
+        if (s) {
+            check(cudaStreamDestroy(s));
+        }
+    }
+    if (first_error != cudaSuccess) {
+        Log::warning("Releasing GPU resources failed: {}", cudaGetErrorString(first_error));
+    }
 }
 
 void BarnesHutCuda::step() {
