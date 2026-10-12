@@ -130,8 +130,8 @@ Scenarios with more than 300 bodies use the GPU algorithm. On a build without CU
 
 ## Configuration
 
-A config is a JSON file with three sections. Every key below is required; keys the simulator
-doesn't know are ignored.
+A config is a JSON file with three sections. Every key below is required, except that the
+softening takes one of two keys; keys the simulator doesn't know are ignored.
 
 **`IO`**
 
@@ -150,7 +150,8 @@ doesn't know are ignored.
 | `timestep`         | Simulated seconds per step at startup                                         |
 | `iterations`       | Stop and exit after this many steps                                           |
 | `theta`            | Barnes-Hut opening angle: smaller is more accurate and slower. The CPU version compares a cell's diagonal to its distance, the GPU version its side |
-| `softening_factor` | Plummer softening length as a fraction of the mean distance between bodies, from 0 (none) to 0.2 |
+| `softening_length_m` | Plummer softening length in metres (0 for none)                             |
+| `softening_factor` | Or: the softening length as a fraction of the mean distance between bodies, from 0 (none) to 0.2 |
 | `threads`          | Threads for the CPU Barnes-Hut (1 to 256)                                     |
 
 **`Graphics`**
@@ -181,10 +182,10 @@ but don't pull anything.
   orbit limits how large it can be (a few hundred steps per orbit). That's why each scenario stays
   at one scale: a planet with moons inside a galaxy would need billions of steps per galactic
   orbit.
-- **Softening** is `softening_factor` × the mean distance between bodies, computed once at
-  startup. It keeps close encounters in particle systems such as galaxies and disks from blowing
-  up, but it also weakens any orbit closer than a few softening lengths, so planetary systems use
-  none.
+- **Softening** is the Plummer length `softening_length_m`, or `softening_factor` × the mean
+  distance between bodies, computed once at startup. It keeps close encounters in particle systems
+  such as galaxies and disks from blowing up, but it also weakens any orbit closer than a few
+  softening lengths, so planetary systems use none.
 - **Playback speed** is steps per second × timestep, so it depends on your hardware. The generated
   timesteps are tuned for a Ryzen 9 9950X3D and an RTX 5070 Ti. On a slower machine a scenario
   plays slower, and you can use the Right arrow to speed it up, up to its `timestep_max_s`.

@@ -87,6 +87,7 @@ static std::optional<StatsDisplayedData::Selection> panel_selection(
         write_handle->theta = cfg.sim.theta;
         write_handle->show_theta = cfg.sim.simtype != Config::Simulation::SimType::ALL_PAIRS;
         write_handle->softening_factor = cfg.sim.softening_factor;
+        write_handle->softening_length_m = cfg.sim.softening_length_m;
         write_handle->threads = cfg.sim.threads;
         write_handle->show_threads = cfg.sim.simtype == Config::Simulation::SimType::BARNES_HUT;
         write_handle->viewport_m = vp.get_rect().size;

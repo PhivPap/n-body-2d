@@ -10,7 +10,7 @@
         "iterations": 10000000000,
         "theta": 0.3,
         "algorithm": "All Pairs",
-        "softening_factor": 0.0,
+        "softening_length_m": 0.0,
         "threads": 1
     },
     "Graphics": {
@@ -36,7 +36,6 @@
         "name": "solar-system",
         "description": "The Solar System at J2000 (orbits projected onto the ecliptic): Sun, eight planets with their major moons (Moon, Phobos, Deimos, the Galilean moons in their Laplace resonance, Saturn's eight major moons, Uranus' five, Proteus, retrograde Triton and Nereid), Pluto-Charon with Nix and Hydra, Ceres, Vesta, Pallas, Hygiea, Eris, Haumea, Makemake and retrograde Halley's comet. No softening, and a timestep that resolves Phobos' 7.7 hour orbit.",
         "bodies": 44,
-        "softening_m": 0.0,
         "timestep_max_s": 91.88,
         "timestep_limited_by": "Phobos around Mars",
         "expected_iterations_per_s": 775000.0,

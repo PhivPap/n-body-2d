@@ -24,10 +24,9 @@ How the configs are chosen (this mirrors the simulator, see src/Simulation/):
   * Algorithm by body count: All Pairs (exact) up to ALL_PAIRS_MAX_BODIES, the GPU Barnes-Hut
     above that. The CPU Barnes-Hut is never the fastest (measured on a Ryzen 9 9950X3D + RTX 5070
     Ti, see estimate_ips() and choose_algorithm()).
-  * Softening: each scenario asks for an absolute Plummer length epsilon [m]. The simulator only
-    takes `softening_factor` = epsilon / (average pairwise distance), so the generator measures that
-    distance the same way the simulator does and divides. Systems with tight orbits (planets, moons,
-    stars around a black hole) use epsilon = 0, or an epsilon far below their closest approaches.
+  * Softening: each scenario asks for an absolute Plummer length epsilon [m], which the config
+    gives as `softening_length_m`. Systems with tight orbits (planets, moons, stars around a black
+    hole) use epsilon = 0, or an epsilon far below their closest approaches.
   * Timestep: the largest step that keeps the tightest orbit healthy (`timestep_max_s`, at least
     STEPS_PER_ORBIT steps per orbit and fine steps through every periapsis) caps the default
     timestep, which is otherwise picked so the scenario plays at a watchable speed. You can speed a
@@ -107,7 +106,6 @@ BH_CPU = "Barnes-Hut"
 BH_GPU = "Barnes-Hut GPU"
 
 TIMESTEP_RANGE = (1e-9, 31_556_952_000_000_000)
-SOFTENING_FACTOR_RANGE = (0.0, 0.2)
 THREADS_RANGE = (1, 256)
 PIXEL_SCALE_RANGE = (1e-12, 8.8e50)
 
@@ -154,28 +152,6 @@ def config_theta(algorithm, theta):
     """The CPU tree compares the cell *diagonal* to the distance, the GPU tree the cell *side*.
     Scenarios specify the side-length angle; convert so both trees are equally accurate."""
     return theta * math.sqrt(2) if algorithm == BH_CPU else theta
-
-
-def mean_pairwise_distance(pos, rng=None):
-    """What Simulation::compute_plummer_softening divides by: the exact mean over all pairs for
-    n * n <= 1e6, otherwise an estimate from 1e6 random pairs (here: exact up to 20k bodies,
-    4e6 sampled pairs above, so the simulator's own estimate lands within ~0.1%)."""
-    n = len(pos)
-    if n < 2:
-        return 0.0
-    if n <= 20_000:
-        total = 0.0
-        for i0 in range(0, n - 1, 256):
-            block = pos[i0:i0 + 256]
-            d = np.hypot(block[:, None, 0] - pos[None, :, 0], block[:, None, 1] - pos[None, :, 1])
-            rows = np.arange(i0, i0 + len(block))[:, None]
-            total += d[np.arange(n)[None, :] > rows].sum()
-        return total / (n * (n - 1) / 2)
-    rng = rng or np.random.default_rng(12345)
-    i = rng.integers(0, n, 4_000_000)
-    j = rng.integers(0, n - 1, 4_000_000)
-    j += j >= i
-    return float(np.hypot(*(pos[i] - pos[j]).T).mean())
 
 
 # ------------------------------------------------------------------------------------------------
@@ -1578,8 +1554,6 @@ class Plan:
     dt: float
     dt_max: float
     dt_limiter: str
-    softening_factor: float
-    mean_distance: float
     pixel_scale: float
 
 
@@ -1622,10 +1596,6 @@ def plan(sc):
     dt = round_down(min(dt_max, sc.show_period / (sc.show_seconds * ips)))
     if not TIMESTEP_RANGE[0] <= dt <= TIMESTEP_RANGE[1]:
         raise ValueError(f"timestep {dt:g} s outside the simulator's range {TIMESTEP_RANGE}")
-    mean_d = mean_pairwise_distance(sc.bodies.pos)
-    factor = sc.softening / mean_d if sc.softening else 0.0
-    if not SOFTENING_FACTOR_RANGE[0] <= factor <= SOFTENING_FACTOR_RANGE[1]:
-        raise ValueError(f"softening factor {factor:g} outside {SOFTENING_FACTOR_RANGE}")
     for p in sc.pairs:  # softening must not touch any orbit that has to hold
         if sc.softening > sc.softening_tolerance * p.a * (1 - p.e):
             raise ValueError(f"softening {fmt_dist(sc.softening)} too large for {p.secondary}'s "
@@ -1635,7 +1605,7 @@ def plan(sc):
     if not PIXEL_SCALE_RANGE[0] <= pixel_scale <= PIXEL_SCALE_RANGE[1]:
         raise ValueError(f"pixel scale {pixel_scale:g} m/px outside {PIXEL_SCALE_RANGE}")
     return Plan(algorithm, round_sig(config_theta(algorithm, sc.theta), 3), ips, dt, dt_max,
-            limiter, factor, mean_d, pixel_scale)
+            limiter, pixel_scale)
 
 
 def make_config(name, sc, p, csv_path):
@@ -1653,7 +1623,7 @@ def make_config(name, sc, p, csv_path):
             "iterations": 10_000_000_000,
             "theta": p.theta,
             "algorithm": p.algorithm,
-            "softening_factor": p.softening_factor,
+            "softening_length_m": sc.softening,
             # Only the CPU Barnes-Hut is multithreaded, so other configs don't depend on the
             # machine that generated them
             "threads": min(CPU_THREADS, n) if p.algorithm == BH_CPU else 1,
@@ -1678,7 +1648,6 @@ def make_config(name, sc, p, csv_path):
             "name": name,
             "description": sc.description,
             "bodies": n,
-            "softening_m": sc.softening,
             "timestep_max_s": round_sig(p.dt_max) if math.isfinite(p.dt_max) else None,
             "timestep_limited_by": p.dt_limiter if math.isfinite(p.dt_max) else None,
             "expected_iterations_per_s": round_sig(p.ips, 3),
@@ -1883,8 +1852,7 @@ def generate(name, args):
     theta = "" if p.algorithm == ALL_PAIRS else f", theta {p.theta:g}"
     print(f"{name}: {n:,} bodies, {p.algorithm}{theta} [{time.time() - t0:.1f} s]")
     if sc.softening:
-        print(f"  softening  {fmt_dist(sc.softening)} = {p.softening_factor:.4g} x mean pair "
-                f"distance {fmt_dist(p.mean_distance)}")
+        print(f"  softening  {fmt_dist(sc.softening)}")
     else:
         print("  softening  none")
     limit = (f"limit {fmt_time(p.dt_max)} from {p.dt_limiter}" if math.isfinite(p.dt_max)

@@ -1,6 +1,7 @@
 #pragma once
 
 #include <filesystem>
+#include <optional>
 #include <string>
 
 #include "SFML/System/Vector2.hpp"
@@ -25,7 +26,9 @@ public:
         std::string simtype_str;
         enum class SimType : uint8_t { ALL_PAIRS, BARNES_HUT, BARNES_HUT_GPU } simtype{};
         double theta;
-        double softening_factor;
+        // Plummer softening, one of: a fraction of the mean distance between bodies, a length
+        std::optional<double> softening_factor;
+        std::optional<double> softening_length_m;
         uint16_t threads;
 
         bool parse_simtype();
