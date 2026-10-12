@@ -1,5 +1,6 @@
 #pragma once
 
+#include <exception>
 #include <mutex>
 #include <thread>
 
@@ -26,10 +27,13 @@ public:
     virtual ~Simulation();
     State get_state();
     Stats get_stats();
+    // True once the simulation ran all its iterations or failed
     bool is_finished() const;
     void run();
     void pause();
     void set_timestep(double timestep);
+    // Rethrows the exception that stopped the simulation thread, if any (after pause())
+    void rethrow_error() const;
 
 protected:
     Config::Simulation& sim_cfg;
@@ -68,6 +72,7 @@ private:
     RLCaller stats_update_rate_limiter{Constants::Simulation::STATS_UPDATE_TIMER};
     std::thread sim_thread;
     std::atomic<bool> stop{false};
+    std::exception_ptr error;
 
     void simulate();
     void post_iteration();

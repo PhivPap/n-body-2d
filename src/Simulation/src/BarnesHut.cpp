@@ -42,22 +42,41 @@ void BarnesHut::on_pause() {
     workers.clear();
 }
 
+// An exception mustn't skip a barrier, the other threads would wait for this one forever. The
+// master rethrows the first exception of a step after the last barrier.
 void BarnesHut::step() {
-    sw_tree.resume();
-    qtree.build_tree(bodies);
-    sw_tree.pause();
+    try {
+        sw_tree.resume();
+        qtree.build_tree(bodies);
+        sw_tree.pause();
+        tree_built = true;
+    }
+    catch (...) {
+        tree_built = false;
+        record_step_error();
+    }
 
     sync_point.arrive_and_wait();
 
-    sw_vel.resume();
-    update_velocities(master_offset, bodies.n);
-    sw_vel.pause();
+    if (tree_built) {
+        try {
+            sw_vel.resume();
+            update_velocities(master_offset, bodies.n);
+            sw_vel.pause();
 
-    sw_pos.resume();
-    update_positions(master_offset, bodies.n);
-    sw_pos.pause();
+            sw_pos.resume();
+            update_positions(master_offset, bodies.n);
+            sw_pos.pause();
+        }
+        catch (...) {
+            record_step_error();
+        }
+    }
 
     sync_point.arrive_and_wait();
+    if (step_error) {
+        std::rethrow_exception(std::exchange(step_error, nullptr));
+    }
 }
 
 void BarnesHut::worker_task(uint32_t worker_id) {
@@ -67,9 +86,23 @@ void BarnesHut::worker_task(uint32_t worker_id) {
         sync_point.arrive_and_wait();
         if (worker_stop)
             return;
-        update_velocities(begin_idx, end_idx);
-        update_positions(begin_idx, end_idx);
+        if (tree_built) {
+            try {
+                update_velocities(begin_idx, end_idx);
+                update_positions(begin_idx, end_idx);
+            }
+            catch (...) {
+                record_step_error();
+            }
+        }
         sync_point.arrive_and_wait();
+    }
+}
+
+void BarnesHut::record_step_error() {
+    std::lock_guard lock(step_error_mtx);
+    if (!step_error) {
+        step_error = std::current_exception();
     }
 }
 
