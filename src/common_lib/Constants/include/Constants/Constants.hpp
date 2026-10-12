@@ -17,7 +17,6 @@ namespace Simulation {
 constexpr double G = 6.67430e-11;  // (m^3 * kg^-1 * s^-2)
 // [picosecond (s), billion years (s)]
 constexpr Range<double> TIMESTEP_RANGE = {1e-9, 31'556'952'000'000'000};
-const char* const ALLOWED_ALGORITHMS[] = {"barnes-hut", "naive"};
 constexpr Range<double> SOFTENING_FACTOR_RANGE = {0.0, 0.2};
 constexpr Range<uint16_t> THREADS_RANGE = {1, 256};
 constexpr Range<double> THETA_RANGE = {0.0, 100.0};

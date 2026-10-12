@@ -20,7 +20,6 @@ public:
             sf::VertexArray& body_vertex_array);
     void select(const sf::Rect<float>& region);
     void set_show(bool show);
-    void clear();
     bool has_selection() const;
     uint32_t num_selected() const;
     SelectionStats compute_stats() const;

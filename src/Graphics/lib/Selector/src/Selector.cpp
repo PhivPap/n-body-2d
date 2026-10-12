@@ -34,13 +34,6 @@ void Selector::set_show(bool show) {
     }
 }
 
-void Selector::clear() {
-    for (const uint32_t index : selected_body_indices) {
-        body_vertex_array[index].color = Constants::Graphics::BODY_COLOR;
-    }
-    selected_body_indices.clear();
-}
-
 bool Selector::has_selection() const {
     return !selected_body_indices.empty();
 }
