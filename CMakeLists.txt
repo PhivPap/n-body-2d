@@ -38,6 +38,8 @@ add_compile_options("$<$<COMPILE_LANGUAGE:CXX>:-march=native>")
 
 # Add third-party directories
 add_subdirectory(${THIRD_PARTY_DIR}/csv-parser)
+# csv-parser builds itself with --coverage in Debug builds, so its users must link the runtime
+target_link_options(csv INTERFACE $<$<CONFIG:Debug>:--coverage>)
 add_subdirectory(${THIRD_PARTY_DIR}/fmt)
 add_subdirectory(${THIRD_PARTY_DIR}/json)
 add_subdirectory(${THIRD_PARTY_DIR}/SFML)

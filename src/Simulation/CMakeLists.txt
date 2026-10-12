@@ -29,34 +29,12 @@ target_link_libraries(${PROJECT_NAME} PUBLIC lib-constants)
 target_link_libraries(${PROJECT_NAME} PUBLIC lib-buffered-mean-calculator)
 target_link_libraries(${PROJECT_NAME} PRIVATE lib-logger)
 
-# CUB / libcudacxx from vendored CCCL (header-only)
-target_include_directories(${PROJECT_NAME} PRIVATE
-    ${THIRD_PARTY_DIR}/CCCL/cub
-    ${THIRD_PARTY_DIR}/CCCL/libcudacxx/include
-    ${THIRD_PARTY_DIR}/CCCL/thrust
-)
-
 find_package(CUDAToolkit REQUIRED)
 
-enable_language(CUDA)
-set_target_properties(${PROJECT_NAME} PROPERTIES
-    CUDA_SEPARABLE_COMPILATION ON
-)
 target_compile_options(${PROJECT_NAME} PRIVATE
     $<$<COMPILE_LANGUAGE:CXX>:-ffast-math>
-    $<$<COMPILE_LANGUAGE:CUDA>:-rdc=true>
     $<$<COMPILE_LANGUAGE:CUDA>:--use_fast_math>
     $<$<COMPILE_LANGUAGE:CUDA>:--extra-device-vectorization>
-    $<$<COMPILE_LANGUAGE:CUDA>:--dlink-time-opt>
-    $<$<COMPILE_LANGUAGE:CUDA>:-Xcompiler=-O3,-march=native,-ffast-math>
+    $<$<COMPILE_LANGUAGE:CUDA>:-Xcompiler=-march=native,-ffast-math>
 )
-set_target_properties(${PROJECT_NAME} PROPERTIES
-    CUDA_RESOLVE_DEVICE_SYMBOLS ON
-)
-
-add_library(cudadevrt STATIC IMPORTED)
-set_target_properties(cudadevrt PROPERTIES
-    IMPORTED_LOCATION
-        ${CUDAToolkit_LIBRARY_ROOT}/targets/x86_64-linux/lib/libcudadevrt.a
-)
-target_link_libraries(${PROJECT_NAME} PRIVATE cudadevrt CUDA::cudart)
+target_link_libraries(${PROJECT_NAME} PRIVATE CUDA::cudart)
