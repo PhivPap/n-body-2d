@@ -171,7 +171,8 @@ doesn't know are ignored.
 
 A universe is a CSV file with a header line, then one body per line: `id,mass,x,y,vel_x,vel_y`, in
 SI units (kg, m, m/s). Columns are read by position, so the header names don't matter, and `id` is
-any label.
+any label. Ids must be unique and values finite. Masses can be zero: massless bodies feel gravity
+but don't pull anything.
 
 ## Good to know
 

@@ -1709,12 +1709,12 @@ def validate_bodies(b):
     problems = []
     if not (np.isfinite(b.mass).all() and np.isfinite(b.pos).all() and np.isfinite(b.vel).all()):
         problems.append("non-finite values")
-    if (b.mass <= 0).any():
-        problems.append("non-positive masses (zero masses turn into NaNs in the CPU algorithms)")
+    if (b.mass < 0).any():
+        problems.append("negative masses")
     if len(np.unique(b.ids)) != len(b):
         problems.append("duplicate ids")
     if len(np.unique(b.pos, axis=0)) != len(b):
-        problems.append("coincident bodies (the CPU quadtree would never stop subdividing)")
+        problems.append("coincident bodies (they wouldn't pull each other)")
     com_p, com_v = b.com()
     if np.hypot(*com_p) > 1e-6 * np.abs(b.pos).max() or np.hypot(*com_v) > 1e-6 * np.abs(
             b.vel).max():

@@ -22,6 +22,9 @@ constexpr Range<uint16_t> THREADS_RANGE = {1, 256};
 constexpr Range<double> THETA_RANGE = {0.0, 100.0};
 constexpr auto STATS_UPDATE_TIMER = std::chrono::milliseconds(8);
 constexpr uint64_t MAX_PAIRWISE_SOFTENING_COMPUTATIONS = 1'000'000;
+// Smallest squared softening length (m^2), far below any resolvable separation. Keeps the pull
+// between coincident bodies finite (zero) without softening.
+constexpr double MIN_EPSILON_SQUARED = 1e-100;
 constexpr double TIMESTEP_CHANGE_FACTOR = 1.1;
 
 static_assert(TIMESTEP_CHANGE_FACTOR > 1.0);

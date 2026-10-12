@@ -1,5 +1,7 @@
 #include "Simulation/BarnesHut.hpp"
 
+#include <algorithm>
+
 #include "Logger/Logger.hpp"
 
 
@@ -124,22 +126,36 @@ void BarnesHut::update_velocity(uint64_t body_idx) {
     quad_idx_stack.reserve(2000);
     quad_idx_stack.push_back(0);
 
-    sf::Vector2<double> F = {0.0, 0.0};
+    sf::Vector2<double> acc = {0.0, 0.0};
+    // Includes the cell's max edges: bodies on the root's max edges lie on their cells' max edges
+    const sf::Vector2<double> pos = bodies.pos(body_idx);
+    const auto in_cell = [&pos](const sf::Rect<double>& cell) {
+        return pos.x >= cell.position.x && pos.x <= cell.position.x + cell.size.x
+               && pos.y >= cell.position.y && pos.y <= cell.position.y + cell.size.y;
+    };
 
     while (!quad_idx_stack.empty()) {
         const Quad& quad = qtree.quads[quad_idx_stack.back()];
         quad_idx_stack.pop_back();
         if (quad.is_leaf()) {
-            if (quad.total_mass != 0 && quad.center_of_mass != bodies.pos(body_idx)) {
-                F += body_to_quad_force(body_idx, quad);
+            // The other bodies of a leaf of nearly coincident bodies (see Quadtree) pull one by one
+            if (quad.body_count > 1
+                    && std::ranges::find(quad.body_idxs, body_idx) != quad.body_idxs.end()) {
+                for (const auto other_idx : quad.body_idxs) {
+                    if (other_idx != body_idx) {
+                        acc += pull(pos, bodies.pos(other_idx)) * bodies.mass(other_idx);
+                    }
+                }
+            }
+            else if (quad.total_mass != 0 && quad.center_of_mass != pos) {
+                acc += body_to_quad_acceleration(body_idx, quad);
             }
         }
         else {
-            const double dist_squared =
-                    (bodies.pos(body_idx) - quad.center_of_mass).lengthSquared();
-            if (!quad.boundaries.contains(bodies.pos(body_idx)) && dist_squared > 0.0
+            const double dist_squared = (pos - quad.center_of_mass).lengthSquared();
+            if (!in_cell(quad.boundaries) && dist_squared > 0.0
                     && quad.boundaries.size.lengthSquared() / dist_squared < theta_sq) {
-                F += body_to_quad_force(body_idx, quad);
+                acc += body_to_quad_acceleration(body_idx, quad);
             }
             else {
                 quad_idx_stack.push_back(quad.top_left_idx + 3);
@@ -150,14 +166,13 @@ void BarnesHut::update_velocity(uint64_t body_idx) {
         }
     }
 
-    bodies.vel(body_idx) += F / bodies.mass(body_idx) * timestep;
+    bodies.vel(body_idx) += acc * timestep;
 }
 
-sf::Vector2<double> BarnesHut::body_to_quad_force(uint64_t body_idx, const Quad& quad) {
+sf::Vector2<double> BarnesHut::body_to_quad_acceleration(uint64_t body_idx, const Quad& quad) {
     const double softened_dist_sq =
             distance_squared(bodies.pos(body_idx), quad.center_of_mass) + epsilon_squared;
-    const double force_amplitude = Constants::Simulation::G * bodies.mass(body_idx)
-                                   * quad.total_mass
-                                   / (softened_dist_sq * std::sqrt(softened_dist_sq));
-    return (quad.center_of_mass - bodies.pos(body_idx)) * force_amplitude;
+    const double amplitude = Constants::Simulation::G * quad.total_mass
+                             / (softened_dist_sq * std::sqrt(softened_dist_sq));
+    return (quad.center_of_mass - bodies.pos(body_idx)) * amplitude;
 }

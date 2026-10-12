@@ -31,5 +31,5 @@ public:
     std::vector<Quad> quads;
 
 private:
-    void fill_tree_recursive(uint32_t quad_idx);
+    void fill_tree_recursive(uint32_t quad_idx, uint32_t depth);
 };

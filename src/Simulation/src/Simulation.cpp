@@ -11,7 +11,9 @@
 
 Simulation::Simulation(const Config::Simulation& sim_cfg, Bodies& bodies)
         : sim_cfg(sim_cfg), bodies(bodies),
-          epsilon_squared(std::pow(compute_plummer_softening(bodies, sim_cfg.softening_factor), 2)),
+          epsilon_squared(std::max(
+                  std::pow(compute_plummer_softening(bodies, sim_cfg.softening_factor), 2),
+                  Constants::Simulation::MIN_EPSILON_SQUARED)),
           requested_timestep(sim_cfg.timestep), timestep(sim_cfg.timestep) {}
 
 Simulation::~Simulation() {
@@ -97,12 +99,11 @@ void Simulation::post_iteration() {
     iteration++;
 }
 
-sf::Vector2<double> Simulation::force(const sf::Vector2<double>& pos_a,
-        const sf::Vector2<double>& pos_b, double mass_a, double mass_b) const {
+sf::Vector2<double> Simulation::pull(const sf::Vector2<double>& pos_a,
+        const sf::Vector2<double>& pos_b) const {
     const double softened_dist_sq = distance_squared(pos_a, pos_b) + epsilon_squared;
-    const double force_amplitude = Constants::Simulation::G * mass_a * mass_b
-                                   / (softened_dist_sq * std::sqrt(softened_dist_sq));
-    return force_amplitude * (pos_b - pos_a);
+    return Constants::Simulation::G / (softened_dist_sq * std::sqrt(softened_dist_sq))
+           * (pos_b - pos_a);
 }
 
 double Simulation::compute_plummer_softening(const Bodies& bodies, double factor,
