@@ -53,9 +53,10 @@ protected:
     static double distance_squared(const sf::Vector2<double>& pos_a,
             const sf::Vector2<double>& pos_b);
 
-    // One iteration, on the simulation thread that run() starts and pause() joins. Derived
-    // destructors must pause a running simulation, as the thread uses them.
-    virtual void step() = 0;
+    // Updates the velocities by the accelerations at the current positions times `kick`, then the
+    // positions by the velocities times `drift`. Runs on the simulation thread that run() starts
+    // and pause() joins: derived destructors must pause a running simulation.
+    virtual void step(double kick, double drift) = 0;
     // Brings `bodies` up to date, on the simulation thread before it stops
     virtual void sync_bodies_to_host() {}
     // On the thread calling run() or pause(), before the simulation thread starts or after it
@@ -63,7 +64,8 @@ protected:
     virtual void on_run() {}
     virtual void on_pause() {}
     // Acceleration of a body at pos_a towards a unit mass at pos_b
-    sf::Vector2<double> pull(const sf::Vector2<double>& pos_a, const sf::Vector2<double>& pos_b) const;
+    sf::Vector2<double> pull(const sf::Vector2<double>& pos_a,
+            const sf::Vector2<double>& pos_b) const;
 
 
 private:
@@ -76,6 +78,7 @@ private:
     std::thread sim_thread;
     std::atomic<bool> stop{false};
     std::exception_ptr error;
+    double velocity_lag = 0.0;  // the velocities are this much time behind the positions
 
     void simulate();
     void post_iteration();

@@ -30,7 +30,7 @@
 //  4. build_lower_nodes, build_upper_nodes: the compressed quadtree of the sorted bodies, from
 //                        their binary radix tree
 //  5. compute_forces:    every warp walks the tree for a group of 32 consecutive bodies, then
-//                        integrates them (symplectic Euler: kick, then drift). A second pass
+//                        kicks and drifts them (leapfrog, see Simulation::simulate). A second pass
 //                        retries the bodies of the rare groups that it was faster to give up on.
 //
 // Precision: bodies stay in double precision while the tree and the forces use single precision,
@@ -585,8 +585,9 @@ __global__ void __launch_bounds__(FORCE_WARPS * WARP_SIZE)
         compute_forces(const TreeNode* __restrict__ nodes, const float4* __restrict__ body_pos,
                 const float* __restrict__ body_mass, const Frame* __restrict__ frame,
                 const int32_t* __restrict__ root, const uint32_t* __restrict__ id, uint32_t n,
-                double dt, bool retry_pass, Counters* counters, uint32_t* retry_bodies,
-                int32_t* stacks, double2* pos, double2* vel, double2* pos_out, double2* vel_out) {
+                double kick, double drift, bool retry_pass, Counters* counters,
+                uint32_t* retry_bodies, int32_t* stacks, double2* pos, double2* vel,
+                double2* pos_out, double2* vel_out) {
     __shared__ float4 interaction_pos[FORCE_WARPS][INTERACTION_CAPACITY];
     __shared__ float interaction_mass[FORCE_WARPS][INTERACTION_CAPACITY];
     __shared__ int32_t shared_stacks[FORCE_WARPS][SHARED_STACK_CAPACITY];
@@ -598,7 +599,7 @@ __global__ void __launch_bounds__(FORCE_WARPS * WARP_SIZE)
     int32_t* const global_stack = stacks + (blockIdx.x * FORCE_WARPS + warp) * STACK_CAPACITY;
 
     const float softening_sq = frame->softening_sq;
-    const double acc_dt = frame->acc_factor * dt;
+    const double acc_kick = frame->acc_factor * kick;
     const int32_t root_node = n > 1 ? *root : -1;
     // The retry pass takes the bodies of abandoned groups one by one, and never abandons them
     const uint32_t groups = retry_pass ? counters->retry_count : (n + WARP_SIZE - 1) / WARP_SIZE;
@@ -759,10 +760,10 @@ __global__ void __launch_bounds__(FORCE_WARPS * WARP_SIZE)
         if (first + static_cast<int32_t>(lane) <= last) {
             double2 v = vel[body];
             double2 x = pos[body];
-            v.x += acc_x.value() * acc_dt;
-            v.y += acc_y.value() * acc_dt;
-            x.x += v.x * dt;
-            x.y += v.y * dt;
+            v.x += acc_x.value() * acc_kick;
+            v.y += acc_y.value() * acc_kick;
+            x.x += v.x * drift;
+            x.y += v.y * drift;
             vel[body] = v;
             pos[body] = x;
             if (pos_out) {
@@ -950,7 +951,7 @@ void BarnesHutCuda::release_device_resources() {
     }
 }
 
-void BarnesHutCuda::step() {
+void BarnesHutCuda::step(double kick, double drift) {
     if (n == 0) {
         return;
     }
@@ -980,7 +981,7 @@ void BarnesHutCuda::step() {
     const bool copy = cudaEventQuery(copy_done) == cudaSuccess;
     for (const bool retry_pass : {false, true}) {
         Kernel::compute_forces<<<force_blocks, FORCE_WARPS * WARP_SIZE, 0, stream>>>(nodes_d,
-                body_pos_d, mass_d, frame_d, root_d, id_d, n, timestep, retry_pass,
+                body_pos_d, mass_d, frame_d, root_d, id_d, n, kick, drift, retry_pass,
                 counters_d, retry_bodies_d, stacks_d, pos_d, vel_d, copy ? pos_out_d : nullptr,
                 copy ? vel_out_d : nullptr);
     }

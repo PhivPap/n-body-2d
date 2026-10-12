@@ -76,7 +76,7 @@ private:
 
     void init_device_resources();
     void release_device_resources();
-    void step() override;
+    void step(double kick, double drift) override;
     void copy_bodies_to_host_async();
     void sync_bodies_to_host() override;
 };

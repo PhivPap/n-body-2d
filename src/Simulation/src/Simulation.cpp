@@ -76,9 +76,16 @@ void Simulation::rethrow_error() const {
 
 void Simulation::simulate() {
     try {
+        // Leapfrog (kick, drift, kick), with each step's last half kick done with the next step's
+        // first: the velocities lag the positions by half a step in between
         while (!stop && iteration < sim_cfg.iterations) {
-            step();
+            step(velocity_lag + 0.5 * timestep, timestep);
+            velocity_lag = 0.5 * timestep;
             post_iteration();
+        }
+        if (velocity_lag > 0.0) {
+            step(velocity_lag, 0.0);
+            velocity_lag = 0.0;
         }
         // `bodies` must hold the final state before the simulation is reported finished
         sync_bodies_to_host();
