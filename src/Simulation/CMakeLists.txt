@@ -43,6 +43,7 @@ set_target_properties(${PROJECT_NAME} PROPERTIES
     CUDA_SEPARABLE_COMPILATION ON
 )
 target_compile_options(${PROJECT_NAME} PRIVATE
+    $<$<COMPILE_LANGUAGE:CXX>:-ffast-math>
     $<$<COMPILE_LANGUAGE:CUDA>:-rdc=true>
     $<$<COMPILE_LANGUAGE:CUDA>:--use_fast_math>
     $<$<COMPILE_LANGUAGE:CUDA>:--extra-device-vectorization>

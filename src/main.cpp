@@ -16,7 +16,7 @@
 #include "Simulation/Simulation.hpp"
 
 // Signal handler can only use signal-safe code
-void sigint_handler(int signum) {
+void sigint_handler([[maybe_unused]] int signum) {
     assert(signum == SIGINT);
     constexpr std::string_view txt1 = "\nInterrupted (SIGINT)\n";
     std::ignore = write(STDERR_FILENO, txt1.data(), txt1.size());

@@ -29,7 +29,7 @@ void BarnesHut::on_run() {
     stop = false;
     worker_stop = false;
     master = std::thread(&BarnesHut::simulate, this);
-    for (uint32_t i = 0; i < n_threads - 1; i++) {
+    for (uint32_t i = 0; i + 1 < n_threads; i++) {
         workers.emplace_back(&BarnesHut::worker_task, this, i);
     }
 }
