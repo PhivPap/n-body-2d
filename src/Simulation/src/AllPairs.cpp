@@ -21,16 +21,16 @@ void AllPairsSim::update_positions() {
     }
 }
 
-// This algorithm only iterates each pair once calculating the forces both ways
+// This algorithm only iterates each pair once calculating the accelerations both ways
 void AllPairsSim::update_velocities() {
     for (uint64_t i = 0; i < bodies.n; i++) {
-        sf::Vector2<double> force_sum = {0.0, 0.0};
+        sf::Vector2<double> acc = {0.0, 0.0};
+        const double mass_dt = bodies.mass(i) * timestep;
         for (uint64_t j = i + 1; j < bodies.n; j++) {
-            const sf::Vector2<double> f =
-                    force(bodies.pos(i), bodies.pos(j), bodies.mass(i), bodies.mass(j));
-            bodies.vel(j) -= f / bodies.mass(j) * timestep;
-            force_sum += f;
+            const sf::Vector2<double> p = pull(bodies.pos(i), bodies.pos(j));
+            acc += p * bodies.mass(j);
+            bodies.vel(j) -= p * mass_dt;
         }
-        bodies.vel(i) += force_sum / bodies.mass(i) * timestep;
+        bodies.vel(i) += acc * timestep;
     }
 }

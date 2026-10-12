@@ -30,6 +30,10 @@ sf::Rect<double> get_universe_boundaries(const Bodies& bodies) {
     return {{min_x, min_y}, {max_x - min_x, max_y - min_y}};
 }
 
+// Bodies closer than 2^-64 of the root, or than a cell's coordinates can split (coincident ones,
+// which no split would separate), share a leaf, which keeps their indices
+constexpr uint32_t MAX_DEPTH = 64;
+
 Quad::Quad(sf::Rect<double>&& boundaries) : boundaries(boundaries) {}
 
 bool Quad::is_leaf() const {
@@ -40,7 +44,7 @@ Quadtree::Quadtree() {}
 
 Quadtree::~Quadtree() {}
 
-void Quadtree::fill_tree_recursive(uint32_t quad_idx) {
+void Quadtree::fill_tree_recursive(uint32_t quad_idx, uint32_t depth) {
     Quad* quad = &quads[quad_idx];
     if (quad->body_count == 0) {
         return;
@@ -56,6 +60,16 @@ void Quadtree::fill_tree_recursive(uint32_t quad_idx) {
     // set boundaries for child nodes
     const auto center = quad->boundaries.getCenter();
     const auto top_left_pos = quad->boundaries.position;
+    if (depth == MAX_DEPTH || center.x == top_left_pos.x || center.y == top_left_pos.y) {
+        sf::Vector2<double> moment = {0.0, 0.0};
+        for (const auto body_idx : quad->body_idxs) {
+            quad->total_mass += bodies->mass(body_idx);
+            moment += bodies->pos(body_idx) * bodies->mass(body_idx);
+        }
+        quad->center_of_mass = quad->total_mass > 0 ? moment / quad->total_mass
+                                                    : bodies->pos(quad->body_idxs.front());
+        return;
+    }
     const auto half_size = quad->boundaries.size / 2.0;
     const uint32_t top_left_idx = quads.size();
 
@@ -106,10 +120,10 @@ void Quadtree::fill_tree_recursive(uint32_t quad_idx) {
     }
 
     // Stmts below invalidate quad references by appending to the vector
-    fill_tree_recursive(top_left_idx);
-    fill_tree_recursive(top_left_idx + 1);
-    fill_tree_recursive(top_left_idx + 2);
-    fill_tree_recursive(top_left_idx + 3);
+    fill_tree_recursive(top_left_idx, depth + 1);
+    fill_tree_recursive(top_left_idx + 1, depth + 1);
+    fill_tree_recursive(top_left_idx + 2, depth + 1);
+    fill_tree_recursive(top_left_idx + 3, depth + 1);
 
     quad = &quads[quad_idx];
     top_left = &quads[top_left_idx];
@@ -120,11 +134,15 @@ void Quadtree::fill_tree_recursive(uint32_t quad_idx) {
     quad->total_mass = top_left->total_mass + top_right->total_mass + bottom_left->total_mass
                        + bottom_right->total_mass;
 
-    quad->center_of_mass = (top_left->center_of_mass * top_left->total_mass
-                                   + bottom_right->center_of_mass * bottom_right->total_mass
-                                   + bottom_left->center_of_mass * bottom_left->total_mass
-                                   + top_right->center_of_mass * top_right->total_mass)
-                           / quad->total_mass;
+    // A massless quad keeps any point of it as center of mass
+    quad->center_of_mass = center;
+    if (quad->total_mass > 0) {
+        quad->center_of_mass = (top_left->center_of_mass * top_left->total_mass
+                                       + bottom_right->center_of_mass * bottom_right->total_mass
+                                       + bottom_left->center_of_mass * bottom_left->total_mass
+                                       + top_right->center_of_mass * top_right->total_mass)
+                               / quad->total_mass;
+    }
 }
 
 void Quadtree::build_tree(const Bodies& bodies) {
@@ -144,5 +162,5 @@ void Quadtree::build_tree(const Bodies& bodies) {
     }
     root.body_count = bodies.n;
 
-    fill_tree_recursive(0);
+    fill_tree_recursive(0, 0);
 }

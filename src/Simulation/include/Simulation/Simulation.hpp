@@ -62,8 +62,8 @@ protected:
     // stopped
     virtual void on_run() {}
     virtual void on_pause() {}
-    sf::Vector2<double> force(const sf::Vector2<double>& pos_a, const sf::Vector2<double>& pos_b,
-            double mass_a, double mass_b) const;
+    // Acceleration of a body at pos_a towards a unit mass at pos_b
+    sf::Vector2<double> pull(const sf::Vector2<double>& pos_a, const sf::Vector2<double>& pos_b) const;
 
 
 private:
