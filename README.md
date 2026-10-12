@@ -18,9 +18,10 @@ down.
 ## Requirements
 
 - Linux on x86-64.
-- An NVIDIA GPU and the CUDA Toolkit 12 or newer. The GPU is needed even to build, because the
-  CUDA code is compiled for the card that CMake finds.
 - CMake 3.23 or newer and a C++20 compiler (GCC or Clang).
+- For the GPU algorithm: an NVIDIA GPU and the CUDA Toolkit 12 or newer. The CUDA code is compiled
+  for the card that CMake finds, so the GPU is needed when building too. Without CUDA (or with
+  `-DNBODY_CUDA=OFF`) the build leaves the GPU algorithm out.
 - The development packages SFML needs on Linux: X11, Xrandr, Xcursor, Xi, udev and OpenGL (see
   [SFML's build guide](https://www.sfml-dev.org/tutorials/3.0/getting-started/build-from-source/)).
   SFML downloads its other dependencies, such as FreeType, the first time CMake runs.
@@ -36,7 +37,8 @@ cmake --build build -j
 ```
 
 If you cloned without `--recursive`, run `git submodule update --init --recursive` first. The
-build is always an optimized release build for your own CPU (`-march=native`).
+build is an optimized release build for your own CPU (`-march=native`) unless you ask for
+another build type, e.g. `-DCMAKE_BUILD_TYPE=Debug`.
 
 ## Run
 
@@ -119,6 +121,9 @@ You can speed a scenario up with the Right arrow until you reach it.
 Generator options: `--scale 0.1` makes 10 times fewer particles for quick tests, `--seed N` gives
 a different random realization, and `--verify` runs the simulator on each scenario at its
 `timestep_max_s` and checks that its orbits hold and its energy is conserved.
+
+Scenarios with more than 300 bodies use the GPU algorithm. On a build without CUDA, set their
+`algorithm` to `"Barnes-Hut"`.
 
 ## Configuration
 

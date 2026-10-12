@@ -12,7 +12,9 @@
 #include "Logger/Logger.hpp"
 #include "Simulation/AllPairs.hpp"
 #include "Simulation/BarnesHut.hpp"
+#ifdef NBODY_CUDA
 #include "Simulation/BarnesHutCuda.hpp"
+#endif
 #include "Simulation/Simulation.hpp"
 
 // Signal handler can only use signal-safe code
@@ -30,9 +32,11 @@ std::unique_ptr<Simulation> create_sim(Config::Simulation& sim_cfg, Bodies& bodi
     else if (sim_cfg.simtype == Config::Simulation::SimType::BARNES_HUT) {
         return std::make_unique<BarnesHut>(sim_cfg, bodies);
     }
+#ifdef NBODY_CUDA
     else if (sim_cfg.simtype == Config::Simulation::SimType::BARNES_HUT_GPU) {
         return std::make_unique<BarnesHutCuda>(sim_cfg, bodies);
     }
+#endif
     assert(false);
     return nullptr;
 }
