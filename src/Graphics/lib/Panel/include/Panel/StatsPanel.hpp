@@ -9,6 +9,8 @@ struct StatsDisplayedData {
         double total_mass;
         sf::Vector2<double> center_of_mass;
         sf::Vector2<double> weighted_velocity;
+
+        bool operator==(const Selection&) const = default;
     };
 
     uint64_t iteration;
@@ -19,6 +21,8 @@ struct StatsDisplayedData {
     double simulated_time_s;
     double simulation_rate;
     std::optional<Selection> opt_selection;
+
+    bool operator==(const StatsDisplayedData&) const = default;
 };
 
 class StatsPanel : public PanelBase<StatsPanel, StatsDisplayedData> {
