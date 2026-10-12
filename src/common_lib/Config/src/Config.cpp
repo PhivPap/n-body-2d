@@ -244,6 +244,12 @@ bool Config::Simulation::validate() {
                 simtype_to_string(SimType::ALL_PAIRS), simtype_to_string(SimType::BARNES_HUT),
                 simtype_to_string(SimType::BARNES_HUT_GPU));
     }
+#ifndef NBODY_CUDA
+    else if (simtype == SimType::BARNES_HUT_GPU) {
+        ok = false;
+        Log::error("Config::Simulation::algorithm `{}` needs a build with CUDA", simtype_str);
+    }
+#endif
     if (!in_range(theta, THETA_RANGE)) {
         ok = false;
         Log::error("Config::Simulation::theta {} not within allowed range {}", theta, THETA_RANGE);

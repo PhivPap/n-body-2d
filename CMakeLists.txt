@@ -12,6 +12,20 @@ if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
     set(CMAKE_BUILD_TYPE Release CACHE STRING "Build type" FORCE)
 endif()
 
+# CUDA, needed by the GPU Barnes-Hut only. The CUDA code is compiled for the GPU found at
+# configure time.
+include(CheckLanguage)
+check_language(CUDA)
+if(CMAKE_CUDA_COMPILER)
+    option(NBODY_CUDA "Build the GPU Barnes-Hut (needs the CUDA toolkit and a GPU)" ON)
+else()
+    option(NBODY_CUDA "Build the GPU Barnes-Hut (needs the CUDA toolkit and a GPU)" OFF)
+endif()
+if(NBODY_CUDA)
+    set(CMAKE_CUDA_ARCHITECTURES native)
+    enable_language(CUDA)
+endif()
+
 # Link time optimization of release builds
 include(CheckIPOSupported)
 check_ipo_supported(RESULT ipo_supported OUTPUT ipo_output)
@@ -48,6 +62,9 @@ add_subdirectory(${THIRD_PARTY_DIR}/argparse)
 # Warnings for this project's code. Only the simulation libraries use -ffast-math, which (on x86)
 # also stops LTO from inlining across them and the rest, so keep hot calls inline in headers.
 add_compile_options("$<$<COMPILE_LANGUAGE:CXX>:-Wall;-Wextra>")
+if(NBODY_CUDA)
+    add_compile_definitions(NBODY_CUDA)
+endif()
 
 # Add lib directories
 add_subdirectory(${LIB_DIR}/Logger)
