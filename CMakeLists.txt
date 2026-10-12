@@ -109,3 +109,7 @@ add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
         ${ASSETS_DIR}
         $<TARGET_FILE_DIR:${PROJECT_NAME}>/assets
 )
+
+# Tests, run with `ctest --test-dir build`
+enable_testing()
+add_subdirectory(tests)

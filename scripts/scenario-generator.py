@@ -1756,11 +1756,11 @@ def pair_elements(b, bp):
     return a, math.sqrt(max(0.0, 1 - h * h / (mu * a)))
 
 
-def verify(sc, p, cfg, csv_path, duration=None):
+def verify(sc, p, cfg, csv_path, simulator, duration=None):
     """Run the simulator for `duration` simulated seconds at the largest allowed timestep
     (timestep_max_s, the worst case a user can speed up to) and check the result."""
-    if not SIMULATOR.exists():
-        raise FileNotFoundError(f"{SIMULATOR} not found: build the simulator first")
+    if not simulator.exists():
+        raise FileNotFoundError(f"{simulator} not found: build the simulator first")
     duration = duration or sc.check_time or 3 * sc.show_period
     dt = round_down(p.dt_max) if math.isfinite(p.dt_max) else p.dt
     iterations = max(1, math.ceil(duration / dt))
@@ -1775,7 +1775,7 @@ def verify(sc, p, cfg, csv_path, duration=None):
         cfg_path = Path(tmp) / "config.json"
         cfg_path.write_text(json.dumps(test_cfg, indent=4))
         t0 = time.time()
-        run = subprocess.run([str(SIMULATOR), str(cfg_path), "--verbosity", "INFO"],
+        run = subprocess.run([str(simulator), str(cfg_path), "--verbosity", "INFO"],
                 cwd=REPO_ROOT, capture_output=True, text=True)
         wall = time.time() - t0
         out_path = Path(tmp) / "out.csv"
@@ -1885,6 +1885,8 @@ def main():
             "and check that tight orbits hold, energy is conserved, etc.")
     parser.add_argument("--verify-time", type=float,
             help="simulated seconds for --verify (default: per scenario)")
+    parser.add_argument("--simulator", type=lambda path: Path(path).resolve(), default=SIMULATOR,
+            help=f"simulator that --verify runs (default: {SIMULATOR.relative_to(REPO_ROOT)})")
     args = parser.parse_args()
 
     if args.list:
@@ -1904,7 +1906,8 @@ def main():
     for name in names:
         try:
             sc, p, cfg, csv_path = generate(name, args)
-            if args.verify and not verify(sc, p, cfg, csv_path, args.verify_time):
+            if args.verify and not verify(sc, p, cfg, csv_path, args.simulator,
+                    args.verify_time):
                 failures.append(name)
         except Exception as e:  # keep going, report at the end
             print(f"{name}: ERROR: {e}")
