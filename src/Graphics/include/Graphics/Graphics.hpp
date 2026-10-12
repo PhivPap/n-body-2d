@@ -22,19 +22,17 @@
 
 class Graphics {
 public:
-    struct Stats {
-        double timestamp_s;
-        uint64_t frame;
-        float fps;
-        sf::Vector2<double> viewport_m;
-        sf::Vector2<uint32_t> viewport_px;
+    // What the panels show of the simulation
+    struct SimulationStats {
+        uint64_t iteration;
+        float ips;
+        double real_elapsed_s;
+        double simulated_elapsed_s;
+        double timestep_s;
     };
 
-    Graphics(Config::Graphics& graphics_cfg, const Bodies& bodies);
-    Stats get_stats() const;
+    Graphics(const Config& cfg, const Bodies& bodies);
     sf::RenderWindow& get_window();
-    ConfigPanel& get_config_panel();
-    StatsPanel& get_stats_panel();
     void resize_view(sf::Vector2f new_size);
     void zoom_view(double delta);
     void grab_view();
@@ -57,11 +55,24 @@ public:
     void notify_paused();
     void notify_resumed();
     void notify_timestep_changed(double old_dt, double new_dt);
+    void update_simulation_stats(const SimulationStats& sim_stats);
     void draw_frame();
 
 private:
-    Config::Graphics& graphics_cfg;
+    struct Stats {
+        double timestamp_s;
+        uint64_t frame;
+        float fps;
+    };
+
+    const Config::Graphics& graphics_cfg;
     const Bodies& bodies;
+    // Display options, changed at runtime
+    bool show_grid = graphics_cfg.show_grid;
+    bool selection_show = graphics_cfg.selection_show;
+    bool selection_show_center_of_mass = graphics_cfg.selection_show_center_of_mass;
+    bool follow_selected = graphics_cfg.follow_selected;
+    std::chrono::duration<double> trails_fade = graphics_cfg.trails_fade;
     std::vector<sf::Vector2<double>> body_positions_cache;
     StopWatch sw;
     sf::VertexArray body_vertex_array;

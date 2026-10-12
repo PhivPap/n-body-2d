@@ -5,7 +5,7 @@
 
 class AllPairsSim : public Simulation {
 public:
-    AllPairsSim(Config::Simulation& sim_cfg, Bodies& bodies);
+    AllPairsSim(const Config::Simulation& sim_cfg, Bodies& bodies);
     ~AllPairsSim() override;
 
 private:
