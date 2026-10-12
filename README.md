@@ -125,8 +125,7 @@ a different random realization, and `--verify` runs the simulator on each scenar
 `timestep_max_s` and checks that its orbits hold and its energy is conserved.
 
 Scenarios with more than 300 bodies use the GPU algorithm. On a build without CUDA, set their
-`algorithm` to `"Barnes-Hut"`, `threads` to the number of threads your CPU runs, and multiply
-`theta` by 1.41 (the CPU tree compares a cell's diagonal, not its side, to the distance).
+`algorithm` to `"Barnes-Hut"` and `threads` to the number of threads your CPU runs.
 
 ## Configuration
 
@@ -149,10 +148,10 @@ softening takes one of two keys; keys the simulator doesn't know are ignored.
 | `algorithm`        | `"All Pairs"`, `"Barnes-Hut"` (CPU) or `"Barnes-Hut GPU"`, in any letter case |
 | `timestep`         | Simulated seconds per step at startup                                         |
 | `iterations`       | Stop and exit after this many steps                                           |
-| `theta`            | Barnes-Hut opening angle: smaller is more accurate and slower. The CPU version compares a cell's diagonal to its distance, the GPU version its side |
+| `theta`            | Barnes-Hut opening angle, a cell's side over its distance: smaller is more accurate and slower |
 | `softening_length_m` | Plummer softening length in metres (0 for none)                             |
 | `softening_factor` | Or: the softening length as a fraction of the mean distance between bodies, from 0 (none) to 0.2 |
-| `threads`          | Threads for the CPU Barnes-Hut (1 to 256)                                     |
+| `threads`          | Threads for the CPU Barnes-Hut (1 to 256), at most one per 400 bodies          |
 
 **`Graphics`**
 

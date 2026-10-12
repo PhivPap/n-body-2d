@@ -31,12 +31,12 @@ How the configs are chosen (this mirrors the simulator, see src/Simulation/):
     STEPS_PER_ORBIT steps per orbit and fine steps through every periapsis) caps the default
     timestep, which is otherwise picked so the scenario plays at a watchable speed. You can speed a
     scenario up at runtime (Right arrow) up to `timestep_max_s` without breaking its tight orbits.
-  * Opening angle (as cell side / distance; the CPU tree gets the diagonal equivalent): 0.3 for
-    self-gravitating systems and 0.6 where one dominant body sets the forces. The trees are
-    monopole-only: the GPU tree's median force error is 0.45% at 0.3, 1.2% at 0.5 and 2.5% at 0.7
-    (100k-body spiral galaxy), and these errors slowly puff up hot components. In galaxy-spiral
-    the dark halo's half-mass radius grows by an extra ~13% * theta^2 over two rotations (1.2% at
-    0.3, 3.4% at 0.5, 6.6% at 0.7), while a 3x smaller timestep changes nothing.
+  * Opening angle (a cell's side over its distance, for both trees): 0.3 for self-gravitating
+    systems and 0.6 where one dominant body sets the forces. The trees are monopole-only: their
+    median force error is 0.45% at 0.3, 1.2% at 0.5 and 2.5% at 0.7 (100k-body spiral galaxy),
+    and these errors slowly puff up hot components. In galaxy-spiral the dark halo's half-mass
+    radius grows by an extra ~13% * theta^2 over two rotations (1.2% at 0.3, 3.4% at 0.5, 6.6% at
+    0.7), while a 3x smaller timestep changes nothing.
   * The simulator integrates with a fixed global timestep, so a scenario can only contain orbits
     whose periods are within a few orders of magnitude of each other (a moon around a planet inside
     a galaxy would need ~1e10 steps per galactic orbit). Scenarios are designed around that: the
@@ -123,35 +123,35 @@ def estimate_ips(algorithm, n, theta):
     """Iterations per second, fitted to measurements on a Ryzen 9 9950X3D + RTX 5070 Ti (in a
     headless session, so the window was drawn by another GPU; within ~15%).
 
-    All Pairs:   single threaded, ~0.93 ns per pair (a bit more for small systems) plus ~50 ns
-                 per iteration (19M it/s for 3 bodies, 0.77M for 44, 2.1k for 1000).
-    Barnes-Hut:  ~0.2 us per body with 32 threads at theta(diagonal) = 1.0, scaling like
-                 theta^-1.25, plus ~10 us per iteration.
+    All Pairs:   single threaded, ~0.70 ns per pair (a bit more for small systems) plus ~50 ns
+                 per iteration (1.0M it/s for 44 bodies, 1.2k for 1.5k).
+    Barnes-Hut:  one thread per 400 bodies, up to CPU_THREADS (32), plus ~5 us per thread per
+                 iteration. A body costs (200 ns + 270 ns / theta) / threads in large systems,
+                 less in small ones (it has fewer interactions). Measured: 33k it/s for 300 bodies
+                 at theta = 0.6, 9.5k for 1.5k at 0.6, 760 for 50k at 0.6, 100 for 300k at 0.3,
+                 26 for 1M at 0.3.
     GPU:         ~45 us per iteration plus 15 ns per body of fixed costs, capped at ~100 us (from
-                 ~4k bodies), plus 0.64 ns + 0.14 ns * theta(side)^-2 per body (the interactions per
-                 body grow like theta^-2). Measured: 14k it/s for 1.5k bodies, 2.2k for 300k at
+                 ~4k bodies), plus 0.64 ns + 0.14 ns * theta^-2 per body (the interactions per body
+                 grow like theta^-2). Measured: 14k it/s for 1.5k bodies, 2.2k for 300k at
                  theta = 0.5, 760-880 for 1M at 0.6-0.7.
-    `theta` is the side-length opening angle used throughout this script.
+    `theta` is the opening angle of both trees: a cell's side over its distance.
     """
     if algorithm == ALL_PAIRS:
         pairs = n * (n - 1) / 2
-        return 1.0 / (50e-9 + 0.93e-9 * pairs * (1 + 900 / (1250 + pairs)))
+        return 1.0 / (50e-9 + 0.70e-9 * pairs * (1 + 900 / (1250 + pairs)))
     if algorithm == BH_CPU:
-        return 1.0 / (10e-6 + 0.2e-6 * n * (theta * math.sqrt(2)) ** -1.25)
+        threads = min(max(n // 400, 1), CPU_THREADS)
+        per_body = (200e-9 + 270e-9 / theta) * min(1.0, (n / 50_000) ** 0.4)
+        return 1.0 / (n * per_body / threads + 5e-6 * threads)
     return 1.0 / (min(100e-6, 45e-6 + 15e-9 * n) + n * (0.64e-9 + 0.14e-9 * theta ** -2))
 
 
 def choose_algorithm(n):
-    """All Pairs (exact) while it keeps up with the GPU tree (they break even at ~330 bodies), the
-    GPU Barnes-Hut above. The CPU Barnes-Hut is never the fastest on the reference machine (1.6x
-    slower than the GPU at 300 bodies, 14x at 6k), so only scenarios that ask for it use it."""
+    """All Pairs (exact) while it keeps up with the GPU tree (they break even at ~380 bodies), the
+    GPU Barnes-Hut above. The CPU Barnes-Hut is never clearly the fastest on the reference machine
+    (as fast as All Pairs at 300 bodies, 1.5x slower than the GPU at 1.5k, 15x at 300k), so only
+    scenarios that ask for it use it."""
     return ALL_PAIRS if n <= ALL_PAIRS_MAX_BODIES else BH_GPU
-
-
-def config_theta(algorithm, theta):
-    """The CPU tree compares the cell *diagonal* to the distance, the GPU tree the cell *side*.
-    Scenarios specify the side-length angle; convert so both trees are equally accurate."""
-    return theta * math.sqrt(2) if algorithm == BH_CPU else theta
 
 
 # ------------------------------------------------------------------------------------------------
@@ -1549,7 +1549,7 @@ def cosmic_web(rng, scale):
 @dataclass
 class Plan:
     algorithm: str
-    theta: float  # value written to the config (diagonal-based for the CPU tree)
+    theta: float
     ips: float
     dt: float
     dt_max: float
@@ -1604,7 +1604,7 @@ def plan(sc):
             sc.view[1] / (VIEW_FILL * RESOLUTION[1] / 2)))
     if not PIXEL_SCALE_RANGE[0] <= pixel_scale <= PIXEL_SCALE_RANGE[1]:
         raise ValueError(f"pixel scale {pixel_scale:g} m/px outside {PIXEL_SCALE_RANGE}")
-    return Plan(algorithm, round_sig(config_theta(algorithm, sc.theta), 3), ips, dt, dt_max,
+    return Plan(algorithm, round_sig(sc.theta, 3), ips, dt, dt_max,
             limiter, pixel_scale)
 
 
