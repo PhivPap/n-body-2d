@@ -1802,6 +1802,7 @@ def verify(sc, p, cfg, csv_path, duration=None):
         test_cfg["IO"].update(universe_infile=str(csv_path.resolve()),
                 universe_outfile=str(Path(tmp) / "out.csv"), echo_config=False)
         test_cfg["Simulation"].update(iterations=iterations, timestep=dt)
+        test_cfg["Graphics"]["enabled"] = False  # headless
         cfg_path = Path(tmp) / "config.json"
         cfg_path.write_text(json.dumps(test_cfg, indent=4))
         t0 = time.time()
@@ -1913,7 +1914,7 @@ def main():
     parser.add_argument("--out-dir", help=f"output directory (default: {SCENARIOS_DIR})")
     parser.add_argument("--verify", action="store_true",
             help="run the built simulator on each generated scenario at its timestep_max_s "
-            "(opens a window) and check that tight orbits hold, energy is conserved, etc.")
+            "and check that tight orbits hold, energy is conserved, etc.")
     parser.add_argument("--verify-time", type=float,
             help="simulated seconds for --verify (default: per scenario)")
     args = parser.parse_args()

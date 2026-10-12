@@ -5,6 +5,7 @@
 
 #include "Constants/Constants.hpp"
 #include "Logger/Logger.hpp"
+#include "Logger/Time.hpp"
 
 
 volatile std::sig_atomic_t Controller::sigint_flag = 0;
@@ -144,6 +145,26 @@ void Controller::run() {
         graphics.draw_frame();
     }
     // Also joins the threads of a finished simulation
+    if (sim.get_state() == Simulation::State::RUNNING) {
+        sim.pause();
+    }
+    Log::debug("Sim done: [{}]", sw);
+}
+
+void Controller::run_headless(Simulation& sim) {
+    using namespace std::chrono_literals;
+    StopWatch sw;
+    StopWatch progress_sw;
+    sim.run();
+    while (!sim.is_finished() && !sigint_flag) {
+        std::this_thread::sleep_for(10ms);
+        if (progress_sw.duration<std::chrono::seconds>() >= 10s) {
+            progress_sw.reset();
+            const auto stats = sim.get_stats();
+            Log::info("Iteration {} ({:.1f} it/s), simulated {}", stats.iteration, stats.ips,
+                    Log::Time::from(stats.simulated_elapsed_s));
+        }
+    }
     if (sim.get_state() == Simulation::State::RUNNING) {
         sim.pause();
     }

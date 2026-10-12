@@ -14,6 +14,8 @@ public:
     
     Controller(const Config& cfg, Simulation& sim, Graphics& graphics);
     void run();
+    // Runs the simulation without a window until it finishes or Ctrl+C
+    static void run_headless(Simulation& sim);
 
 private:
     Simulation& sim;
