@@ -117,6 +117,9 @@ void Controller::init_panels(const Config& cfg) {
         write_handle->vsync = cfg.graphics.vsync_enabled;
         write_handle->grid = cfg.graphics.show_grid;
         write_handle->max_fps = cfg.graphics.fps;
+        write_handle->selection_show = cfg.graphics.selection_show;
+        write_handle->selection_show_center_of_mass = cfg.graphics.selection_show_center_of_mass;
+        write_handle->selection_follow_center_of_mass = cfg.graphics.follow_selected;
     }
 
     {

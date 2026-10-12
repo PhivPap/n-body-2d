@@ -22,8 +22,10 @@ Config::Config(const fs::path& path) {
 
         const auto j_io = json_cfg.at("IO");
         echo_config = j_io.at("echo_config");
-        io = IO{.universe_infile = fs::path(j_io.at("universe_infile")),
-                .universe_outfile = fs::path(j_io.at("universe_outfile")),
+        // Relative universe paths are relative to the config file, not the working directory
+        const fs::path config_dir = path.parent_path();
+        io = IO{.universe_infile = config_dir / fs::path(j_io.at("universe_infile")),
+                .universe_outfile = config_dir / fs::path(j_io.at("universe_outfile")),
                 .echo_bodies = j_io.at("echo_bodies")};
 
         const auto j_sim = json_cfg.at("Simulation");
@@ -47,6 +49,7 @@ Config::Config(const fs::path& path) {
                 .show_commands_panel = j_graphics.at("show_commands_panel"),
                 .show_config_panel = j_graphics.at("show_config_panel"),
                 .show_stats_panel = j_graphics.at("show_stats_panel"),
+                .show_action_log_panel = j_graphics.at("show_action_log_panel"),
                 .selection_show = j_selection.at("show"),
                 .selection_show_center_of_mass = j_selection.at("show_center_of_mass"),
                 .follow_selected = j_selection.at("follow"),
@@ -270,6 +273,7 @@ std::string Config::Graphics::to_string() const {
     show_commands_panel: {}
     show_config_panel:   {}
     show_stats_panel:    {}
+    show_action_log:     {}
     panel_update_hz      {}
     selection_show:      {}
     selection_show_CoM:  {}
@@ -277,8 +281,8 @@ std::string Config::Graphics::to_string() const {
     trails_fade_time_s:  {})";
     return fmt::format(fmt_str, enabled, resolution.x, resolution.y, vsync_enabled, fps,
             pixel_scale, show_grid, show_commands_panel, show_config_panel, show_stats_panel,
-            panel_update_hz, selection_show, selection_show_center_of_mass, follow_selected, 
-            trails_fade.count());
+            show_action_log_panel, panel_update_hz, selection_show, selection_show_center_of_mass,
+            follow_selected, trails_fade.count());
 }
 
 bool Config::Graphics::validate() const {

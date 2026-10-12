@@ -35,3 +35,12 @@
 tmp
 build
 .vscode
+
+# Generated scenarios (regenerate with scripts/scenario-generator.py), except the Solar System
+scenarios/*
+!scenarios/solar-system.csv
+!scenarios/solar-system.json
+scripts/__pycache__/*
+
+# AI
+CLAUDE.md

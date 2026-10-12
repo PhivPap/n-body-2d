@@ -62,6 +62,10 @@ void main() {
     panel_manager.register_panel(&stats_panel, PanelManager::Position::TOP_LEFT);
     panel_manager.register_panel(&commands_panel, PanelManager::Position::TOP_RIGHT);
     panel_manager.register_panel(&action_log_panel, PanelManager::Position::BOTTOM_RIGHT);
+    config_panel.set_visible(graphics_cfg.show_config_panel);
+    stats_panel.set_visible(graphics_cfg.show_stats_panel);
+    commands_panel.set_visible(graphics_cfg.show_commands_panel);
+    action_log_panel.set_visible(graphics_cfg.show_action_log_panel);
 
     reset_trails(true);
 }
