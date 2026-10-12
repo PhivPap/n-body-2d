@@ -980,7 +980,7 @@ void BarnesHutCuda::step() {
     const bool copy = cudaEventQuery(copy_done) == cudaSuccess;
     for (const bool retry_pass : {false, true}) {
         Kernel::compute_forces<<<force_blocks, FORCE_WARPS * WARP_SIZE, 0, stream>>>(nodes_d,
-                body_pos_d, mass_d, frame_d, root_d, id_d, n, sim_cfg.timestep, retry_pass,
+                body_pos_d, mass_d, frame_d, root_d, id_d, n, timestep, retry_pass,
                 counters_d, retry_bodies_d, stacks_d, pos_d, vel_d, copy ? pos_out_d : nullptr,
                 copy ? vel_out_d : nullptr);
     }

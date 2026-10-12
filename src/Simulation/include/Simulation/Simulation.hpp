@@ -23,7 +23,7 @@ public:
         double simulated_elapsed_s = 0;
     };
 
-    Simulation(Config::Simulation& sim_cfg, Bodies& bodies);
+    Simulation(const Config::Simulation& sim_cfg, Bodies& bodies);
     virtual ~Simulation();
     State get_state();
     Stats get_stats();
@@ -32,14 +32,17 @@ public:
     void run();
     void pause();
     void set_timestep(double timestep);
+    // The timestep set last, which the simulation uses from its next iteration
+    double get_timestep() const;
     // Rethrows the exception that stopped the simulation thread, if any (after pause())
     void rethrow_error() const;
 
 protected:
-    Config::Simulation& sim_cfg;
+    const Config::Simulation& sim_cfg;
     Bodies& bodies;
     const double epsilon_squared;
     std::atomic<double> requested_timestep;
+    double timestep;  // of the current iteration
     uint64_t iteration = 0;
     std::atomic<bool> finished{false};
     BufferedMeanCalculator<float, 60> ips_calculator{};

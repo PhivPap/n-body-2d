@@ -18,11 +18,9 @@ public:
 private:
     Simulation& sim;
     Graphics& graphics;
-    double timestep;
     RLCaller stats_update_rate_limiter;
 
     void handle_events(sf::RenderWindow& window);
-    void init_panels(const Config& cfg);
     void update_panels();
     void timestep_increase();
     void timestep_decrease();

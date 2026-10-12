@@ -37,8 +37,8 @@ void main() {
 }
 )glsl";
 
- Graphics::Graphics(Config::Graphics& graphics_cfg, const Bodies& bodies)
-        : graphics_cfg(graphics_cfg), bodies(bodies), body_positions_cache(bodies.n),
+ Graphics::Graphics(const Config& cfg, const Bodies& bodies)
+        : graphics_cfg(cfg.graphics), bodies(bodies), body_positions_cache(bodies.n),
           body_vertex_array(sf::PrimitiveType::Points, bodies.n),
           window(sf::VideoMode(sf::Vector2u(graphics_cfg.resolution)), "N-Body Sim"),
           vp(sf::Vector2f(graphics_cfg.resolution), graphics_cfg.pixel_scale),
@@ -49,7 +49,7 @@ void main() {
     for (uint64_t i = 0; i < body_vertex_array.getVertexCount(); i++) {
         body_vertex_array[i].color = Constants::Graphics::BODY_COLOR;
     }
-    selector.set_show(graphics_cfg.selection_show);
+    selector.set_show(selection_show);
 
     glEnable(GL_PROGRAM_POINT_SIZE);
     glEnable(GL_POINT_SPRITE);  // gl_PointCoord is undefined without it (compatibility profile)
@@ -68,23 +68,41 @@ void main() {
     commands_panel.set_visible(graphics_cfg.show_commands_panel);
     action_log_panel.set_visible(graphics_cfg.show_action_log_panel);
 
-    reset_trails(true);
-}
+    {
+        auto write_handle = config_panel.write_handle();
+        write_handle->timestep_s = cfg.sim.timestep;
+        write_handle->algorithm = cfg.sim.simtype_str;
+        write_handle->theta = cfg.sim.theta;
+        write_handle->show_theta = cfg.sim.simtype != Config::Simulation::SimType::ALL_PAIRS;
+        write_handle->softening_factor = cfg.sim.softening_factor;
+        write_handle->threads = cfg.sim.threads;
+        write_handle->show_threads = cfg.sim.simtype == Config::Simulation::SimType::BARNES_HUT;
+        write_handle->viewport_m = vp.get_rect().size;
+        write_handle->viewport_px = sf::Vector2<uint32_t>{vp.get_window_res()};
+        write_handle->vsync = graphics_cfg.vsync_enabled;
+        write_handle->grid = show_grid;
+        write_handle->max_fps = graphics_cfg.fps;
+        write_handle->selection_show = selection_show;
+        write_handle->selection_show_center_of_mass = selection_show_center_of_mass;
+        write_handle->selection_follow_center_of_mass = follow_selected;
+    }
 
-Graphics::Stats Graphics::get_stats() const {
-    return stats;
+    {
+        auto write_handle = stats_panel.write_handle();
+        write_handle->iteration = 0;
+        write_handle->iter_per_sec = 0;
+        write_handle->frame = 0;
+        write_handle->fps = 0;
+        write_handle->elapsed_s = 0;
+        write_handle->simulated_time_s = 0;
+        write_handle->simulation_rate = std::numeric_limits<double>::quiet_NaN();
+    }
+
+    reset_trails(true);
 }
 
 sf::RenderWindow& Graphics::get_window() {
     return window;
-}
-
-ConfigPanel& Graphics::get_config_panel() {
-    return config_panel;
-}
-
-StatsPanel& Graphics::get_stats_panel() {
-    return stats_panel;
 }
 
 void Graphics::pan_if_view_grabbed() {
@@ -102,7 +120,7 @@ void Graphics::pan_if_view_grabbed() {
 // Whenever the above conditions break from either zoom or window resizing,
 // the grid spacing will adjust accordingly.
 void Graphics::draw_grid() {
-    if (!graphics_cfg.show_grid) {
+    if (!show_grid) {
         return;
     }
     const sf::Rect<double> rect = vp.get_rect();
@@ -173,7 +191,7 @@ void Graphics::update_selection_tracking() {
 
     const auto new_selection_stats = selector.compute_stats();
 
-    if (graphics_cfg.follow_selected && cached_selection_stats) {
+    if (follow_selected && cached_selection_stats) {
         vp.pan_coords(new_selection_stats.center_of_mass - cached_selection_stats->center_of_mass);
     }
 
@@ -196,7 +214,7 @@ void Graphics::draw_selection_overlay() {
         window.draw(selector);
     }
 
-    if (cached_selection_stats && graphics_cfg.selection_show_center_of_mass) {
+    if (cached_selection_stats && selection_show_center_of_mass) {
         const sf::Vector2f CoM_pos =
                 vp.coords_to_pos_on_viewport(cached_selection_stats->center_of_mass);
         const float marker_radius = body_diameter_pixels / 2.0f + 2.0f;
@@ -213,11 +231,7 @@ void Graphics::update_stats() {
     const auto frame_delta = frame - stats.frame;
     const auto dt = now - stats.timestamp_s;
     fps_calculator.register_value(frame_delta / dt);
-    stats = Stats{.timestamp_s = now,
-            .frame = frame,
-            .fps = fps_calculator.get_mean<float>(),
-            .viewport_m = vp.get_rect().size,
-            .viewport_px = sf::Vector2<uint32_t>{vp.get_window_res()}};
+    stats = Stats{.timestamp_s = now, .frame = frame, .fps = fps_calculator.get_mean<float>()};
     action_log_panel.write_handle()->assign(action_log.to_string());
 }
 
@@ -238,7 +252,7 @@ void Graphics::reset_trails(bool resize) {
 }
 
 void Graphics::set_fade_shader_decay() {
-    if (graphics_cfg.trails_fade.count() <= 0) {
+    if (trails_fade.count() <= 0) {
         fade_shader.setUniform("decay", 1.f);
         return;
     }
@@ -247,7 +261,7 @@ void Graphics::set_fade_shader_decay() {
     last_trail_fade_sw.reset();
 
     constexpr float fade_chunk_size = 1.f / 255.f;
-    const float fade_fraction = elapsed / graphics_cfg.trails_fade;
+    const float fade_fraction = elapsed / trails_fade;
     const float fractional_fade_chunks = fade_fraction / fade_chunk_size + remainder_fractional_fade_chunks;
     const float whole_fade_chunks = std::floor(fractional_fade_chunks);
     remainder_fractional_fade_chunks = fractional_fade_chunks - whole_fade_chunks;
@@ -351,45 +365,45 @@ void Graphics::body_size_decrease() {
 }
 
 void Graphics::trails_length_increase() {
-    graphics_cfg.trails_fade += Constants::Graphics::TRAILS_FADE_CHANGE_STEP;
+    trails_fade += Constants::Graphics::TRAILS_FADE_CHANGE_STEP;
     action_log.log(fmt::format("Trails length: {}", 
-            Log::Time::from<Log::Time::Unit::S>(graphics_cfg.trails_fade.count())));
+            Log::Time::from<Log::Time::Unit::S>(trails_fade.count())));
 }
 
 void Graphics::trails_length_decrease() {
-    graphics_cfg.trails_fade -= Constants::Graphics::TRAILS_FADE_CHANGE_STEP;
-    if (graphics_cfg.trails_fade.count() < 0) {
-        graphics_cfg.trails_fade = std::chrono::duration<double>::zero();
+    trails_fade -= Constants::Graphics::TRAILS_FADE_CHANGE_STEP;
+    if (trails_fade.count() < 0) {
+        trails_fade = std::chrono::duration<double>::zero();
     }
     else {
         action_log.log(fmt::format("Trails length: {}", 
-                Log::Time::from<Log::Time::Unit::S>(graphics_cfg.trails_fade.count())));
+                Log::Time::from<Log::Time::Unit::S>(trails_fade.count())));
     }
 }
 
 void Graphics::toggle_grid() {
-    graphics_cfg.show_grid = !graphics_cfg.show_grid;
-    config_panel.write_handle()->grid = graphics_cfg.show_grid;
-    action_log.log(fmt::format("Grid: {}", graphics_cfg.show_grid ? "Enabled" : "Disabled"));
+    show_grid = !show_grid;
+    config_panel.write_handle()->grid = show_grid;
+    action_log.log(fmt::format("Grid: {}", show_grid ? "Enabled" : "Disabled"));
 }
 
 void Graphics::toggle_selection_show() {
-    graphics_cfg.selection_show = !graphics_cfg.selection_show;
-    selector.set_show(graphics_cfg.selection_show);
-    config_panel.write_handle()->selection_show = graphics_cfg.selection_show;
-    action_log.log(fmt::format("Selection overlay: {}", graphics_cfg.selection_show ? "Enabled" : "Disabled"));
+    selection_show = !selection_show;
+    selector.set_show(selection_show);
+    config_panel.write_handle()->selection_show = selection_show;
+    action_log.log(fmt::format("Selection overlay: {}", selection_show ? "Enabled" : "Disabled"));
 }
 
 void Graphics::toggle_selection_show_center_of_mass() {
-    graphics_cfg.selection_show_center_of_mass = !graphics_cfg.selection_show_center_of_mass;
-    config_panel.write_handle()->selection_show_center_of_mass = graphics_cfg.selection_show_center_of_mass;
-    action_log.log(fmt::format("CoM marker: {}", graphics_cfg.selection_show_center_of_mass ? "Enabled" : "Disabled"));
+    selection_show_center_of_mass = !selection_show_center_of_mass;
+    config_panel.write_handle()->selection_show_center_of_mass = selection_show_center_of_mass;
+    action_log.log(fmt::format("CoM marker: {}", selection_show_center_of_mass ? "Enabled" : "Disabled"));
 }
 
 void Graphics::toggle_follow_selected() {
-    graphics_cfg.follow_selected = !graphics_cfg.follow_selected;
-    config_panel.write_handle()->selection_follow_center_of_mass = graphics_cfg.follow_selected;
-    action_log.log(fmt::format("Selection follow: {}", graphics_cfg.follow_selected ? "Enabled" : "Disabled"));
+    follow_selected = !follow_selected;
+    config_panel.write_handle()->selection_follow_center_of_mass = follow_selected;
+    action_log.log(fmt::format("Selection follow: {}", follow_selected ? "Enabled" : "Disabled"));
 }
 
 void Graphics::center_on_selection_center_of_mass() {
@@ -430,6 +444,25 @@ void Graphics::notify_timestep_changed(double old_dt, double new_dt) {
     using Time = Log::Time;
     action_log.log(fmt::format("Dt: {} -> {}", Time::from<Time::Unit::S>(old_dt),
             Time::from<Time::Unit::S>(new_dt)));
+}
+
+void Graphics::update_simulation_stats(const SimulationStats& sim_stats) {
+    {
+        auto write_handle = config_panel.write_handle();
+        write_handle->viewport_m = vp.get_rect().size;
+        write_handle->viewport_px = sf::Vector2<uint32_t>{vp.get_window_res()};
+    }
+
+    {
+        auto write_handle = stats_panel.write_handle();
+        write_handle->iteration = sim_stats.iteration;
+        write_handle->iter_per_sec = sim_stats.ips;
+        write_handle->frame = stats.frame;
+        write_handle->fps = stats.fps;
+        write_handle->elapsed_s = sim_stats.real_elapsed_s;
+        write_handle->simulated_time_s = sim_stats.simulated_elapsed_s;
+        write_handle->simulation_rate = sim_stats.ips * sim_stats.timestep_s;
+    }
 }
 
 void Graphics::draw_frame() {

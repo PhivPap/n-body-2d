@@ -7,7 +7,7 @@
 
 class BarnesHut : public Simulation {
 public:
-    BarnesHut(Config::Simulation& sim_cfg, Bodies& bodies);
+    BarnesHut(const Config::Simulation& sim_cfg, Bodies& bodies);
     ~BarnesHut() override;
 
 private:

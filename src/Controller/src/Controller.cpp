@@ -10,11 +10,9 @@
 volatile std::sig_atomic_t Controller::sigint_flag = 0;
 
 Controller::Controller(const Config& cfg, Simulation& sim, Graphics& graphics)
-        : sim(sim), graphics(graphics), timestep(cfg.sim.timestep),
+        : sim(sim), graphics(graphics),
           stats_update_rate_limiter(
-                  std::chrono::duration<float>(1 / cfg.graphics.panel_update_hz)) {
-    init_panels(cfg);
-}
+                  std::chrono::duration<float>(1 / cfg.graphics.panel_update_hz)) {}
 
 void Controller::handle_events(sf::RenderWindow& window) {
     while (const std::optional event = window.pollEvent()) {
@@ -102,63 +100,16 @@ void Controller::handle_events(sf::RenderWindow& window) {
     }
 }
 
-void Controller::init_panels(const Config& cfg) {
-    {
-        auto write_handle = graphics.get_config_panel().write_handle();
-        write_handle->timestep_s = cfg.sim.timestep;
-        write_handle->algorithm = cfg.sim.simtype_str;
-        write_handle->theta = cfg.sim.theta;
-        write_handle->show_theta =
-                cfg.sim.simtype == Config::Simulation::SimType::BARNES_HUT
-                || cfg.sim.simtype == Config::Simulation::SimType::BARNES_HUT_GPU;
-        write_handle->softening_factor = cfg.sim.softening_factor;
-        write_handle->threads = cfg.sim.threads;
-        write_handle->show_threads = cfg.sim.simtype != Config::Simulation::SimType::BARNES_HUT_GPU;
-        write_handle->viewport_m = {0, 0};
-        write_handle->viewport_px = {0, 0};
-        write_handle->vsync = cfg.graphics.vsync_enabled;
-        write_handle->grid = cfg.graphics.show_grid;
-        write_handle->max_fps = cfg.graphics.fps;
-        write_handle->selection_show = cfg.graphics.selection_show;
-        write_handle->selection_show_center_of_mass = cfg.graphics.selection_show_center_of_mass;
-        write_handle->selection_follow_center_of_mass = cfg.graphics.follow_selected;
-    }
-
-    {
-        auto write_handle = graphics.get_stats_panel().write_handle();
-        write_handle->iteration = 0;
-        write_handle->iter_per_sec = 0;
-        write_handle->frame = 0;
-        write_handle->fps = 0;
-        write_handle->elapsed_s = 0;
-        write_handle->simulated_time_s = 0;
-        write_handle->simulation_rate = std::numeric_limits<double>::quiet_NaN();
-    }
-}
-
 void Controller::update_panels() {
     const auto sim_stats = sim.get_stats();
-    const auto graphics_stats = graphics.get_stats();
-
-    {
-        auto write_handle = graphics.get_config_panel().write_handle();
-        write_handle->viewport_m = graphics_stats.viewport_m;
-        write_handle->viewport_px = graphics_stats.viewport_px;
-    }
-
-    {
-        auto write_handle = graphics.get_stats_panel().write_handle();
-        write_handle->iteration = sim_stats.iteration;
-        write_handle->iter_per_sec = sim_stats.ips;
-        write_handle->frame = graphics_stats.frame;
-        write_handle->fps = graphics_stats.fps;
-        write_handle->elapsed_s = sim_stats.real_elapsed_s;
-        write_handle->simulated_time_s = sim_stats.simulated_elapsed_s;
-        write_handle->simulation_rate = sim_stats.ips * timestep;
-    }
+    graphics.update_simulation_stats({.iteration = sim_stats.iteration, .ips = sim_stats.ips,
+            .real_elapsed_s = sim_stats.real_elapsed_s,
+            .simulated_elapsed_s = sim_stats.simulated_elapsed_s,
+            .timestep_s = sim.get_timestep()});
 }
 
 void Controller::timestep_increase() {
+    const double timestep = sim.get_timestep();
     auto new_timestep = timestep * Constants::Simulation::TIMESTEP_CHANGE_FACTOR;
     if (new_timestep > Constants::Simulation::TIMESTEP_RANGE.second) {
         Log::warning("Reached maximum timestep, cannot accelerate further");
@@ -167,11 +118,11 @@ void Controller::timestep_increase() {
     if (new_timestep != timestep) {
         sim.set_timestep(new_timestep);
         graphics.notify_timestep_changed(timestep, new_timestep);
-        timestep = new_timestep;
     }
 }
 
 void Controller::timestep_decrease() {
+    const double timestep = sim.get_timestep();
     auto new_timestep = timestep / Constants::Simulation::TIMESTEP_CHANGE_FACTOR;
     if (new_timestep < Constants::Simulation::TIMESTEP_RANGE.first) {
         Log::warning("Reached minimum timestep, cannot decelerate further");
@@ -180,7 +131,6 @@ void Controller::timestep_decrease() {
     if (new_timestep != timestep) {
         sim.set_timestep(new_timestep);
         graphics.notify_timestep_changed(timestep, new_timestep);
-        timestep = new_timestep;
     }
 }
 

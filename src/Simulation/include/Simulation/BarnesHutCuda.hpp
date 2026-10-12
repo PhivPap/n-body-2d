@@ -19,7 +19,7 @@ public:
     struct Arrival;
     struct Seed;
 
-    BarnesHutCuda(Config::Simulation& sim_cfg, Bodies& bodies);
+    BarnesHutCuda(const Config::Simulation& sim_cfg, Bodies& bodies);
     ~BarnesHutCuda() override;
 
 private:

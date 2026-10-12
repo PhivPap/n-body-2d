@@ -1,7 +1,7 @@
 #include "Simulation/AllPairs.hpp"
 
 
-AllPairsSim::AllPairsSim(Config::Simulation& sim_cfg, Bodies& bodies)
+AllPairsSim::AllPairsSim(const Config::Simulation& sim_cfg, Bodies& bodies)
         : Simulation(sim_cfg, bodies) {}
 
 AllPairsSim::~AllPairsSim() {
@@ -17,7 +17,7 @@ void AllPairsSim::step() {
 
 void AllPairsSim::update_positions() {
     for (uint64_t i = 0; i < bodies.n; i++) {
-        bodies.pos(i) += bodies.vel(i) * sim_cfg.timestep;
+        bodies.pos(i) += bodies.vel(i) * timestep;
     }
 }
 
@@ -28,9 +28,9 @@ void AllPairsSim::update_velocities() {
         for (uint64_t j = i + 1; j < bodies.n; j++) {
             const sf::Vector2<double> f =
                     force(bodies.pos(i), bodies.pos(j), bodies.mass(i), bodies.mass(j));
-            bodies.vel(j) -= f / bodies.mass(j) * sim_cfg.timestep;
+            bodies.vel(j) -= f / bodies.mass(j) * timestep;
             force_sum += f;
         }
-        bodies.vel(i) += force_sum / bodies.mass(i) * sim_cfg.timestep;
+        bodies.vel(i) += force_sum / bodies.mass(i) * timestep;
     }
 }

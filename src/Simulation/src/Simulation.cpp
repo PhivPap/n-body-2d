@@ -9,10 +9,10 @@
 #include "Logger/Logger.hpp"
 
 
-Simulation::Simulation(Config::Simulation& sim_cfg, Bodies& bodies)
+Simulation::Simulation(const Config::Simulation& sim_cfg, Bodies& bodies)
         : sim_cfg(sim_cfg), bodies(bodies),
           epsilon_squared(std::pow(compute_plummer_softening(bodies, sim_cfg.softening_factor), 2)),
-          requested_timestep(sim_cfg.timestep) {}
+          requested_timestep(sim_cfg.timestep), timestep(sim_cfg.timestep) {}
 
 Simulation::~Simulation() {
     assert(!sim_thread.joinable());  // derived destructors pause a running simulation
@@ -62,6 +62,10 @@ void Simulation::set_timestep(double timestep) {
     requested_timestep.store(timestep, std::memory_order::relaxed);
 }
 
+double Simulation::get_timestep() const {
+    return requested_timestep.load(std::memory_order::relaxed);
+}
+
 void Simulation::rethrow_error() const {
     if (error) {
         std::rethrow_exception(error);
@@ -89,7 +93,7 @@ void Simulation::simulate() {
 
 void Simulation::post_iteration() {
     stats_update_rate_limiter.try_call(std::bind(&Simulation::update_stats, this));
-    sim_cfg.timestep = requested_timestep.load(std::memory_order::relaxed);
+    timestep = requested_timestep.load(std::memory_order::relaxed);
     iteration++;
 }
 
@@ -168,5 +172,5 @@ void Simulation::update_stats() {
     stats.iteration = iteration;
     stats.ips = ips_calculator.get_mean<float>();
     stats.real_elapsed_s = elapsed_s;
-    stats.simulated_elapsed_s += iter_delta * sim_cfg.timestep;
+    stats.simulated_elapsed_s += iter_delta * timestep;
 }
