@@ -95,6 +95,8 @@ void Controller::handle_events(sf::RenderWindow& window) {
             case sf::Keyboard::Scan::F4:
                 graphics.toggle_action_log_panel();
                 break;
+            default:
+                break;
             }
         }
     }

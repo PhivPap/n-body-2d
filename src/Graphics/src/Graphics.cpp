@@ -39,9 +39,9 @@ void main() {
 
  Graphics::Graphics(Config::Graphics& graphics_cfg, const Bodies& bodies)
         : graphics_cfg(graphics_cfg), bodies(bodies), body_positions_cache(bodies.n),
+          body_vertex_array(sf::PrimitiveType::Points, bodies.n),
           window(sf::VideoMode(sf::Vector2u(graphics_cfg.resolution)), "N-Body Sim"),
           vp(sf::Vector2f(graphics_cfg.resolution), graphics_cfg.pixel_scale),
-          body_vertex_array(sf::PrimitiveType::Points, bodies.n),
           selector(bodies, body_positions_cache, body_vertex_array) {
     window.setFramerateLimit(graphics_cfg.fps);
     window.setVerticalSyncEnabled(graphics_cfg.vsync_enabled);

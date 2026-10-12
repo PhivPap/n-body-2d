@@ -92,8 +92,8 @@ DisplayedData* PanelBase<Derived, DisplayedData>::WriteHandle::operator->() {
 
 template <typename Derived, typename DisplayedData>
 PanelBase<Derived, DisplayedData>::PanelBase(uint32_t width)
-        : texture({width, 1}), sprite(texture.getTexture()),
-          text(AssetManager::instance().get<sf::Font>("fonts/UbuntuMono-R.ttf")), visible(true) {
+        : text(AssetManager::instance().get<sf::Font>("fonts/UbuntuMono-R.ttf")),
+          texture({width, 1}), sprite(texture.getTexture()), visible(true) {
     text.setPosition({5.0f, 3.0f});
     text.setCharacterSize(16);
     text.setLineSpacing(1.4f);

@@ -9,8 +9,9 @@
 
 
 Simulation::Simulation(Config::Simulation& sim_cfg, Bodies& bodies)
-        : sim_cfg(sim_cfg), bodies(bodies), requested_timestep(sim_cfg.timestep), epsilon_squared(
-                  std::pow(compute_plummer_softening(bodies, sim_cfg.softening_factor), 2)) {}
+        : sim_cfg(sim_cfg), bodies(bodies),
+          epsilon_squared(std::pow(compute_plummer_softening(bodies, sim_cfg.softening_factor), 2)),
+          requested_timestep(sim_cfg.timestep) {}
 
 Simulation::~Simulation() {}
 
