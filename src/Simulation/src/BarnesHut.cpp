@@ -5,6 +5,7 @@
 #include <cfloat>
 #include <cmath>
 #include <limits>
+#include <utility>
 
 #include "Logger/Logger.hpp"
 
@@ -14,10 +15,9 @@ namespace {
 // share a leaf
 constexpr uint32_t KEY_LEVELS = 24;
 constexpr uint32_t KEY_BITS = 2 * KEY_LEVELS;
-// Least significant digit radix sort
+// Every thread sorts its bucket of bodies with a least significant digit radix sort
 constexpr uint32_t RADIX_BITS = 8;
 constexpr uint32_t RADIX = 1u << RADIX_BITS;
-static_assert(KEY_BITS % (2 * RADIX_BITS) == 0, "an even number of passes ends in the input");
 // Nodes of at most this many bodies are leaves
 constexpr uint32_t LEAF_SIZE = 8;
 // Bodies that walk the tree together
@@ -53,6 +53,30 @@ uint64_t hilbert_key(double x, double y) {
     return key;
 }
 
+// Sorts items[0..count - 1] by key, keeping the order of equal keys, and returns where they ended up:
+// in items or in scratch. Skips the digits that all keys share.
+template <typename Item>
+Item* radix_sort(Item* items, Item* scratch, uint32_t count) {
+    for (uint32_t shift = 0; shift < KEY_BITS && count > 0; shift += RADIX_BITS) {
+        uint32_t offsets[RADIX] = {};
+        for (uint32_t i = 0; i < count; i++) {
+            offsets[(items[i].key >> shift) & (RADIX - 1)]++;
+        }
+        if (offsets[(items[0].key >> shift) & (RADIX - 1)] == count) {
+            continue;
+        }
+        uint32_t total = 0;
+        for (uint32_t& offset : offsets) {
+            total += std::exchange(offset, total);
+        }
+        for (uint32_t i = 0; i < count; i++) {
+            scratch[offsets[(items[i].key >> shift) & (RADIX - 1)]++] = items[i];
+        }
+        std::swap(items, scratch);
+    }
+    return items;
+}
+
 // Number of leading digits two keys share
 uint32_t common_digits(uint64_t a, uint64_t b) {
     return a == b ? KEY_LEVELS : (std::countl_zero(a ^ b) - (64 - KEY_BITS)) / 2;
@@ -80,15 +104,15 @@ BarnesHut::BarnesHut(const Config::Simulation& sim_cfg, Bodies& bodies)
           n_threads(std::max<uint64_t>(
                   std::min<uint64_t>(bodies.n / MIN_BODIES_PER_THREAD, sim_cfg.threads), 1)),
           sync_point(n_threads),
-          thread_bounds(n_threads), order(bodies.n), order_alt(bodies.n), keys(bodies.n),
-          keys_alt(bodies.n), histograms(n_threads * RADIX), sorted_pos(bodies.n),
-          sorted_mass(bodies.n), interactions(n_threads) {
+          thread_bounds(n_threads), order(bodies.n), keys(bodies.n), sorted_pos(bodies.n),
+          sorted_mass(bodies.n), splitters(n_threads * n_threads), body_buckets(bodies.n),
+          bucket_sizes(n_threads * n_threads), bucket_offsets(n_threads * n_threads),
+          sort_items(bodies.n), sort_scratch(bodies.n), interactions(n_threads) {
     if (sim_cfg.threads == 0)
         throw std::runtime_error("Thread count 0 is invalid");
-    if (sim_cfg.threads > bodies.n)
-        throw std::runtime_error("Threads must be less than the number of bodies");
-    // The tree refers to bodies and to its nodes (at most two per body) by 32-bit signed indices
-    if (bodies.n > static_cast<uint64_t>(std::numeric_limits<int32_t>::max() / 2))
+    // The tree refers to bodies and to its nodes (fewer than three per body) by 32-bit signed
+    // indices
+    if (bodies.n > static_cast<uint64_t>(std::numeric_limits<int32_t>::max() / 3))
         throw std::runtime_error("Too many bodies for Barnes-Hut");
 
     // A node of level l has a cell of side 2^-l root cells: it stands in for its bodies from
@@ -175,6 +199,9 @@ void BarnesHut::run_task(uint32_t thread) {
 }
 
 void BarnesHut::step(double kick, double drift) {
+    if (bodies.n == 0) {
+        return;  // no tree to build
+    }
     if (!bounds_known) {
         bounds = {DBL_MAX, -DBL_MAX, DBL_MAX, -DBL_MAX};
         for (uint64_t i = 0; i < bodies.n; i++) {
@@ -213,52 +240,65 @@ void BarnesHut::step(double kick, double drift) {
     }
 }
 
-// Sorts the bodies by Hilbert key from the previous step's order, with a least significant digit
-// radix sort over the threads' slices, then gathers their positions and masses
+// Sorts the bodies by Hilbert key, equal keys in the previous order, then gathers their positions
+// and masses. The previous order is nearly sorted, so the keys of the bodies that start the threads'
+// slices of it split the keys into one bucket per thread, about the bodies of its slice: every
+// thread moves the bodies of its slice to their buckets, then sorts its own bucket. That takes two
+// barriers, where a radix sort over all threads takes two per digit.
 void BarnesHut::sort_bodies(uint32_t thread) {
     const uint32_t n = bodies.n;
-    const uint32_t begin = static_cast<uint64_t>(n) * thread / n_threads;
-    const uint32_t end = static_cast<uint64_t>(n) * (thread + 1) / n_threads;
+    const auto slice_begin = [&](uint32_t t) {
+        return static_cast<uint32_t>(static_cast<uint64_t>(n) * t / n_threads);
+    };
+    const uint32_t begin = slice_begin(thread), end = slice_begin(thread + 1);
     const double scale = 1.0 / root_size;
-    for (uint32_t i = begin; i < end; i++) {
-        const auto& p = bodies.pos(order[i]);
-        keys[i] = hilbert_key((p.x - root_x) * scale, (p.y - root_y) * scale);
+    const auto key_of = [&](uint32_t body) {
+        const auto& p = bodies.pos(body);
+        return hilbert_key((p.x - root_x) * scale, (p.y - root_y) * scale);
+    };
+
+    // Every thread computes the same splitters, rather than waiting for one to
+    uint64_t* const thread_splitters = &splitters[thread * n_threads];
+    for (uint32_t t = 1; t < n_threads; t++) {
+        thread_splitters[t - 1] = key_of(order[slice_begin(t)]);
     }
-
-    uint64_t* src_keys = keys.data();
-    uint64_t* dst_keys = keys_alt.data();
-    uint32_t* src_order = order.data();
-    uint32_t* dst_order = order_alt.data();
-    uint32_t* const histogram = &histograms[thread * RADIX];
-    for (uint32_t shift = 0; shift < KEY_BITS; shift += RADIX_BITS) {
-        std::fill_n(histogram, RADIX, 0);
-        for (uint32_t i = begin; i < end; i++) {
-            histogram[(src_keys[i] >> shift) & (RADIX - 1)]++;
-        }
-        sync_point.arrive_and_wait();
-
-        // A body goes after those with smaller digits, then those with its digit in earlier slices
-        uint32_t offsets[RADIX];
-        uint32_t total = 0;
-        for (uint32_t digit = 0; digit < RADIX; digit++) {
-            offsets[digit] = total;
-            for (uint32_t t = 0; t < n_threads; t++) {
-                const uint32_t count = histograms[t * RADIX + digit];
-                offsets[digit] += t < thread ? count : 0;
-                total += count;
-            }
-        }
-        for (uint32_t i = begin; i < end; i++) {
-            const uint32_t at = offsets[(src_keys[i] >> shift) & (RADIX - 1)]++;
-            dst_keys[at] = src_keys[i];
-            dst_order[at] = src_order[i];
-        }
-        sync_point.arrive_and_wait();
-        std::swap(src_keys, dst_keys);
-        std::swap(src_order, dst_order);
+    std::sort(thread_splitters, thread_splitters + n_threads - 1);
+    for (uint32_t i = begin; i < end; i++) {  // a loop of its own, which vectorizes
+        keys[i] = key_of(order[i]);
     }
-
+    uint32_t* const sizes = &bucket_sizes[thread * n_threads];
+    std::fill_n(sizes, n_threads, 0);
     for (uint32_t i = begin; i < end; i++) {
+        body_buckets[i] = std::upper_bound(thread_splitters, thread_splitters + n_threads - 1,
+                                  keys[i])
+                          - thread_splitters;
+        sizes[body_buckets[i]]++;
+    }
+    sync_point.arrive_and_wait();
+
+    // A body goes after those of earlier buckets, then those of its bucket in earlier slices
+    uint32_t* const offsets = &bucket_offsets[thread * n_threads];
+    uint32_t total = 0, first = 0, last = 0;
+    for (uint32_t b = 0; b < n_threads; b++) {
+        first = b == thread ? total : first;
+        offsets[b] = total;
+        for (uint32_t t = 0; t < n_threads; t++) {
+            const uint32_t size = bucket_sizes[t * n_threads + b];
+            offsets[b] += t < thread ? size : 0;
+            total += size;
+        }
+        last = b == thread ? total : last;
+    }
+    for (uint32_t i = begin; i < end; i++) {
+        sort_items[offsets[body_buckets[i]]++] = {keys[i], order[i]};
+    }
+    sync_point.arrive_and_wait();
+
+    const SortItem* const sorted =
+            radix_sort(&sort_items[first], &sort_scratch[first], last - first) - first;
+    for (uint32_t i = first; i < last; i++) {
+        keys[i] = sorted[i].key;
+        order[i] = sorted[i].body;
         sorted_pos[i] = bodies.pos(order[i]);
         sorted_mass[i] = bodies.mass(order[i]);
     }

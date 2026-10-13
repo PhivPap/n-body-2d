@@ -32,8 +32,12 @@ private:
     struct alignas(64) Bounds {
         double min_x, max_x, min_y, max_y;
     };
-    struct Interactions {
+    struct alignas(64) Interactions {  // per thread, so on separate cache lines
         std::vector<double> x, y, mass;
+    };
+    struct SortItem {
+        uint64_t key;
+        uint32_t body;
     };
 
     const uint32_t n_threads;
@@ -53,11 +57,15 @@ private:
     double root_x = 0.0, root_y = 0.0, root_size = 1.0;
 
     // Bodies in Hilbert order: their index in `bodies`, key, position and mass
-    std::vector<uint32_t> order, order_alt;
-    std::vector<uint64_t> keys, keys_alt;
-    std::vector<uint32_t> histograms;  // radix sort, per thread
+    std::vector<uint32_t> order;
+    std::vector<uint64_t> keys;
     std::vector<sf::Vector2<double>> sorted_pos;
     std::vector<double> sorted_mass;
+    // Sort: the bodies go to one bucket per thread, of the keys between two splitters
+    std::vector<uint64_t> splitters;  // per thread, the same
+    std::vector<uint32_t> body_buckets;  // in the previous order
+    std::vector<uint32_t> bucket_sizes, bucket_offsets;  // per thread and bucket
+    std::vector<SortItem> sort_items, sort_scratch;  // by bucket
 
     // Tree: the top nodes that the master builds, then the subtrees that the threads build
     std::vector<Node> nodes;
