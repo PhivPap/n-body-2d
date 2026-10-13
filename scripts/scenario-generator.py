@@ -22,8 +22,8 @@ Usage (from anywhere; paths are resolved against the repo root). Needs numpy and
 
 How the configs are chosen (this mirrors the simulator, see src/Simulation/):
   * Algorithm by body count: All Pairs (exact) up to ALL_PAIRS_MAX_BODIES, the GPU Barnes-Hut
-    above that. The CPU Barnes-Hut is never the fastest (measured on a Ryzen 9 9950X3D + RTX 5070
-    Ti, see estimate_ips() and choose_algorithm()).
+    above that. The CPU Barnes-Hut is never clearly the fastest (measured on a Ryzen 9 9950X3D +
+    RTX 5070 Ti, see estimate_ips() and choose_algorithm()).
   * Softening: each scenario asks for an absolute Plummer length epsilon [m], which the config
     gives as `softening_length_m`. Systems with tight orbits (planets, moons, stars around a black
     hole) use epsilon = 0, or an epsilon far below their closest approaches.
@@ -125,11 +125,11 @@ def estimate_ips(algorithm, n, theta):
 
     All Pairs:   single threaded, ~0.70 ns per pair (a bit more for small systems) plus ~50 ns
                  per iteration (1.0M it/s for 44 bodies, 1.2k for 1.5k).
-    Barnes-Hut:  one thread per 400 bodies, up to CPU_THREADS (32), plus ~5 us per thread per
-                 iteration. A body costs (200 ns + 270 ns / theta) / threads in large systems,
-                 less in small ones (it has fewer interactions). Measured: 33k it/s for 300 bodies
-                 at theta = 0.6, 9.5k for 1.5k at 0.6, 760 for 50k at 0.6, 100 for 300k at 0.3,
-                 26 for 1M at 0.3.
+    Barnes-Hut:  one thread per 400 bodies, up to CPU_THREADS (32), plus ~6 us per thread per
+                 iteration. A body costs (70 ns + 290 ns / theta) / threads in large systems, less
+                 in small ones (it has fewer interactions). Measured: 33k it/s for 300 bodies at
+                 theta = 0.6, 12k for 1.5k at 0.6, 2.9k for 12.5k at 0.6, 990 for 50k at 0.6, 106
+                 for 300k at 0.3, 27 for 1M at 0.3.
     GPU:         ~45 us per iteration plus 15 ns per body of fixed costs, capped at ~100 us (from
                  ~4k bodies), plus 0.64 ns + 0.14 ns * theta^-2 per body (the interactions per body
                  grow like theta^-2). Measured: 14k it/s for 1.5k bodies, 2.2k for 300k at
@@ -141,16 +141,16 @@ def estimate_ips(algorithm, n, theta):
         return 1.0 / (50e-9 + 0.70e-9 * pairs * (1 + 900 / (1250 + pairs)))
     if algorithm == BH_CPU:
         threads = min(max(n // 400, 1), CPU_THREADS)
-        per_body = (200e-9 + 270e-9 / theta) * min(1.0, (n / 50_000) ** 0.4)
-        return 1.0 / (n * per_body / threads + 5e-6 * threads)
+        per_body = (70e-9 + 290e-9 / theta) * min(1.0, (n / 50_000) ** 0.4)
+        return 1.0 / (n * per_body / threads + 6e-6 * threads)
     return 1.0 / (min(100e-6, 45e-6 + 15e-9 * n) + n * (0.64e-9 + 0.14e-9 * theta ** -2))
 
 
 def choose_algorithm(n):
     """All Pairs (exact) while it keeps up with the GPU tree (they break even at ~380 bodies), the
     GPU Barnes-Hut above. The CPU Barnes-Hut is never clearly the fastest on the reference machine
-    (as fast as All Pairs at 300 bodies, 1.5x slower than the GPU at 1.5k, 15x at 300k), so only
-    scenarios that ask for it use it."""
+    (about as fast as the exact All Pairs at 300 bodies, 1.25x slower than the GPU at 1.5k, 13x at
+    300k), so only scenarios that ask for it use it."""
     return ALL_PAIRS if n <= ALL_PAIRS_MAX_BODIES else BH_GPU
 
 
