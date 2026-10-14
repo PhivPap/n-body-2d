@@ -49,9 +49,13 @@ public:
         bool show_config_panel;
         bool show_stats_panel;
         bool show_action_log_panel;
+        bool show_inspector_panel;
         bool selection_show;
         bool selection_show_center_of_mass;
         bool follow_selected;
+        bool selection_show_orbit;
+        bool named_bodies_show_labels;
+        bool named_bodies_scale_by_mass;
         std::chrono::duration<double> trails_fade;
 
         bool validate() const;

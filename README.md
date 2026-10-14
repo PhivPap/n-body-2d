@@ -174,9 +174,10 @@ softening takes one of two keys; keys the simulator doesn't know are ignored.
 | `vsync`                 | Vertical sync                                              |
 | `pixel_scale`           | Metres per pixel at startup, i.e. the initial zoom         |
 | `show_grid`             | Show the grid at startup                                   |
-| `show_commands_panel`, `show_config_panel`, `show_stats_panel`, `show_action_log_panel` | Panels shown at startup |
+| `show_commands_panel`, `show_config_panel`, `show_stats_panel`, `show_action_log_panel`, `show_inspector_panel` | Panels shown at startup |
 | `panel_update_hz`       | How often the panels refresh                               |
-| `selection`             | `show`, `show_center_of_mass` and `follow`: the selection settings at startup |
+| `selection`             | `show`, `show_center_of_mass`, `follow` and `show_orbit`: the selection settings at startup |
+| `named_bodies`          | `show_labels` and `scale_by_mass`: how named bodies are drawn at startup |
 | `trails_fade_time_s`    | Seconds a trail takes to fade (0 for no trails)            |
 | `enabled`               | Open a window. `false` runs headless until `iterations` or Ctrl+C |
 

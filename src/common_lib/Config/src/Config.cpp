@@ -43,6 +43,7 @@ Config::Config(const fs::path& path) {
 
         const auto j_graphics = json_cfg.at("Graphics");
         const auto j_selection = j_graphics.at("selection");
+        const auto j_named_bodies = j_graphics.at("named_bodies");
         graphics = Graphics{.enabled = j_graphics.at("enabled"),
                 .resolution = {j_graphics.at("resolution").at(0),
                         j_graphics.at("resolution").at(1)},
@@ -55,9 +56,13 @@ Config::Config(const fs::path& path) {
                 .show_config_panel = j_graphics.at("show_config_panel"),
                 .show_stats_panel = j_graphics.at("show_stats_panel"),
                 .show_action_log_panel = j_graphics.at("show_action_log_panel"),
+                .show_inspector_panel = j_graphics.at("show_inspector_panel"),
                 .selection_show = j_selection.at("show"),
                 .selection_show_center_of_mass = j_selection.at("show_center_of_mass"),
                 .follow_selected = j_selection.at("follow"),
+                .selection_show_orbit = j_selection.at("show_orbit"),
+                .named_bodies_show_labels = j_named_bodies.at("show_labels"),
+                .named_bodies_scale_by_mass = j_named_bodies.at("scale_by_mass"),
                 .trails_fade = std::chrono::duration<double>(j_graphics.at("trails_fade_time_s")
                         .get<double>())};
     }
@@ -298,15 +303,20 @@ std::string Config::Graphics::to_string() const {
     show_config_panel:   {}
     show_stats_panel:    {}
     show_action_log:     {}
+    show_inspector:      {}
     panel_update_hz      {}
     selection_show:      {}
     selection_show_CoM:  {}
     follow_selected:     {}
+    selection_orbit:     {}
+    show_labels:         {}
+    scale_by_mass:       {}
     trails_fade_time_s:  {})";
     return fmt::format(fmt_str, enabled, resolution.x, resolution.y, vsync_enabled, fps,
             pixel_scale, show_grid, show_commands_panel, show_config_panel, show_stats_panel,
-            show_action_log_panel, panel_update_hz, selection_show, selection_show_center_of_mass,
-            follow_selected, trails_fade.count());
+            show_action_log_panel, show_inspector_panel, panel_update_hz, selection_show,
+            selection_show_center_of_mass, follow_selected, selection_show_orbit,
+            named_bodies_show_labels, named_bodies_scale_by_mass, trails_fade.count());
 }
 
 bool Config::Graphics::validate() const {
