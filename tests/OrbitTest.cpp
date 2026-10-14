@@ -281,7 +281,7 @@ void test_binary_primaries() {
     const auto attractor = Orbit::find_attractor({1e20, pos[2], {}}, named, primaries,
             mass.data(), pos.data(), vel.data(), [](uint32_t i) { return i == 2; });
     CHECK(attractor && attractor->primary == 1 && attractor->inner_count == 1);
-    CHECK(attractor && attractor->pos == Vec(5e10, 0.0));
+    CHECK(attractor && (attractor->pos - Vec(5e10, 0.0)).length() <= 1e-15 * 5e10);
 
     // A planet around a star far from a binary: the binary's chains go round in circles
     const std::vector<double> mass2 = {1e31, 1e30, 1e30, 0.0};
