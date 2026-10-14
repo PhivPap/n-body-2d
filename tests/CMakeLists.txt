@@ -9,6 +9,19 @@ add_executable(test-input-output ${CMAKE_CURRENT_LIST_DIR}/InputOutputTest.cpp)
 target_link_libraries(test-input-output PRIVATE lib-input-output lib-logger)
 add_test(NAME input-output COMMAND test-input-output)
 
+# test-orbit [solar-system.csv]: orbital elements, attractors and orbit tracing, and with the CSV
+# the elements the generator gave the committed Solar System
+add_executable(test-orbit ${CMAKE_CURRENT_LIST_DIR}/OrbitTest.cpp)
+target_link_libraries(test-orbit PRIVATE lib-graphics-orbit lib-graphics-named-bodies
+        lib-input-output lib-constants lib-logger)
+add_test(NAME orbital-elements
+        COMMAND test-orbit ${CMAKE_SOURCE_DIR}/scenarios/solar-system.csv)
+
+add_executable(test-named-bodies ${CMAKE_CURRENT_LIST_DIR}/NamedBodiesTest.cpp)
+target_link_libraries(test-named-bodies PRIVATE lib-graphics-named-bodies
+        lib-graphics-selector lib-body lib-constants lib-logger)
+add_test(NAME named-bodies COMMAND test-named-bodies)
+
 # test-simulation <test> <algorithm> runs one physics test on one algorithm, linked like the
 # simulator (see the top-level CMakeLists.txt)
 add_executable(test-simulation ${CMAKE_CURRENT_LIST_DIR}/SimulationTest.cpp)
