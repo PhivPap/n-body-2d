@@ -96,10 +96,12 @@ static std::optional<StatsDisplayedData::Selection> panel_selection(
     panel_manager.register_panel(&config_panel, PanelManager::Position::TOP_LEFT);
     panel_manager.register_panel(&stats_panel, PanelManager::Position::TOP_LEFT);
     panel_manager.register_panel(&commands_panel, PanelManager::Position::TOP_RIGHT);
+    panel_manager.register_panel(&inspector_panel, PanelManager::Position::TOP_RIGHT);
     panel_manager.register_panel(&action_log_panel, PanelManager::Position::BOTTOM_RIGHT);
     config_panel.set_visible(graphics_cfg.show_config_panel);
     stats_panel.set_visible(graphics_cfg.show_stats_panel);
     commands_panel.set_visible(graphics_cfg.show_commands_panel);
+    inspector_panel.set_visible(graphics_cfg.show_inspector_panel);
     action_log_panel.set_visible(graphics_cfg.show_action_log_panel);
 
     {
@@ -135,7 +137,10 @@ static std::optional<StatsDisplayedData::Selection> panel_selection(
         write_handle->simulated_time_s = 0;
         write_handle->simulation_rate = std::numeric_limits<double>::quiet_NaN();
     }
+    update_inspector_panel();
 
+    // No primaries until the first frame has the bodies' positions
+    primaries.assign(named_bodies.indices().size(), -1);
     reset_trails(true);
 }
 
@@ -175,6 +180,34 @@ void Graphics::update_hover_cursor() {
             && static_cast<uint32_t>(cursor.y) < size.y) {
         hover_cursor = sf::Vector2f(cursor);
     }
+}
+
+// Every named body's primary, which attractors are found from. Primaries change slowly.
+void Graphics::update_primaries() {
+    primaries = Orbit::find_primaries(named_bodies.indices(), bodies.mass_data(),
+            body_positions_cache.data());
+}
+
+// The attractor of a target, and its orbit around it
+template <typename Excluded>
+std::optional<Graphics::OrbitView> Graphics::find_orbit(const Orbit::Target& target,
+        Excluded&& excluded) const {
+    const auto& named = named_bodies.indices();
+    const Orbit::Vec* pos = body_positions_cache.data();
+    const auto attractor = Orbit::find_attractor(target, named, primaries, bodies.mass_data(), pos,
+            bodies.vel_data(), excluded);
+    if (!attractor) {
+        return std::nullopt;
+    }
+    const auto elements = Orbit::elements(target.pos - attractor->pos,
+            target.vel - attractor->vel,
+            Constants::Simulation::G * (target.mass + attractor->mass));
+    if (!elements) {
+        return std::nullopt;
+    }
+    return OrbitView{.attractor = *attractor, .elements = *elements,
+            .retrograde = Orbit::retrograde(elements->angular_momentum, *attractor, named,
+                    primaries, pos, bodies.vel_data())};
 }
 
 // This calculation guarantees:
@@ -278,6 +311,13 @@ void Graphics::update_hover() {
     if (!hovered_body) {
         hovered_body = nearest_body_in_hover_radius;
     }
+    hovered_orbit = std::nullopt;
+    if (hovered_body) {
+        const uint32_t index = *hovered_body;
+        const Orbit::Target target{bodies.mass(index), body_positions_cache[index],
+                bodies.vel(index)};
+        hovered_orbit = find_orbit(target, [index](uint32_t i) { return i == index; });
+    }
 }
 
 // Markers above the trails, so that big bodies don't paint wide trails, then labels
@@ -311,12 +351,70 @@ void Graphics::update_selection_tracking() {
     cached_selection_stats = new_selection_stats;
 }
 
+// The selection's orbit, treating it as one body: velocities lag the positions by half a step
+// while the simulation runs, which the elements reflect, slightly
+void Graphics::update_selection_orbit() {
+    selection_orbit = std::nullopt;
+    if (!cached_selection_stats) {
+        return;
+    }
+    const Selector::SelectionStats& selection = *cached_selection_stats;
+    selection_orbit = find_orbit(
+            {selection.total_mass, selection.center_of_mass, selection.weighted_velocity},
+            [this](uint32_t i) { return selector.is_selected(i); });
+}
+
+void Graphics::update_inspector_panel() {
+    // Panel values must not be NaN
+    const auto not_nan = [](double x) {
+        return std::isnan(x) ? std::numeric_limits<double>::infinity() : x;
+    };
+    auto write_handle = inspector_panel.write_handle();
+    write_handle->body = std::nullopt;
+    write_handle->mass_kg = 0.0;
+    write_handle->speed_m_s = 0.0;
+    write_handle->orbit = std::nullopt;
+    if (!cached_selection_stats) {
+        return;
+    }
+    const Selector::SelectionStats& selection = *cached_selection_stats;
+    const std::string& heaviest = bodies.id(selection.heaviest);
+    write_handle->body = selection.n == 1
+                                 ? heaviest
+                                 : fmt::format("{} (+{} more)", heaviest, selection.n - 1);
+    write_handle->mass_kg = selection.total_mass;
+    write_handle->speed_m_s = not_nan(selection.weighted_velocity.length());
+    if (!selection_orbit) {
+        return;
+    }
+    const Orbit::Elements& el = selection_orbit->elements;
+    const auto closed = [&el](double x) { return el.closed() ? std::optional(x) : std::nullopt; };
+    write_handle->orbit = InspectorDisplayedData::Orbit{
+            .attractor = bodies.id(selection_orbit->attractor.primary),
+            .inner_count = selection_orbit->attractor.inner_count,
+            .distance_m = el.distance,
+            .relative_speed_m_s = el.speed,
+            .eccentricity = el.eccentricity,
+            .periapsis_m = el.periapsis,
+            .semi_major_axis_m = closed(el.semi_major_axis),
+            .apoapsis_m = closed(el.apoapsis),
+            .period_s = closed(el.period),
+            .excess_speed_m_s = el.closed() ? std::nullopt : std::optional(el.excess_speed),
+            .time_to_periapsis_s = std::isfinite(el.time_to_periapsis)
+                                           ? std::optional(el.time_to_periapsis)
+                                           : std::nullopt,
+            .clockwise = el.angular_momentum > 0.0,
+            .retrograde = selection_orbit->retrograde};
+}
+
 // Like release_select(), for a clicked body
 void Graphics::select_body(uint32_t index) {
     selector.select_body(index);
     action_log.log(fmt::format("Selected {}", bodies.id(index)));
     cached_selection_stats = selector.compute_stats();
     stats_panel.write_handle()->opt_selection = panel_selection(cached_selection_stats);
+    update_selection_orbit();
+    update_inspector_panel();
 }
 
 void Graphics::draw_selection_overlay() {
@@ -361,17 +459,26 @@ void Graphics::draw_hover_ring() {
     window.draw(ring);
 }
 
-// The hovered body's id, mass and speed, next to the cursor
+// The hovered body's id, mass, and what it orbits or else its speed, next to the cursor
 void Graphics::draw_tooltip() {
     using namespace Constants::Graphics;
     if (!hovered_body || !hover_cursor) {
         return;
     }
     const uint32_t index = *hovered_body;
-    const double speed = bodies.vel(index).length();
-    const std::string text = fmt::format("{}\nMass: {:.4g}kg\nSpeed: {}", bodies.id(index),
-            bodies.mass(index),
-            std::isfinite(speed) ? fmt::format("{}/s", Log::Distance::from(speed)) : "-");
+    std::string text = fmt::format("{}\nMass: {:.4g}kg\n", bodies.id(index), bodies.mass(index));
+    if (hovered_orbit) {
+        const Orbit::Attractor& attractor = hovered_orbit->attractor;
+        text += fmt::format("Around {}{}: {}, {}/s", bodies.id(attractor.primary),
+                attractor.inner_count > 0 ? fmt::format(" (+{} inner)", attractor.inner_count) : "",
+                Log::Distance::from(hovered_orbit->elements.distance),
+                Log::Distance::from(hovered_orbit->elements.speed));
+    }
+    else {
+        const double speed = bodies.vel(index).length();
+        text += fmt::format("Speed: {}",
+                std::isfinite(speed) ? fmt::format("{}/s", Log::Distance::from(speed)) : "-");
+    }
     tooltip_text.setString(sf::String::fromUtf8(text.begin(), text.end()));
 
     // Below right of the cursor, or left of it or above it if it doesn't fit there
@@ -523,6 +630,8 @@ void Graphics::release_select(bool skip_select) {
     cached_selection_stats = selector.has_selection() ? std::optional(selector.compute_stats())
                                                       : std::nullopt;
     stats_panel.write_handle()->opt_selection = panel_selection(cached_selection_stats);
+    update_selection_orbit();
+    update_inspector_panel();
 }
 
 void Graphics::body_size_increase() {
@@ -628,6 +737,10 @@ void Graphics::toggle_action_log_panel() {
     action_log_panel.set_visible(!action_log_panel.is_visible());
 }
 
+void Graphics::toggle_inspector_panel() {
+    inspector_panel.set_visible(!inspector_panel.is_visible());
+}
+
 void Graphics::set_cursor_in_window(bool in_window) {
     cursor_in_window = in_window;
 }
@@ -667,6 +780,7 @@ void Graphics::update_simulation_stats(const SimulationStats& sim_stats) {
         write_handle->simulation_rate = sim_stats.ips * sim_stats.timestep_s;
         write_handle->opt_selection = panel_selection(cached_selection_stats);
     }
+    update_inspector_panel();
 }
 
 void Graphics::draw_frame() {
@@ -675,7 +789,9 @@ void Graphics::draw_frame() {
     update_hover_cursor();
     std::memcpy(body_positions_cache.data(), bodies.pos_data(),
             bodies.n * sizeof(sf::Vector2<double>));
+    primaries_update_rate_limiter.try_call(std::bind(&Graphics::update_primaries, this));
     update_selection_tracking();
+    update_selection_orbit();
     draw_grid();
     draw_bodies();
     update_hover();
