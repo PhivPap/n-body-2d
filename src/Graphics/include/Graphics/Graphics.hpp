@@ -51,6 +51,7 @@ public:
     void toggle_selection_show();
     void toggle_selection_show_center_of_mass();
     void toggle_follow_selected();
+    void toggle_selection_orbit();
     void toggle_labels();
     void toggle_mass_scaled_markers();
     void center_on_selection_center_of_mass();
@@ -119,6 +120,11 @@ private:
     std::optional<uint32_t> hovered_body{};
     sf::Text tooltip_text;
     sf::RectangleShape tooltip_box{};
+    // The selection's orbit, reused every frame
+    std::vector<Orbit::Segment> orbit_segments;
+    sf::VertexArray orbit_lines{sf::PrimitiveType::Lines};
+    sf::CircleShape apsis_marker{Constants::Graphics::APSIS_MARKER_RADIUS_PX};
+    sf::Text apsis_label;
     sf::Shader body_shader{};
     sf::Shader fade_shader{};
     sf::Shader marker_shader{};
@@ -144,6 +150,7 @@ private:
     void draw_grid();
     void draw_bodies();
     void update_hover();
+    void draw_selection_orbit();
     void draw_named_bodies();
     void update_selection_tracking();
     void update_selection_orbit();

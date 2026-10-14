@@ -2,6 +2,7 @@
 
 #include <GL/gl.h>
 #include <algorithm>
+#include <numbers>
 
 #include "AssetManager/AssetManager.hpp"
 #include "Constants/Constants.hpp"
@@ -74,7 +75,9 @@ static std::optional<StatsDisplayedData::Selection> panel_selection(
           vp(sf::Vector2f(graphics_cfg.resolution), graphics_cfg.pixel_scale),
           selector(bodies, body_positions_cache, body_vertex_array),
           tooltip_text(AssetManager::instance().get<sf::Font>("fonts/UbuntuMono-R.ttf"), "",
-                  Constants::Graphics::TOOLTIP_CHARACTER_SIZE) {
+                  Constants::Graphics::TOOLTIP_CHARACTER_SIZE),
+          apsis_label(AssetManager::instance().get<sf::Font>("fonts/UbuntuMono-R.ttf"), "",
+                  Constants::Graphics::APSIS_CHARACTER_SIZE) {
     window.setFramerateLimit(graphics_cfg.fps);
     window.setVerticalSyncEnabled(graphics_cfg.vsync_enabled);
 
@@ -93,6 +96,10 @@ static std::optional<StatsDisplayedData::Selection> panel_selection(
     body_shader.setUniform("pointDiameter", static_cast<float>(body_diameter_pixels));
     fade_shader.setUniform("texture", sf::Shader::CurrentTexture);
     tooltip_box.setFillColor(Constants::Graphics::TOOLTIP_BACKGROUND_COLOR);
+    constexpr float apsis_radius = Constants::Graphics::APSIS_MARKER_RADIUS_PX;
+    apsis_marker.setOrigin({apsis_radius, apsis_radius});
+    apsis_marker.setFillColor(Constants::Graphics::ORBIT_COLOR);
+    apsis_label.setFillColor(Constants::Graphics::ORBIT_COLOR);
     panel_manager.register_panel(&config_panel, PanelManager::Position::TOP_LEFT);
     panel_manager.register_panel(&stats_panel, PanelManager::Position::TOP_LEFT);
     panel_manager.register_panel(&commands_panel, PanelManager::Position::TOP_RIGHT);
@@ -317,6 +324,45 @@ void Graphics::update_hover() {
         const Orbit::Target target{bodies.mass(index), body_positions_cache[index],
                 bodies.vel(index)};
         hovered_orbit = find_orbit(target, [index](uint32_t i) { return i == index; });
+    }
+}
+
+// The selection's osculating orbit around its attractor's barycentre, dashed, with its apsides.
+// It is traced in double precision and clipped to the window, so it stays exact at any zoom.
+void Graphics::draw_selection_orbit() {
+    using namespace Constants::Graphics;
+    if (!selection_show_orbit || !selection_orbit) {
+        return;
+    }
+    const Orbit::Elements& el = selection_orbit->elements;
+    const Orbit::Vec focus = selection_orbit->attractor.pos;
+    const Orbit::ScreenTransform transform{vp.get_rect().position, vp.get_pixels_per_meter()};
+    if ((el.closed() ? el.apoapsis : el.periapsis) * transform.pixels_per_meter
+            < ORBIT_MIN_SIZE_PX) {
+        return;
+    }
+    const sf::Vector2f window_size = vp.get_window_res();
+    orbit_segments.clear();
+    Orbit::trace(el, focus, transform, window_size, orbit_segments, ORBIT_TOLERANCE_PX,
+            ORBIT_CLIP_MARGIN_PX);
+    orbit_lines.clear();
+    Orbit::append_dashes(orbit_segments, ORBIT_DASH_PX, ORBIT_GAP_PX, ORBIT_COLOR, orbit_lines);
+    window.draw(orbit_lines);
+
+    const auto draw_apsis = [&](double nu, const char* name) {
+        const Orbit::Vec pos = transform.to_screen(focus + el.position_at(nu));
+        if (pos.x >= 0.0 && pos.x <= window_size.x && pos.y >= 0.0 && pos.y <= window_size.y) {
+            apsis_marker.setPosition(sf::Vector2f(pos));
+            window.draw(apsis_marker);
+            const sf::Vector2f label_pos = sf::Vector2f(pos) + APSIS_LABEL_OFFSET_PX;
+            apsis_label.setString(name);
+            apsis_label.setPosition({std::round(label_pos.x), std::round(label_pos.y)});
+            window.draw(apsis_label);
+        }
+    };
+    draw_apsis(0.0, "Pe");
+    if (el.closed()) {
+        draw_apsis(std::numbers::pi, "Ap");
     }
 }
 
@@ -701,6 +747,13 @@ void Graphics::toggle_follow_selected() {
     action_log.log(fmt::format("Selection follow: {}", follow_selected ? "Enabled" : "Disabled"));
 }
 
+void Graphics::toggle_selection_orbit() {
+    selection_show_orbit = !selection_show_orbit;
+    config_panel.write_handle()->selection_show_orbit = selection_show_orbit;
+    action_log.log(fmt::format("Selection orbit: {}",
+            selection_show_orbit ? "Enabled" : "Disabled"));
+}
+
 void Graphics::toggle_labels() {
     show_labels = !show_labels;
     config_panel.write_handle()->show_labels = show_labels;
@@ -795,6 +848,7 @@ void Graphics::draw_frame() {
     draw_grid();
     draw_bodies();
     update_hover();
+    draw_selection_orbit();
     draw_named_bodies();
     draw_ui();
     window.display();
