@@ -30,6 +30,12 @@ void Controller::handle_events(sf::RenderWindow& window) {
         else if (const auto* scrolled = event->getIf<sf::Event::MouseWheelScrolled>()) {
             graphics.zoom_view(scrolled->delta);
         }
+        else if (event->is<sf::Event::MouseLeft>()) {
+            graphics.set_cursor_in_window(false);
+        }
+        else if (event->is<sf::Event::MouseEntered>()) {
+            graphics.set_cursor_in_window(true);
+        }
         else if (const auto* mouse_clicked = event->getIf<sf::Event::MouseButtonPressed>()) {
             if (mouse_clicked->button == sf::Mouse::Button::Left) {
                 graphics.grab_view();
