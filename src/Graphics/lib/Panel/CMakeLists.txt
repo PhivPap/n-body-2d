@@ -6,6 +6,7 @@ add_library(${PROJECT_NAME}
     ${CMAKE_CURRENT_LIST_DIR}/src/StatsPanel.cpp
     ${CMAKE_CURRENT_LIST_DIR}/src/ConfigPanel.cpp
     ${CMAKE_CURRENT_LIST_DIR}/src/CommandsPanel.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/src/InspectorPanel.cpp
     ${CMAKE_CURRENT_LIST_DIR}/src/ActionLogPanel.cpp)
 target_include_directories(${PROJECT_NAME} PUBLIC ${CMAKE_CURRENT_LIST_DIR}/include)
 

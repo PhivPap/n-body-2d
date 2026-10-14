@@ -50,7 +50,7 @@ constexpr Range<float> PANEL_UPDATE_HZ_RANGE = {0.1, 30};
 constexpr uint16_t CONFIG_PANEL_WIDTH = 340;
 constexpr uint16_t STATS_PANEL_WIDTH = 340;
 constexpr uint16_t COMMANDS_PANEL_WIDTH = 370;
-constexpr uint16_t INSPECTOR_PANEL_WIDTH = 340;
+constexpr uint16_t INSPECTOR_PANEL_WIDTH = 380;  // fits "counter-clockwise (retrograde)"
 constexpr auto STATS_UPDATE_TIMER = std::chrono::milliseconds(8);
 // Named bodies: those whose id group (the id without a trailing number) has at most
 // NAMED_GROUP_MAX_SIZE members; only the heaviest NAMED_BODIES_MAX are kept

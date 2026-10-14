@@ -9,9 +9,11 @@
 #include "Config/Config.hpp"
 #include "Constants/Constants.hpp"
 #include "NamedBodies/NamedBodies.hpp"
+#include "Orbit/Orbit.hpp"
 #include "Panel/ActionLogPanel.hpp"
 #include "Panel/CommandsPanel.hpp"
 #include "Panel/ConfigPanel.hpp"
+#include "Panel/InspectorPanel.hpp"
 #include "Panel/Panel.hpp"
 #include "Panel/PanelManager.hpp"
 #include "Panel/StatsPanel.hpp"
@@ -56,6 +58,7 @@ public:
     void toggle_stats_panel();
     void toggle_commands_panel();
     void toggle_action_log_panel();
+    void toggle_inspector_panel();
     void set_cursor_in_window(bool in_window);
     void notify_paused();
     void notify_resumed();
@@ -68,6 +71,12 @@ private:
         double timestamp_s;
         uint64_t frame;
         float fps;
+    };
+    // A target's attractor and elements this frame
+    struct OrbitView {
+        Orbit::Attractor attractor;
+        Orbit::Elements elements;
+        bool retrograde;
     };
 
     const Config::Graphics& graphics_cfg;
@@ -90,6 +99,9 @@ private:
     ViewPort vp;
     Selector selector;
     NamedBodies named_bodies{bodies};
+    std::vector<int32_t> primaries;  // per named body, see Orbit::find_primaries
+    RLCaller primaries_update_rate_limiter{Constants::Graphics::PRIMARIES_UPDATE_TIMER};
+    std::optional<OrbitView> selection_orbit{}, hovered_orbit{};
     uint64_t frame = 0;
     bool paused = false;
     std::optional<Selector::SelectionStats> cached_selection_stats{};
@@ -114,6 +126,7 @@ private:
     ConfigPanel config_panel{Constants::Graphics::CONFIG_PANEL_WIDTH};
     StatsPanel stats_panel{Constants::Graphics::STATS_PANEL_WIDTH};
     CommandsPanel commands_panel{Constants::Graphics::COMMANDS_PANEL_WIDTH};
+    InspectorPanel inspector_panel{Constants::Graphics::INSPECTOR_PANEL_WIDTH};
     ActionLogPanel action_log_panel{Constants::Graphics::COMMANDS_PANEL_WIDTH};
     ActionLog action_log{};
     BufferedMeanCalculator<float, 60> fps_calculator{};
@@ -125,11 +138,16 @@ private:
 
     void pan_if_view_grabbed();
     void update_hover_cursor();
+    void update_primaries();
+    template <typename Excluded>
+    std::optional<OrbitView> find_orbit(const Orbit::Target& target, Excluded&& excluded) const;
     void draw_grid();
     void draw_bodies();
     void update_hover();
     void draw_named_bodies();
     void update_selection_tracking();
+    void update_selection_orbit();
+    void update_inspector_panel();
     void select_body(uint32_t index);
     void draw_selection_overlay();
     void draw_hover_ring();

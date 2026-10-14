@@ -13,7 +13,7 @@ void CommandsPanel::set_panel_text() {
  C:               Center on selection CoM
  L:               Toggle labels
  M:               Toggle mass-scaled markers
- F1/F2/F3/F4:     Toggle panels
+ F1-F5:           Toggle panels
  Left/Right:      Decrease/Increase timestep
  Up/Down:         Increase/Decrease body size
  Scroll:          Zoom view
