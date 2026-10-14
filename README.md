@@ -13,7 +13,10 @@ down.
 - **24 ready-made scenarios**, from the Solar System with its moons to Saturn's rings, colliding
   galaxies and a toy cosmic web. A generator script sets each one up in equilibrium and picks its
   algorithm, timestep and softening.
-- Fading trails, box selection with a centre-of-mass marker, and a follow mode.
+- Fading trails, box or click selection with a centre-of-mass marker, and a follow mode.
+- Named bodies (planets, moons, stars, black holes) are labelled and drawn by mass. Hover any body
+  for its name, mass and orbit; the inspector panel shows the selection's orbital elements and its
+  predicted orbit.
 
 ## Requirements
 
@@ -48,9 +51,11 @@ ctest --test-dir build --output-on-failure   # after building, ~10 s
 
 The tests check config parsing, CSV files, and the physics of every algorithm: a circular orbit
 stays circular, the Barnes-Hut trees with `theta` 0 match All Pairs, pausing doesn't change the
-result, and massless or coincident bodies are handled. The GPU algorithm's tests need a CUDA build
-(`-E gpu` skips them). If CMake finds Python 3 with numpy and scipy, the `scenarios` tests also
-run the scenario generator's `--verify` on a few scenarios.
+result, and massless or coincident bodies are handled. They also check the viewer's orbital
+elements (against the elements the Solar System was generated from), named bodies and labels.
+The GPU algorithm's tests need a CUDA build (`-E gpu` skips them). If CMake finds Python 3 with
+numpy and scipy, the `scenarios` tests also run the scenario generator's `--verify` on a few
+scenarios.
 
 ## Run
 
@@ -81,13 +86,38 @@ around the planet, press F to follow it and zoom in with the mouse wheel.
 | Up / Down           | Bigger / smaller bodies                                    |
 | Mouse wheel         | Zoom                                                       |
 | Left-drag           | Pan                                                        |
+| Left-click          | Select the body under the cursor                           |
 | Right-drag          | Select the bodies in a box                                 |
 | S                   | Show or hide the selection                                 |
 | D                   | Show or hide the selection's centre of mass                |
 | F                   | Follow the selection                                       |
 | C                   | Centre the view on the selection                           |
+| O                   | Show or hide the selection's predicted orbit               |
+| L                   | Show or hide the names of named bodies                     |
+| M                   | Draw named bodies by mass, or all the same size            |
 | G                   | Show or hide the grid                                      |
-| F1 / F2 / F3 / F4   | Show or hide the commands, config, stats and message panels |
+| F1 / F2 / F3 / F4 / F5 | Show or hide the commands, config, stats, message and inspector panels |
+
+## Named bodies and the inspector
+
+A body is *named* unless its id numbers it in a population: an id's group is the id without a
+trailing number (and a `-` or `_` before it), and bodies in groups of at most 64 are named. So
+`Io`, `Kepler-16b` and the 37 S-stars `S1` to `S37` are named, but not the 250,000 `ring-N`
+particles of Saturn's rings. The 1024 heaviest named bodies are kept.
+
+- Named bodies are drawn above the trails as markers 2 to 12 px wider than the other bodies, by
+  mass, and labelled with their ids where there is room, heaviest first.
+- Hovering over any body shows its id, mass and what it orbits; clicking it selects it. A click on
+  empty space keeps the selection, and dragging still pans.
+- The inspector panel treats the selection as one body, at its centre of mass, and shows its
+  orbital elements around its attractor. The attractor is the selection's primary, the heavier
+  named body with the largest m/d³ (the Earth for the Moon, although the Sun pulls the Moon
+  harder), merged with the named bodies that orbit that primary inside the selection's distance:
+  Nix orbits Pluto and Charon together, and Kepler-16b both of its suns. So right-dragging a box
+  around a planet and its moons gives the orbit of their barycentre.
+- The predicted orbit is the conic of those elements, with its periapsis and apoapsis.
+- While the simulation runs, velocities lag positions by half a step, so the elements carry a tiny
+  error. They are exact while it's paused.
 
 ## Scenarios
 
