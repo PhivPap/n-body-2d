@@ -79,6 +79,9 @@ void Controller::handle_events(sf::RenderWindow& window) {
             case sf::Keyboard::Scan::C:
                 graphics.center_on_selection_center_of_mass();
                 break;
+            case sf::Keyboard::Scan::O:
+                graphics.toggle_selection_orbit();
+                break;
             case sf::Keyboard::Scan::L:
                 graphics.toggle_labels();
                 break;

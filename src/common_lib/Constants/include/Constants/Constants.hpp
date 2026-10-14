@@ -93,6 +93,10 @@ constexpr double ORBIT_CLIP_MARGIN_PX = 2.0;
 constexpr double ORBIT_OPEN_DISTANCE_FACTOR = 4.0;
 constexpr double ORBIT_OPEN_PERIAPSIS_FACTOR = 20.0;
 constexpr float ORBIT_MIN_SIZE_PX = 2.f;
+// Periapsis and apoapsis markers, labelled "Pe" and "Ap"
+constexpr float APSIS_MARKER_RADIUS_PX = 3.f;
+constexpr uint32_t APSIS_CHARACTER_SIZE = 12;
+constexpr sf::Vector2f APSIS_LABEL_OFFSET_PX(5.f, -8.f);
 
 static_assert(ZOOM_FACTOR > 1.0);
 static_assert(GRID_SPACING_FACTOR >= 2.0);

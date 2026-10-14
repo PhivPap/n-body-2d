@@ -11,6 +11,7 @@ void CommandsPanel::set_panel_text() {
  D:               Toggle selection CoM show
  F:               Toggle selection follow
  C:               Center on selection CoM
+ O:               Toggle selection orbit
  L:               Toggle labels
  M:               Toggle mass-scaled markers
  F1-F5:           Toggle panels
