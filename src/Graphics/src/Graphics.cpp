@@ -310,6 +310,7 @@ void Graphics::draw_bodies() {
 // Named bodies' markers take precedence over the body nearest to the cursor
 void Graphics::update_hover() {
     hovered_body = std::nullopt;
+    hovered_orbit = std::nullopt;
     if (!hover_cursor) {
         return;
     }
@@ -318,7 +319,6 @@ void Graphics::update_hover() {
     if (!hovered_body) {
         hovered_body = nearest_body_in_hover_radius;
     }
-    hovered_orbit = std::nullopt;
     if (hovered_body) {
         const uint32_t index = *hovered_body;
         const Orbit::Target target{bodies.mass(index), body_positions_cache[index],
