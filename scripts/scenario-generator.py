@@ -1639,8 +1639,11 @@ def make_config(name, sc, p, csv_path):
             "show_config_panel": True,
             "show_stats_panel": True,
             "show_action_log_panel": True,
+            "show_inspector_panel": True,
             "panel_update_hz": 1,
-            "selection": {"show": True, "show_center_of_mass": True, "follow": False},
+            "selection": {"show": True, "show_center_of_mass": True, "follow": False,
+                    "show_orbit": True},
+            "named_bodies": {"show_labels": True, "scale_by_mass": True},
             "trails_fade_time_s": sc.trails,
         },
         # Not read by the simulator (unknown keys are ignored): documentation and --verify input

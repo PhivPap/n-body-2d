@@ -24,11 +24,17 @@
         "show_config_panel": true,
         "show_stats_panel": true,
         "show_action_log_panel": true,
+        "show_inspector_panel": true,
         "panel_update_hz": 1,
         "selection": {
             "show": true,
             "show_center_of_mass": true,
-            "follow": false
+            "follow": false,
+            "show_orbit": true
+        },
+        "named_bodies": {
+            "show_labels": true,
+            "scale_by_mass": true
         },
         "trails_fade_time_s": 3
     },

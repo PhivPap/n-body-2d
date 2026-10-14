@@ -39,8 +39,11 @@ json valid_config() {
             "show_config_panel": true,
             "show_stats_panel": true,
             "show_action_log_panel": true,
+            "show_inspector_panel": true,
             "panel_update_hz": 1,
-            "selection": {"show": true, "show_center_of_mass": true, "follow": false},
+            "selection": {"show": true, "show_center_of_mass": true, "follow": false,
+                    "show_orbit": true},
+            "named_bodies": {"show_labels": true, "scale_by_mass": false},
             "trails_fade_time_s": 3
         }
     })");
@@ -78,6 +81,10 @@ void test_valid(const fs::path& dir) {
     CHECK(cfg.sim.threads == 4);
     CHECK(!cfg.graphics.enabled);
     CHECK(cfg.graphics.resolution == sf::Vector2<uint16_t>(1600, 900));
+    CHECK(cfg.graphics.show_inspector_panel);
+    CHECK(cfg.graphics.selection_show_orbit);
+    CHECK(cfg.graphics.named_bodies_show_labels);
+    CHECK(!cfg.graphics.named_bodies_scale_by_mass);
     CHECK(cfg.graphics.trails_fade.count() == 3.0);
 
     json j = without("/Simulation/softening_length_m");
@@ -117,6 +124,10 @@ void test_invalid(const fs::path& dir) {
     CHECK_THROWS(parse(dir, without("/IO/echo_config")));
     CHECK_THROWS(parse(dir, without("/Simulation/timestep")));
     CHECK_THROWS(parse(dir, without("/Graphics/selection/follow")));
+    CHECK_THROWS(parse(dir, without("/Graphics/show_inspector_panel")));
+    CHECK_THROWS(parse(dir, without("/Graphics/selection/show_orbit")));
+    CHECK_THROWS(parse(dir, without("/Graphics/named_bodies/show_labels")));
+    CHECK_THROWS(parse(dir, without("/Graphics/named_bodies/scale_by_mass")));
     CHECK_THROWS(parse(dir, with("/IO/universe_infile", "missing.csv")));
     CHECK_THROWS(parse(dir, with("/Simulation/algorithm", "Barnes Hut")));
     CHECK_THROWS(parse(dir, with("/Simulation/softening_factor", 0.01)));  // both softenings
