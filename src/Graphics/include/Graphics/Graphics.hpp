@@ -37,7 +37,8 @@ public:
     void resize_view(sf::Vector2f new_size);
     void zoom_view(double delta);
     void grab_view();
-    void release_view();
+    // A release close enough to the press is a click, which selects the body under the cursor
+    void release_view(bool allow_click = true);
     void grab_select();
     void release_select(bool skip_select = false);
     void body_size_increase();
@@ -55,6 +56,7 @@ public:
     void toggle_stats_panel();
     void toggle_commands_panel();
     void toggle_action_log_panel();
+    void set_cursor_in_window(bool in_window);
     void notify_paused();
     void notify_resumed();
     void notify_timestep_changed(double old_dt, double new_dt);
@@ -93,6 +95,18 @@ private:
     std::optional<Selector::SelectionStats> cached_selection_stats{};
     std::optional<sf::Vector2i> opt_view_grabbed_pos{};
     std::optional<sf::Vector2i> opt_select_grabbed_pos{};
+    // Left click: where the press was, how far the cursor went, the body under it at the press
+    sf::Vector2i view_grab_start{};
+    float view_grab_max_drag_px = 0.f;
+    std::optional<uint32_t> click_candidate{};
+    // Hovering: the cursor if bodies under it are looked for this frame, the nearest body within
+    // HOVER_RADIUS_PX that draw_bodies() found, and the hovered body
+    bool cursor_in_window = true;
+    std::optional<sf::Vector2f> hover_cursor{};
+    std::optional<uint32_t> nearest_body_in_hover_radius{};
+    std::optional<uint32_t> hovered_body{};
+    sf::Text tooltip_text;
+    sf::RectangleShape tooltip_box{};
     sf::Shader body_shader{};
     sf::Shader fade_shader{};
     sf::Shader marker_shader{};
@@ -110,11 +124,16 @@ private:
     float remainder_fractional_fade_chunks = 0.f;
 
     void pan_if_view_grabbed();
+    void update_hover_cursor();
     void draw_grid();
     void draw_bodies();
+    void update_hover();
     void draw_named_bodies();
     void update_selection_tracking();
+    void select_body(uint32_t index);
     void draw_selection_overlay();
+    void draw_hover_ring();
+    void draw_tooltip();
     void update_stats();
     void draw_ui();
     void reset_trails(bool resize = false);
