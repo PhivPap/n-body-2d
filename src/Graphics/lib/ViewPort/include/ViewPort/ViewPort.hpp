@@ -21,6 +21,7 @@ public:
     sf::Vector2<double> pos_on_viewport_to_coords(const sf::Vector2f& pos) const;
     sf::Vector2f get_window_res() const;
     sf::Rect<double> get_rect() const;
+    double get_pixels_per_meter() const;
 
 private:
     sf::Vector2f window_res;

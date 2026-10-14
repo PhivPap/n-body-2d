@@ -82,3 +82,7 @@ sf::Vector2f ViewPort::get_window_res() const {
 sf::Rect<double> ViewPort::get_rect() const {
     return rect;
 }
+
+double ViewPort::get_pixels_per_meter() const {
+    return pixels_per_meter;
+}
