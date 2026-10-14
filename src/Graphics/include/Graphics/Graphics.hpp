@@ -8,6 +8,7 @@
 #include "BufferedMeanCalculator/BufferedMeanCalculator.hpp"
 #include "Config/Config.hpp"
 #include "Constants/Constants.hpp"
+#include "NamedBodies/NamedBodies.hpp"
 #include "Panel/ActionLogPanel.hpp"
 #include "Panel/CommandsPanel.hpp"
 #include "Panel/ConfigPanel.hpp"
@@ -47,6 +48,8 @@ public:
     void toggle_selection_show();
     void toggle_selection_show_center_of_mass();
     void toggle_follow_selected();
+    void toggle_labels();
+    void toggle_mass_scaled_markers();
     void center_on_selection_center_of_mass();
     void toggle_config_panel();
     void toggle_stats_panel();
@@ -72,6 +75,9 @@ private:
     bool selection_show = graphics_cfg.selection_show;
     bool selection_show_center_of_mass = graphics_cfg.selection_show_center_of_mass;
     bool follow_selected = graphics_cfg.follow_selected;
+    bool selection_show_orbit = graphics_cfg.selection_show_orbit;
+    bool show_labels = graphics_cfg.named_bodies_show_labels;
+    bool scale_named_by_mass = graphics_cfg.named_bodies_scale_by_mass;
     std::chrono::duration<double> trails_fade = graphics_cfg.trails_fade;
     std::vector<sf::Vector2<double>> body_positions_cache;
     StopWatch sw;
@@ -81,6 +87,7 @@ private:
     sf::Sprite trails_sprite{trails_texture1.getTexture()};
     ViewPort vp;
     Selector selector;
+    NamedBodies named_bodies{bodies};
     uint64_t frame = 0;
     bool paused = false;
     std::optional<Selector::SelectionStats> cached_selection_stats{};
@@ -88,6 +95,7 @@ private:
     std::optional<sf::Vector2i> opt_select_grabbed_pos{};
     sf::Shader body_shader{};
     sf::Shader fade_shader{};
+    sf::Shader marker_shader{};
     PanelManager panel_manager{};
     ConfigPanel config_panel{Constants::Graphics::CONFIG_PANEL_WIDTH};
     StatsPanel stats_panel{Constants::Graphics::STATS_PANEL_WIDTH};
@@ -104,6 +112,7 @@ private:
     void pan_if_view_grabbed();
     void draw_grid();
     void draw_bodies();
+    void draw_named_bodies();
     void update_selection_tracking();
     void draw_selection_overlay();
     void update_stats();

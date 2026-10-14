@@ -73,6 +73,12 @@ void Controller::handle_events(sf::RenderWindow& window) {
             case sf::Keyboard::Scan::C:
                 graphics.center_on_selection_center_of_mass();
                 break;
+            case sf::Keyboard::Scan::L:
+                graphics.toggle_labels();
+                break;
+            case sf::Keyboard::Scan::M:
+                graphics.toggle_mass_scaled_markers();
+                break;
             case sf::Keyboard::Scan::Left:
                 key_pressed->control ? graphics.trails_length_decrease() : timestep_decrease();
                 break;

@@ -22,7 +22,10 @@ void ConfigPanel::set_panel_text() {
         " Max FPS:       {}\n"
         " Sel. Show:     {}\n"
         " Sel. Show CoM: {}\n"
-        " Sel. Follow:   {}\n",
+        " Sel. Follow:   {}\n"
+        " Sel. Orbit:    {}\n"
+        " Labels:        {}\n"
+        " Mass Sizes:    {}\n",
         Log::Time::from(d.timestep_s),
         d.algorithm,
         displayed_data.show_theta ? fmt::format(" Theta:         {}\n", d.theta) : "",
@@ -39,7 +42,10 @@ void ConfigPanel::set_panel_text() {
         d.max_fps,
         d.selection_show ? "ON" : "OFF",
         d.selection_show_center_of_mass ? "ON" : "OFF",
-        d.selection_follow_center_of_mass ? "ON" : "OFF"
+        d.selection_follow_center_of_mass ? "ON" : "OFF",
+        d.selection_show_orbit ? "ON" : "OFF",
+        d.show_labels ? "ON" : "OFF",
+        d.scale_named_by_mass ? "ON" : "OFF"
     );
     text.setString(txt);
 }

@@ -28,6 +28,22 @@ void main() {
     gl_FragColor = gl_Color;  // Use vertex color or set fixed
 }
 )glsl";
+// Named bodies' markers: points as wide as their texture coordinate's x, drawn as circles
+constexpr std::string_view marker_vertex_shader = R"glsl(
+#version 130
+void main() {
+    gl_Position = gl_ModelViewProjectionMatrix * gl_Vertex;
+    gl_PointSize = gl_MultiTexCoord0.x;  // the marker's diameter in pixels
+    gl_FrontColor = gl_Color;
+}
+)glsl";
+constexpr std::string_view marker_fragment_shader = R"glsl(
+#version 130
+void main() {
+    if (length(gl_PointCoord - vec2(0.5, 0.5)) > 0.5) discard;  // circle
+    gl_FragColor = gl_Color;
+}
+)glsl";
 constexpr std::string_view fade_fragment_shader = R"glsl(
 #version 130
 uniform sampler2D texture;
@@ -66,7 +82,8 @@ static std::optional<StatsDisplayedData::Selection> panel_selection(
     glEnable(GL_PROGRAM_POINT_SIZE);
     glEnable(GL_POINT_SPRITE);  // gl_PointCoord is undefined without it (compatibility profile)
     if (!body_shader.loadFromMemory(body_vertex_shader, body_fragment_shader)
-            || !fade_shader.loadFromMemory(fade_fragment_shader, sf::Shader::Type::Fragment)) {
+            || !fade_shader.loadFromMemory(fade_fragment_shader, sf::Shader::Type::Fragment)
+            || !marker_shader.loadFromMemory(marker_vertex_shader, marker_fragment_shader)) {
         throw std::runtime_error("Failed to load shaders");
     }
     body_shader.setUniform("pointDiameter", static_cast<float>(body_diameter_pixels));
@@ -98,6 +115,9 @@ static std::optional<StatsDisplayedData::Selection> panel_selection(
         write_handle->selection_show = selection_show;
         write_handle->selection_show_center_of_mass = selection_show_center_of_mass;
         write_handle->selection_follow_center_of_mass = follow_selected;
+        write_handle->selection_show_orbit = selection_show_orbit;
+        write_handle->show_labels = show_labels;
+        write_handle->scale_named_by_mass = scale_named_by_mass;
     }
 
     {
@@ -193,6 +213,21 @@ void Graphics::draw_bodies() {
     // Bodies were alpha blended onto a transparent texture, so it holds premultiplied alpha
     window.draw(trails_sprite,
             sf::BlendMode(sf::BlendMode::Factor::One, sf::BlendMode::Factor::OneMinusSrcAlpha));
+}
+
+// Markers above the trails, so that big bodies don't paint wide trails, then labels
+void Graphics::draw_named_bodies() {
+    const float base_px = body_diameter_pixels;
+    named_bodies.draw_markers(window, marker_shader, body_vertex_array, base_px,
+            scale_named_by_mass, selector.selection_mask(), selection_show);
+    if (show_labels) {
+        const std::optional<uint32_t> selected_body =
+                selector.num_selected() == 1 && cached_selection_stats
+                        ? std::optional(cached_selection_stats->heaviest)
+                        : std::nullopt;
+        named_bodies.draw_labels(window, body_vertex_array, base_px, scale_named_by_mass,
+                selected_body, selector.selection_mask(), selection_show);
+    }
 }
 
 // The stats panel shows the selection's stats at the panel refresh rate
@@ -416,6 +451,19 @@ void Graphics::toggle_follow_selected() {
     action_log.log(fmt::format("Selection follow: {}", follow_selected ? "Enabled" : "Disabled"));
 }
 
+void Graphics::toggle_labels() {
+    show_labels = !show_labels;
+    config_panel.write_handle()->show_labels = show_labels;
+    action_log.log(fmt::format("Labels: {}", show_labels ? "Enabled" : "Disabled"));
+}
+
+void Graphics::toggle_mass_scaled_markers() {
+    scale_named_by_mass = !scale_named_by_mass;
+    config_panel.write_handle()->scale_named_by_mass = scale_named_by_mass;
+    action_log.log(fmt::format("Mass-scaled markers: {}",
+            scale_named_by_mass ? "Enabled" : "Disabled"));
+}
+
 void Graphics::center_on_selection_center_of_mass() {
     if (cached_selection_stats) {
         vp.center_on_coords(cached_selection_stats->center_of_mass);
@@ -484,6 +532,7 @@ void Graphics::draw_frame() {
     update_selection_tracking();
     draw_grid();
     draw_bodies();
+    draw_named_bodies();
     draw_ui();
     window.display();
     frame++;
