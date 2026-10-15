@@ -74,11 +74,12 @@ private:
         uint64_t frame;
         float fps;
     };
-    // A target's attractor and elements this frame
+    // A body's attractor and elements this frame, with its satellites
     struct OrbitView {
         Orbit::Attractor attractor;
         Orbit::Elements elements;
         bool retrograde;
+        uint32_t satellite_count;
     };
 
     const Config::Graphics& graphics_cfg;

@@ -176,6 +176,11 @@ bool NamedBodies::is_named(uint32_t index) const {
     return rank_of.contains(index);
 }
 
+std::optional<uint32_t> NamedBodies::rank(uint32_t index) const {
+    const auto it = rank_of.find(index);
+    return it == rank_of.end() ? std::nullopt : std::optional(it->second);
+}
+
 float NamedBodies::marker_diameter(uint32_t index, float base_px, bool scale_by_mass) const {
     return ::marker_diameter(bodies.mass(index), max_mass, base_px, scale_by_mass);
 }

@@ -191,14 +191,27 @@ void Graphics::update_primaries() {
             body_positions_cache.data());
 }
 
-// A body's attractor, and its orbit around it. Velocities lag the positions by half a step while
-// the simulation runs, which the elements reflect, slightly.
+// A body's attractor, and its orbit around it together with its satellites, as the generator builds
+// systems: their barycentre orbits smoothly, while a heavy moon like Charon makes its planet's own
+// orbit wobble. Velocities lag the positions by half a step while the simulation runs, which the
+// elements reflect, slightly.
 std::optional<Graphics::OrbitView> Graphics::body_orbit(uint32_t index) const {
     const auto& named = named_bodies.indices();
     const Orbit::Vec* pos = body_positions_cache.data();
-    const Orbit::Target target{bodies.mass(index), pos[index], bodies.vel(index)};
+    std::vector<uint32_t> members{index};
+    if (const auto rank = named_bodies.rank(index)) {
+        const auto satellites =
+                Orbit::find_satellites(*rank, named, primaries, bodies.mass_data(), pos);
+        members.insert(members.end(), satellites.begin(), satellites.end());
+    }
+    const Orbit::Target target =
+            Orbit::barycentre(members, bodies.mass_data(), pos, bodies.vel_data());
+    const auto satellite_count = static_cast<uint32_t>(members.size() - 1);
+    std::sort(members.begin(), members.end());
     const auto attractor = Orbit::find_attractor(target, named, primaries, bodies.mass_data(), pos,
-            bodies.vel_data(), [index](uint32_t i) { return i == index; });
+            bodies.vel_data(), [&members](uint32_t i) {
+                return std::binary_search(members.begin(), members.end(), i);
+            });
     if (!attractor) {
         return std::nullopt;
     }
@@ -210,7 +223,8 @@ std::optional<Graphics::OrbitView> Graphics::body_orbit(uint32_t index) const {
     }
     return OrbitView{.attractor = *attractor, .elements = *elements,
             .retrograde = Orbit::retrograde(elements->angular_momentum, *attractor, named,
-                    primaries, pos, bodies.vel_data())};
+                    primaries, pos, bodies.vel_data()),
+            .satellite_count = satellite_count};
 }
 
 // This calculation guarantees:
@@ -454,7 +468,8 @@ void Graphics::update_inspector_panel() {
                                            ? std::optional(el.time_to_periapsis)
                                            : std::nullopt,
             .clockwise = el.angular_momentum > 0.0,
-            .retrograde = selection_orbit->retrograde};
+            .retrograde = selection_orbit->retrograde,
+            .satellite_count = selection_orbit->satellite_count};
 }
 
 // Like release_select(), for a clicked body

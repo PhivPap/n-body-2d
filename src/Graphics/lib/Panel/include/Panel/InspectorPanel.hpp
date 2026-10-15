@@ -21,6 +21,7 @@ struct InspectorDisplayedData {
         std::optional<double> time_to_periapsis_s;  // nullopt: moving away on an open orbit
         bool clockwise;                             // on screen
         bool retrograde;
+        uint32_t satellite_count;                   // orbiting along with the body
 
         bool operator==(const Orbit&) const = default;
     };

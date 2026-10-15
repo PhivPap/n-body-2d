@@ -84,12 +84,18 @@ void InspectorPanel::set_panel_text() {
         );
     }
     else {
+        // Which orbit along with it
+        std::string satellites;
+        if (const uint32_t n = d.orbit ? d.orbit->satellite_count : 0; n > 0) {
+            satellites = fmt::format(" (+{} satellite{})", n, n == 1 ? "" : "s");
+        }
         txt += fmt::format(
-            " Body:          {}\n"
+            " Body:          {}{}\n"
             " Mass:          {:.4g}kg\n"
             " Position:      ({}, {})\n"
             " Velocity:      ({}, {})\n",
             d.body,
+            satellites,
             d.mass_kg,
             distance(d.position_m.x),
             distance(d.position_m.y),
