@@ -25,6 +25,13 @@ std::vector<uint32_t> find_named_bodies(const Bodies& bodies, uint32_t max_group
 // heaviest named body (or massless, or without scaling), up to base + 12 for the heaviest
 float marker_diameter(double mass, double max_mass, float base_px, bool scale_by_mass);
 
+// The heaviest of the named bodies whose marker, grown by HOVER_MARGIN_PX, contains `cursor`;
+// among equal masses, the one whose marker edge is nearest to it. `named` lists body indices, most
+// massive first, whose markers are sized by marker_diameter() and centred on their vertices.
+std::optional<uint32_t> pick_marker(sf::Vector2f cursor, std::span<const uint32_t> named,
+        const double* mass, const sf::VertexArray& body_vertices, float base_px,
+        bool scale_by_mass);
+
 // A label to place: the marker's centre and radius in window pixels, and the text's size
 struct LabelBox {
     sf::Vector2f anchor;
@@ -47,7 +54,7 @@ public:
     bool is_named(uint32_t index) const;
     // A named body's marker diameter in pixels
     float marker_diameter(uint32_t index, float base_px, bool scale_by_mass) const;
-    // The named body whose marker edge is nearest to `cursor`, within HOVER_MARGIN_PX
+    // The heaviest named body under `cursor`, see pick_marker()
     std::optional<uint32_t> pick(sf::Vector2f cursor, const sf::VertexArray& body_vertices,
             float base_px, bool scale_by_mass) const;
     // Heaviest first, so that lighter bodies such as moons stay visible on top

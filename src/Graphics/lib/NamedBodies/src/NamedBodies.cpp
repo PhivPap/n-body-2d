@@ -90,6 +90,27 @@ float marker_diameter(double mass, double max_mass, float base_px, bool scale_by
            + static_cast<float>(scale) * (NAMED_MARKER_MAX_EXTRA_PX - NAMED_MARKER_MIN_EXTRA_PX);
 }
 
+std::optional<uint32_t> pick_marker(sf::Vector2f cursor, std::span<const uint32_t> named,
+        const double* mass, const sf::VertexArray& body_vertices, float base_px,
+        bool scale_by_mass) {
+    const double max_mass = named.empty() ? 0.0 : mass[named.front()];
+    std::optional<uint32_t> picked;
+    float picked_gap = 0.f;
+    for (const uint32_t index : named) {
+        if (picked && mass[index] < mass[*picked]) {
+            break;  // so are the bodies after it
+        }
+        // From the marker's edge, negative inside it
+        const float gap = (body_vertices[index].position - cursor).length()
+                          - marker_diameter(mass[index], max_mass, base_px, scale_by_mass) / 2.f;
+        if (gap <= Constants::Graphics::HOVER_MARGIN_PX && (!picked || gap < picked_gap)) {
+            picked = index;
+            picked_gap = gap;
+        }
+    }
+    return picked;
+}
+
 std::vector<std::optional<sf::Vector2f>> place_labels(std::span<const LabelBox> boxes,
         sf::Vector2f window_size, uint32_t max_labels, float gap_px) {
     using Constants::Graphics::LABEL_SPACING_PX;
@@ -154,18 +175,7 @@ float NamedBodies::marker_diameter(uint32_t index, float base_px, bool scale_by_
 
 std::optional<uint32_t> NamedBodies::pick(sf::Vector2f cursor,
         const sf::VertexArray& body_vertices, float base_px, bool scale_by_mass) const {
-    std::optional<uint32_t> picked;
-    float picked_gap = 0.f;
-    for (const uint32_t index : named) {
-        // From the marker's edge, negative inside it
-        const float gap = (body_vertices[index].position - cursor).length()
-                          - marker_diameter(index, base_px, scale_by_mass) / 2.f;
-        if (gap <= Constants::Graphics::HOVER_MARGIN_PX && (!picked || gap < picked_gap)) {
-            picked = index;
-            picked_gap = gap;
-        }
-    }
-    return picked;
+    return pick_marker(cursor, named, bodies.mass_data(), body_vertices, base_px, scale_by_mass);
 }
 
 void NamedBodies::draw_markers(sf::RenderTarget& target, const sf::Shader& marker_shader,

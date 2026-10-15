@@ -100,6 +100,36 @@ void test_marker_diameter() {
     }
 }
 
+void test_pick_marker() {
+    using Constants::Graphics::BODY_COLOR;
+    // The Moon, the Earth, the Sun, two equal stars and a massless probe
+    const std::vector<double> mass = {7e22, 6e24, 2e30, 1e30, 1e30, 0.0};
+    const std::vector<uint32_t> named = {2, 3, 4, 1, 0, 5};  // most massive first
+    const std::vector<sf::Vector2f> positions = {{103.f, 100.f}, {100.f, 100.f}, {500.f, 500.f},
+            {300.f, 300.f}, {306.f, 300.f}, {700.f, 100.f}};
+    sf::VertexArray vertices(sf::PrimitiveType::Points);
+    for (const sf::Vector2f pos : positions) {
+        vertices.append({pos, BODY_COLOR});
+    }
+    const auto pick = [&](sf::Vector2f cursor, bool scale_by_mass = true) {
+        return pick_marker(cursor, named, mass.data(), vertices, 1.f, scale_by_mass);
+    };
+    // Marker radii: the Earth 3.43 px, the Moon 2.36 px, the stars 6.33 px, the probe 1.5 px,
+    // with a 3 px margin
+    CHECK(pick({103.f, 100.f}) == 1u);  // on the Moon, but also on the heavier Earth
+    CHECK(pick({106.f, 100.f}) == 1u);  // nearer the Moon, still within the Earth's margin
+    CHECK(pick({108.f, 100.f}) == 0u);  // only the Moon
+    CHECK(pick({305.f, 300.f}) == 4u);  // equal masses: the nearest edge
+    CHECK(pick({301.f, 300.f}) == 3u);
+    CHECK(pick({704.4f, 100.f}) == 5u);
+    CHECK(!pick({704.6f, 100.f}));
+    CHECK(!pick({900.f, 800.f}));
+    // Without mass scaling every marker has a 1.5 px radius
+    CHECK(pick({102.f, 100.f}, false) == 1u);
+    CHECK(pick({105.5f, 100.f}, false) == 0u);
+    CHECK(!pick_marker({100.f, 100.f}, {}, mass.data(), vertices, 1.f, true));
+}
+
 void test_place_labels() {
     const sf::Vector2f window(1600.f, 900.f), size(40.f, 10.f);
     const float gap = 4.f;
@@ -189,6 +219,7 @@ int main() {
     test_id_group();
     test_find_named_bodies();
     test_marker_diameter();
+    test_pick_marker();
     test_place_labels();
     test_selector();
     return Check::result();
