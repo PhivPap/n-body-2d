@@ -295,6 +295,26 @@ void test_binary_primaries() {
     CHECK(attractor2 && attractor2->primary == 0 && attractor2->inner_count == 0);
 }
 
+// A planet around a binary star stays with both stars as it passes the lighter one, unlike a moon
+// of that star
+void test_sphere_of_influence() {
+    // Kepler-16-like: stars A and B, a planet beyond B and a moon of B
+    const std::vector<double> mass = {1.37e30, 4e29, 6.3e26, 1e22};
+    const std::vector<Vec> pos = {{0.0, 0.0}, {3.4e10, 0.0}, {9e10, 0.0}, {3.5e10, 0.0}}, vel(4);
+    const std::vector<uint32_t> named = {0, 1, 2, 3};
+    const auto is = [](uint32_t index) { return [index](uint32_t i) { return i == index; }; };
+    // By m / d^3, B is the planet's primary, but the planet is far out of B's sphere
+    CHECK(Orbit::find_primary(mass[2], pos[2], named, mass.data(), pos.data(), is(2)) == 1u);
+    const auto primaries = Orbit::find_primaries(named, mass.data(), pos.data());
+    CHECK(primaries == std::vector<int32_t>({-1, 0, 0, 1}));
+    const auto planet = Orbit::find_attractor({mass[2], pos[2], {}}, named, primaries,
+            mass.data(), pos.data(), vel.data(), is(2));
+    CHECK(planet && planet->primary == 0 && planet->inner_count == 2);
+    const auto moon = Orbit::find_attractor({mass[3], pos[3], {}}, named, primaries, mass.data(),
+            pos.data(), vel.data(), is(3));
+    CHECK(moon && moon->primary == 1 && moon->inner_count == 0);
+}
+
 // The window and orbit of the tracing tests: e = 0.5, q = 1e11 around the origin
 constexpr sf::Vector2f WINDOW(1600.f, 900.f);
 constexpr double MARGIN_PX = 2.0, TOLERANCE_PX = 0.5;
@@ -571,6 +591,7 @@ int main(int argc, const char* argv[]) {
     test_primaries();
     test_attractors();
     test_binary_primaries();
+    test_sphere_of_influence();
     test_trace_visible();
     test_trace_deep_zoom();
     test_trace_off_screen();

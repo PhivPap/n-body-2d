@@ -114,10 +114,11 @@ particles of Saturn's rings. The 1024 heaviest named bodies are kept.
   selection.
 - The inspector panel shows a single selected body's position, velocity and orbital elements
   around its attractor, and for several bodies their count, total mass, centre of mass and its
-  velocity. The attractor is the body's primary, the heavier named body with the largest m/d³ (the
-  Earth for the Moon, although the Sun pulls the Moon harder), merged with the named bodies that
-  orbit that primary inside the body's distance: Nix orbits Pluto and Charon together, and
-  Kepler-16b both of its suns.
+  velocity. The attractor is the body's primary: the heavier named body with the largest m/d³ (the
+  Earth for the Moon, although the Sun pulls the Moon harder), or what that one orbits if the body
+  is outside its sphere of influence, so Kepler-16b doesn't fall to its lighter sun as it passes
+  it. It is merged with the named bodies that orbit that primary inside the body's distance: Nix
+  orbits Pluto and Charon together, and Kepler-16b both of its suns.
 - The predicted orbit is the conic of those elements, with its periapsis and apoapsis. Bodies
   selected together have none, since they may be far apart.
 - While the simulation runs, velocities lag positions by half a step, so the elements carry a tiny
