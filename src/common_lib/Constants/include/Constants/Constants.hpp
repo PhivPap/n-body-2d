@@ -81,6 +81,7 @@ constexpr float TOOLTIP_OFFSET_PX = 16.f;
 constexpr float TOOLTIP_PADDING_PX = 6.f;
 constexpr sf::Color TOOLTIP_BACKGROUND_COLOR(40, 40, 40, 220);
 constexpr sf::Color ORBIT_COLOR(100, 180, 255, 220);
+constexpr sf::Color NAMED_ORBIT_COLOR(190, 190, 190, 150);  // every named body's orbit (A)
 constexpr float ORBIT_DASH_PX = 8.f;
 constexpr float ORBIT_GAP_PX = 6.f;
 // Orbits are drawn within ORBIT_TOLERANCE_PX of the true conic, in ORBIT_INITIAL_SEGMENTS pieces

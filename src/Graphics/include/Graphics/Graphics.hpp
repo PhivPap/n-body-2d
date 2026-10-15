@@ -53,6 +53,7 @@ public:
     void toggle_selection_show_center_of_mass();
     void toggle_follow_selected();
     void toggle_selection_orbit();
+    void toggle_named_orbits();
     void toggle_labels();
     void toggle_mass_scaled_markers();
     void center_on_selection_center_of_mass();
@@ -91,6 +92,7 @@ private:
     bool follow_selected = graphics_cfg.follow_selected;
     bool selection_show_orbit = graphics_cfg.selection_show_orbit;
     bool show_labels = graphics_cfg.named_bodies_show_labels;
+    bool show_named_orbits = false;  // not in the config
     bool scale_named_by_mass = graphics_cfg.named_bodies_scale_by_mass;
     std::chrono::duration<double> trails_fade = graphics_cfg.trails_fade;
     std::vector<sf::Vector2<double>> body_positions_cache;
@@ -121,9 +123,10 @@ private:
     std::optional<uint32_t> hovered_body{};
     sf::Text tooltip_text;
     sf::RectangleShape tooltip_box{};
-    // The selection's orbit, reused every frame
+    // Orbits' segments and dashes (the selection's, every named body's), reused every frame
     std::vector<Orbit::Segment> orbit_segments;
     sf::VertexArray orbit_lines{sf::PrimitiveType::Lines};
+    sf::VertexArray named_orbit_lines{sf::PrimitiveType::Lines};
     sf::CircleShape apsis_marker{Constants::Graphics::APSIS_MARKER_RADIUS_PX};
     sf::Text apsis_label;
     sf::Shader body_shader{};
@@ -152,6 +155,9 @@ private:
     void draw_grid();
     void draw_bodies();
     void update_hover();
+    bool append_orbit(const OrbitView& orbit, const Orbit::ScreenTransform& transform,
+            sf::Color color, sf::VertexArray& lines);
+    void draw_named_orbits();
     void draw_selection_orbit();
     void draw_named_bodies();
     void update_selection_tracking();
