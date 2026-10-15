@@ -283,8 +283,8 @@ void Graphics::draw_bodies() {
             const float distance_squared = (pos - cursor).lengthSquared();
             if (distance_squared < radius_squared) {
                 const double mass = bodies.mass(i);
-                if (mass > heaviest_mass
-                        || (mass == heaviest_mass && distance_squared < heaviest_distance_squared)) {
+                const bool nearer = distance_squared < heaviest_distance_squared;
+                if (mass > heaviest_mass || (mass == heaviest_mass && nearer)) {
                     heaviest_mass = mass;
                     heaviest_distance_squared = distance_squared;
                     heaviest = i;
