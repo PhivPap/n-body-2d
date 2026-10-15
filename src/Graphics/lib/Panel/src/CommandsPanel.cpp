@@ -18,8 +18,8 @@ void CommandsPanel::set_panel_text() {
  Left/Right:      Decrease/Increase timestep
  Up/Down:         Increase/Decrease body size
  Scroll:          Zoom view
- LClick:          Select body
  LClick & Drag:   Pan view
+ RClick:          Select body
  RClick & Drag:   Select bodies
  Ctrl Left/Right: Decrease/Increase trails
 )";

@@ -28,7 +28,7 @@ void InspectorPanel::set_panel_text() {
     const auto& d = displayed_data;
     std::string txt = "Inspector:\n";
     if (!d.body) {
-        txt += " Click a body, or right-drag a box\n"
+        txt += " Right-click a body, or right-drag a box\n"
                " around bodies, to inspect them\n";
     }
     else if (!d.orbit) {

@@ -86,7 +86,7 @@ around the planet, press F to follow it and zoom in with the mouse wheel.
 | Up / Down           | Bigger / smaller bodies                                    |
 | Mouse wheel         | Zoom                                                       |
 | Left-drag           | Pan                                                        |
-| Left-click          | Select the body under the cursor                           |
+| Right-click         | Select the body under the cursor, or clear the selection   |
 | Right-drag          | Select the bodies in a box                                 |
 | S                   | Show or hide the selection                                 |
 | D                   | Show or hide the selection's centre of mass                |
@@ -108,8 +108,8 @@ particles of Saturn's rings. The 1024 heaviest named bodies are kept.
 - Named bodies are drawn above the trails as markers 2 to 12 px wider than the other bodies, by
   mass, and labelled with their ids where there is room, heaviest first.
 - Hovering over any body shows its id, mass and what it orbits (of several bodies under the
-  cursor, the heaviest); clicking it selects it. A click on empty space keeps the selection, and
-  dragging still pans.
+  cursor, the heaviest); right-clicking it selects it, and right-clicking empty space clears the
+  selection.
 - The inspector panel treats the selection as one body, at its centre of mass, and shows its
   orbital elements around its attractor. The attractor is the selection's primary, the heavier
   named body with the largest m/d³ (the Earth for the Moon, although the Sun pulls the Moon

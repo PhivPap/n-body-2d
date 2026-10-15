@@ -39,8 +39,9 @@ public:
     void resize_view(sf::Vector2f new_size);
     void zoom_view(double delta);
     void grab_view();
-    // A release close enough to the press is a click, which selects the body under the cursor
-    void release_view(bool allow_click = true);
+    void release_view();
+    // A right press released within CLICK_MAX_DRAG_PX is a click, which selects the body under the
+    // cursor (or clears the selection on empty space); dragged further, it selects a box
     void grab_select();
     void release_select(bool skip_select = false);
     void body_size_increase();
@@ -108,9 +109,8 @@ private:
     std::optional<Selector::SelectionStats> cached_selection_stats{};
     std::optional<sf::Vector2i> opt_view_grabbed_pos{};
     std::optional<sf::Vector2i> opt_select_grabbed_pos{};
-    // Left click: where the press was, how far the cursor went, the body under it at the press
-    sf::Vector2i view_grab_start{};
-    float view_grab_max_drag_px = 0.f;
+    // Right press: how far the cursor went from it, and the body under the cursor at the press
+    float select_grab_max_drag_px = 0.f;
     std::optional<uint32_t> click_candidate{};
     // Hovering: the cursor if bodies under it are looked for this frame, the heaviest body within
     // HOVER_RADIUS_PX that draw_bodies() found, and the hovered body
@@ -143,6 +143,8 @@ private:
     float remainder_fractional_fade_chunks = 0.f;
 
     void pan_if_view_grabbed();
+    void update_select_drag();
+    bool is_box_selecting() const;
     void update_hover_cursor();
     void update_primaries();
     template <typename Excluded>

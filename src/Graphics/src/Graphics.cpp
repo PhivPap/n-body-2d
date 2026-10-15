@@ -155,30 +155,38 @@ sf::RenderWindow& Graphics::get_window() {
     return window;
 }
 
-// The view follows the cursor once it went further from the press than a click can, so that
-// clicks, which select bodies, don't move the view or clear the trails
+// The view follows the cursor while the left button is held, and the trails restart when it moves
 void Graphics::pan_if_view_grabbed() {
     if (!opt_view_grabbed_pos) {
         return;
     }
     const sf::Vector2i new_cursor_pos = sf::Mouse::getPosition(window);
-    view_grab_max_drag_px = std::max(view_grab_max_drag_px,
-            sf::Vector2f(new_cursor_pos - view_grab_start).length());
-    if (new_cursor_pos != *opt_view_grabbed_pos
-            && view_grab_max_drag_px > Constants::Graphics::CLICK_MAX_DRAG_PX) {
+    if (new_cursor_pos != *opt_view_grabbed_pos) {
         vp.pan(sf::Vector2f(*opt_view_grabbed_pos - new_cursor_pos));
         opt_view_grabbed_pos = new_cursor_pos;
         reset_trails();
     }
 }
 
-// Bodies under the cursor are looked for while it is in the window and no box selection or pan
-// is going on. XWayland may not update the cursor position once it left the window.
+// How far the cursor went from a right press, which stays a click until it passes
+// CLICK_MAX_DRAG_PX
+void Graphics::update_select_drag() {
+    if (opt_select_grabbed_pos) {
+        select_grab_max_drag_px = std::max(select_grab_max_drag_px,
+                sf::Vector2f(sf::Mouse::getPosition(window) - *opt_select_grabbed_pos).length());
+    }
+}
+
+bool Graphics::is_box_selecting() const {
+    return opt_select_grabbed_pos
+           && select_grab_max_drag_px > Constants::Graphics::CLICK_MAX_DRAG_PX;
+}
+
+// Bodies under the cursor are looked for while it is in the window and no pan or box selection is
+// going on. XWayland may not update the cursor position once it left the window.
 void Graphics::update_hover_cursor() {
     hover_cursor = std::nullopt;
-    if (!cursor_in_window || opt_select_grabbed_pos
-            || (opt_view_grabbed_pos
-                    && view_grab_max_drag_px > Constants::Graphics::CLICK_MAX_DRAG_PX)) {
+    if (!cursor_in_window || opt_view_grabbed_pos || is_box_selecting()) {
         return;
     }
     const sf::Vector2i cursor = sf::Mouse::getPosition(window);
@@ -475,7 +483,7 @@ void Graphics::select_body(uint32_t index) {
 }
 
 void Graphics::draw_selection_overlay() {
-    if (opt_select_grabbed_pos) {
+    if (is_box_selecting()) {
         const sf::Vector2i new_cursor_pos = sf::Mouse::getPosition(window);
         sf::RectangleShape selector(sf::Vector2f(new_cursor_pos - *opt_select_grabbed_pos));
         selector.setPosition(sf::Vector2f(*opt_select_grabbed_pos));
@@ -633,12 +641,9 @@ void Graphics::grab_view() {
         Log::warning("Failed to create cross cursor");
     }
     opt_view_grabbed_pos = sf::Mouse::getPosition(window);
-    view_grab_start = *opt_view_grabbed_pos;
-    view_grab_max_drag_px = 0.f;
-    click_candidate = hovered_body;
 }
 
-void Graphics::release_view(bool allow_click) {
+void Graphics::release_view() {
     static const std::optional def_cursor = sf::Cursor::createFromSystem(sf::Cursor::Type::Arrow);
     if (def_cursor) {
         window.setMouseCursor(*def_cursor);
@@ -646,24 +651,17 @@ void Graphics::release_view(bool allow_click) {
     else {
         Log::warning("Failed to create default cursor");
     }
-    if (allow_click && opt_view_grabbed_pos && click_candidate) {
-        // The cursor may have moved since the last frame
-        const float drag = std::max(view_grab_max_drag_px,
-                sf::Vector2f(sf::Mouse::getPosition(window) - view_grab_start).length());
-        if (drag <= Constants::Graphics::CLICK_MAX_DRAG_PX) {
-            select_body(*click_candidate);
-        }
-    }
     opt_view_grabbed_pos = std::nullopt;
-    click_candidate = std::nullopt;
 }
 
-// A right press during a left press cancels the pan, which isn't a click
+// A right press during a left press cancels the pan
 void Graphics::grab_select() {
     if (opt_view_grabbed_pos) {
-        release_view(false);
+        release_view();
     }
     opt_select_grabbed_pos = sf::Mouse::getPosition(window);
+    select_grab_max_drag_px = 0.f;
+    click_candidate = hovered_body;
 }
 
 void Graphics::release_select(bool skip_select) {
@@ -673,8 +671,19 @@ void Graphics::release_select(bool skip_select) {
     if (!opt_select_grabbed_pos) {
         return;
     }
-    const sf::Rect<float> region{sf::Vector2f(*opt_select_grabbed_pos),
-            sf::Vector2f(sf::Mouse::getPosition(window)) - sf::Vector2f(*opt_select_grabbed_pos)};
+    update_select_drag();  // the cursor may have moved since the last frame
+    const sf::Vector2i press = *opt_select_grabbed_pos;
+    const bool click = !is_box_selecting();
+    opt_select_grabbed_pos = std::nullopt;
+    if (click && click_candidate) {
+        select_body(*click_candidate);
+        return;
+    }
+    // A click on empty space selects nothing, like an empty box
+    sf::Rect<float> region{};
+    if (!click) {
+        region = {sf::Vector2f(press), sf::Vector2f(sf::Mouse::getPosition(window) - press)};
+    }
     const bool had_selection = selector.has_selection();
     selector.select(region);
     if (const auto num_selected = selector.num_selected(); num_selected > 0) {
@@ -683,7 +692,6 @@ void Graphics::release_select(bool skip_select) {
     else if (had_selection) {
         action_log.log("Cleared selection");
     }
-    opt_select_grabbed_pos = std::nullopt;
     cached_selection_stats = selector.has_selection() ? std::optional(selector.compute_stats())
                                                       : std::nullopt;
     stats_panel.write_handle()->opt_selection = panel_selection(cached_selection_stats);
@@ -850,6 +858,7 @@ void Graphics::update_simulation_stats(const SimulationStats& sim_stats) {
 void Graphics::draw_frame() {
     window.clear(Constants::Graphics::BG_COLOR);
     pan_if_view_grabbed();
+    update_select_drag();
     update_hover_cursor();
     std::memcpy(body_positions_cache.data(), bodies.pos_data(),
             bodies.n * sizeof(sf::Vector2<double>));
