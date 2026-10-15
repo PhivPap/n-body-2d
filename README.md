@@ -118,7 +118,10 @@ particles of Saturn's rings. The 1024 heaviest named bodies are kept.
   Earth for the Moon, although the Sun pulls the Moon harder), or what that one orbits if the body
   is outside its sphere of influence, so Kepler-16b doesn't fall to its lighter sun as it passes
   it. It is merged with the named bodies that orbit that primary inside the body's distance: Nix
-  orbits Pluto and Charon together, and Kepler-16b both of its suns.
+  orbits Pluto and Charon together, and Kepler-16b both of its suns. The body's satellites, the
+  lighter named bodies inside its sphere of influence, orbit along with it: Pluto's elements are
+  those of the barycentre of Pluto, Charon, Nix and Hydra, as the generator builds the system,
+  since Charon makes Pluto itself wobble.
 - The predicted orbit is the conic of those elements, with its periapsis and apoapsis. Bodies
   selected together have none, since they may be far apart.
 - While the simulation runs, velocities lag positions by half a step, so the elements carry a tiny

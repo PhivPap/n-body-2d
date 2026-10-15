@@ -213,19 +213,25 @@ struct System {
         return primaries[rank] < 0 ? "" : ids[named[primaries[rank]]];
     }
 
+    // The ids of a body's satellites, most massive first
+    std::vector<std::string> satellites_of(const std::string& id) const {
+        const auto rank = std::find(named.begin(), named.end(), index(id)) - named.begin();
+        std::vector<std::string> satellites;
+        for (const uint32_t i : Orbit::find_satellites(static_cast<uint32_t>(rank), named,
+                     primaries, mass.data(), pos.data())) {
+            satellites.push_back(ids[i]);
+        }
+        return satellites;
+    }
+
     // The attractor of the bodies in `selection`, treated as one body
     std::optional<Orbit::Attractor> attractor(const std::vector<std::string>& selection) const {
         std::vector<uint32_t> members;
-        Orbit::Target target{0.0, {}, {}};
         for (const auto& id : selection) {
-            const uint32_t i = index(id);
-            members.push_back(i);
-            target.mass += mass[i];
-            target.pos += mass[i] * pos[i];
-            target.vel += mass[i] * vel[i];
+            members.push_back(index(id));
         }
-        target.pos /= target.mass;
-        target.vel /= target.mass;
+        const Orbit::Target target =
+                Orbit::barycentre(members, mass.data(), pos.data(), vel.data());
         return Orbit::find_attractor(target, named, primaries, mass.data(), pos.data(), vel.data(),
                 [&members](uint32_t i) {
                     return std::find(members.begin(), members.end(), i) != members.end();
@@ -270,6 +276,27 @@ void test_attractors() {
     CHECK(!system.attractor({"Sun"}));
 }
 
+void test_satellites() {
+    const System system;
+    using Ids = std::vector<std::string>;
+    CHECK(system.satellites_of("Earth") == Ids({"Moon"}));
+    CHECK(system.satellites_of("Pluto") == Ids({"Charon", "Nix"}));
+    CHECK(system.satellites_of("Mars") == Ids({"Phobos", "probe"}));
+    CHECK(system.satellites_of("Sun").size() == 8);
+    CHECK(system.satellites_of("Moon").empty() && system.satellites_of("probe").empty());
+
+    // Barycentres, by mass or, for massless bodies, plain means
+    const Orbit::Target earth_moon = Orbit::barycentre(std::vector<uint32_t>{1, 2},
+            system.mass.data(), system.pos.data(), system.vel.data());
+    CHECK_REL(earth_moon.mass, 6e24 + 7.3e22, 1e-15);
+    CHECK_REL(earth_moon.pos.x, 1.5e11 + 3.84e8 * 7.3e22 / (6e24 + 7.3e22), 1e-15);
+    const std::vector<double> massless(2, 0.0);
+    const std::vector<Vec> points = {{1.0, 2.0}, {3.0, 6.0}};
+    const Orbit::Target mean = Orbit::barycentre(std::vector<uint32_t>{0, 1}, massless.data(),
+            points.data(), points.data());
+    CHECK(mean.mass == 0.0 && mean.pos == Vec(2.0, 4.0) && mean.vel == Vec(2.0, 4.0));
+}
+
 // Equal-mass stars are each other's primary
 void test_binary_primaries() {
     // A planet around a binary orbits the nearer star, merged with the other one
@@ -282,6 +309,15 @@ void test_binary_primaries() {
             mass.data(), pos.data(), vel.data(), [](uint32_t i) { return i == 2; });
     CHECK(attractor && attractor->primary == 1 && attractor->inner_count == 1);
     CHECK(attractor && (attractor->pos - Vec(5e10, 0.0)).length() <= 1e-15 * 5e10);
+    // It orbits the pair, so it isn't a satellite of either star
+    CHECK(Orbit::find_satellites(0, named, primaries, mass.data(), pos.data()).empty());
+    CHECK(Orbit::find_satellites(1, named, primaries, mass.data(), pos.data()).empty());
+    // Unlike a planet close to one star of a wide pair
+    const std::vector<Vec> wide = {{0.0, 0.0}, {1e13, 0.0}, {1e13 + 1.5e11, 0.0}};
+    const auto wide_primaries = Orbit::find_primaries(named, mass.data(), wide.data());
+    CHECK(Orbit::find_satellites(1, named, wide_primaries, mass.data(), wide.data())
+            == std::vector<uint32_t>({2}));
+    CHECK(Orbit::find_satellites(0, named, wide_primaries, mass.data(), wide.data()).empty());
 
     // A planet around a star far from a binary: the binary's chains go round in circles
     const std::vector<double> mass2 = {1e31, 1e30, 1e30, 0.0};
@@ -464,23 +500,27 @@ void test_golden(const char* csv_path) {
         CHECK(!"body in the CSV");
         return 0u;
     };
+    const auto satellites = [&](const std::string& id) {
+        const auto rank = std::find(named.begin(), named.end(), index(id)) - named.begin();
+        return Orbit::find_satellites(static_cast<uint32_t>(rank), named, primaries,
+                bodies.mass_data(), bodies.pos_data());
+    };
+    const auto satellite_ids = [&](const std::string& id) {
+        std::vector<std::string> ids;
+        for (const uint32_t i : satellites(id)) {
+            ids.push_back(bodies.id(i));
+        }
+        std::sort(ids.begin(), ids.end());
+        return ids;
+    };
 
     struct Result {
         std::optional<Orbit::Attractor> attractor;
         std::optional<Orbit::Elements> elements;
     };
-    const auto inspect = [&](const std::vector<std::string>& selection) {
-        std::vector<uint32_t> members;
-        Orbit::Target target{0.0, {}, {}};
-        for (const auto& id : selection) {
-            const uint32_t i = index(id);
-            members.push_back(i);
-            target.mass += bodies.mass(i);
-            target.pos += bodies.mass(i) * bodies.pos(i);
-            target.vel += bodies.mass(i) * bodies.vel(i);
-        }
-        target.pos /= target.mass;
-        target.vel /= target.mass;
+    const auto inspect_members = [&](const std::vector<uint32_t>& members) {
+        const Orbit::Target target = Orbit::barycentre(members, bodies.mass_data(),
+                bodies.pos_data(), bodies.vel_data());
         Result result;
         result.attractor = Orbit::find_attractor(target, named, primaries, bodies.mass_data(),
                 bodies.pos_data(), bodies.vel_data(), [&members](uint32_t i) {
@@ -491,6 +531,19 @@ void test_golden(const char* csv_path) {
                     target.vel - result.attractor->vel, G * (target.mass + result.attractor->mass));
         }
         return result;
+    };
+    const auto inspect = [&](const std::vector<std::string>& selection) {
+        std::vector<uint32_t> members;
+        for (const auto& id : selection) {
+            members.push_back(index(id));
+        }
+        return inspect_members(members);
+    };
+    // A single body, as the inspector shows it: with its satellites
+    const auto inspect_body = [&](const std::string& id) {
+        std::vector<uint32_t> members = satellites(id);
+        members.insert(members.begin(), index(id));
+        return inspect_members(members);
     };
 
     const std::vector<Golden> golden = {
@@ -527,16 +580,15 @@ void test_golden(const char* csv_path) {
             {{"Earth"}, "Sun", 2, 149'737'337'272.1, 0.0175941387, 1e-8},
             {{"Sun"}, "", 0, 0.0, 0.0, 0.0}};
 
-    for (const Golden& row : golden) {
-        const Result result = inspect(row.selection);
+    const auto check_row = [&bodies](const Golden& row, const Result& result) {
         if (row.primary.empty()) {
             CHECK(!result.attractor);
-            continue;
+            return;
         }
         CHECK(result.attractor && result.elements);
         if (!result.attractor || !result.elements) {
             fmt::println("  {}: no orbit", row.selection.front());
-            continue;
+            return;
         }
         const bool ok = bodies.id(result.attractor->primary) == row.primary
                         && result.attractor->inner_count == row.inner_count
@@ -550,7 +602,23 @@ void test_golden(const char* csv_path) {
                     bodies.id(result.attractor->primary), result.attractor->inner_count,
                     result.elements->semi_major_axis, result.elements->eccentricity);
         }
+    };
+    size_t body_rows = 0;
+    for (const Golden& row : golden) {
+        check_row(row, inspect(row.selection));
+        // Rows of a body with all its satellites: the body alone, as the inspector shows it
+        std::vector<std::string> others(row.selection.begin() + 1, row.selection.end());
+        std::sort(others.begin(), others.end());
+        if (satellite_ids(row.selection.front()) == others) {
+            check_row(row, inspect_body(row.selection.front()));
+            body_rows++;
+        }
     }
+    // All but the Earth without the Moon, and the Sun with everything
+    CHECK(body_rows == golden.size() - 2);
+    CHECK(satellite_ids("Pluto") == std::vector<std::string>({"Charon", "Hydra", "Nix"}));
+    CHECK(satellite_ids("Saturn").size() == 8 && satellite_ids("Sun").size() == 43);
+    CHECK(satellite_ids("Moon").empty() && satellite_ids("Halley").empty());
 
     // Times to the next periapsis and directions
     const auto time_to_periapsis = [&](const std::vector<std::string>& selection) {
@@ -590,6 +658,7 @@ int main(int argc, const char* argv[]) {
     test_degenerate();
     test_primaries();
     test_attractors();
+    test_satellites();
     test_binary_primaries();
     test_sphere_of_influence();
     test_trace_visible();

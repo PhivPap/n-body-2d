@@ -73,11 +73,24 @@ uint32_t climb_primaries(uint32_t primary_rank, Vec target_pos, std::span<const 
 std::vector<int32_t> find_primaries(std::span<const uint32_t> named, const double* mass,
         const Vec* pos);
 
-// What orbits: a body, or a selection treated as one body
+// The named bodies that orbit the named body of rank `rank`, directly or through each other,
+// inside its sphere of influence: the lighter bodies whose chain of primaries reaches it, like the
+// Moon for the Earth or Charon, Nix and Hydra for Pluto, but not a planet around a binary of equal
+// stars. Returned as body indices, most massive first.
+std::vector<uint32_t> find_satellites(uint32_t rank, std::span<const uint32_t> named,
+        std::span<const int32_t> primaries, const double* mass, const Vec* pos);
+
+// What orbits: a body, or bodies treated as one, like a planet with its satellites
 struct Target {
     double mass;   // total mass [kg], 0 for massless
-    Vec pos, vel;  // a selection's centre of mass and mass-weighted velocity
+    Vec pos, vel;  // their centre of mass and mass-weighted velocity
 };
+
+// Bodies `members` (body indices, at least one) as one target: their total mass, barycentre and
+// mass-weighted velocity (plain means if they are massless), summed relative to the first member,
+// which keeps their precision far from the origin
+Target barycentre(std::span<const uint32_t> members, const double* mass, const Vec* pos,
+        const Vec* vel);
 
 // What a target orbits: its primary, climbed to the body whose sphere of influence it is in, merged
 // with the named bodies that orbit that primary inside the target's distance (a Jacobi

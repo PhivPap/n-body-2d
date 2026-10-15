@@ -287,6 +287,66 @@ std::vector<int32_t> find_primaries(std::span<const uint32_t> named, const doubl
     return primaries;
 }
 
+std::vector<uint32_t> find_satellites(uint32_t rank, std::span<const uint32_t> named,
+        std::span<const int32_t> primaries, const double* mass, const Vec* pos) {
+    assert(primaries.size() == named.size());
+    const uint32_t j = named[rank];
+    // A satellite's chain reaches the body from inside its sphere, whose edge has the m / d^3 of
+    // the body's primary at the body. Primaries are at least as heavy as their bodies, so a chain
+    // that reaches the body's mass elsewhere never reaches it.
+    double edge_score = 0.0;
+    if (const int32_t outer = primaries[rank]; outer >= 0) {
+        const double d = (pos[named[outer]] - pos[j]).length();
+        edge_score = mass[named[outer]] / (d * d * d);
+    }
+    std::vector<uint32_t> satellites;
+    for (uint32_t other = 0; other < named.size(); other++) {
+        int32_t body = static_cast<int32_t>(other);
+        for (uint32_t hop = 0; hop < MAX_PRIMARY_HOPS && mass[named[body]] < mass[j]; hop++) {
+            const int32_t next = primaries[body];
+            if (next == static_cast<int32_t>(rank)) {
+                const double d = (pos[named[body]] - pos[j]).length();
+                if (mass[j] / (d * d * d) >= edge_score) {
+                    satellites.push_back(named[other]);
+                }
+                break;
+            }
+            if (next < 0) {
+                break;
+            }
+            body = next;
+        }
+    }
+    return satellites;
+}
+
+Target barycentre(std::span<const uint32_t> members, const double* mass, const Vec* pos,
+        const Vec* vel) {
+    assert(!members.empty());
+    const uint32_t first = members.front();
+    Target target{0.0, {}, {}};
+    for (const uint32_t i : members) {
+        target.mass += mass[i];
+        target.pos += mass[i] * (pos[i] - pos[first]);
+        target.vel += mass[i] * (vel[i] - vel[first]);
+    }
+    if (target.mass > 0.0) {
+        target.pos /= target.mass;
+        target.vel /= target.mass;
+    }
+    else {
+        for (const uint32_t i : members) {
+            target.pos += pos[i] - pos[first];
+            target.vel += vel[i] - vel[first];
+        }
+        target.pos /= static_cast<double>(members.size());
+        target.vel /= static_cast<double>(members.size());
+    }
+    target.pos += pos[first];
+    target.vel += vel[first];
+    return target;
+}
+
 bool retrograde(double angular_momentum, const Attractor& attractor,
         std::span<const uint32_t> named, std::span<const int32_t> primaries, const Vec* pos,
         const Vec* vel) {
