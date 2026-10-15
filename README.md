@@ -106,7 +106,9 @@ trailing number (and a `-` or `_` before it), and bodies in groups of at most 64
 particles of Saturn's rings. The 1024 heaviest named bodies are kept.
 
 - Named bodies are drawn above the trails as markers 2 to 12 px wider than the other bodies, by
-  mass, and labelled with their ids where there is room, heaviest first.
+  mass, and labelled with their ids, right of their markers. Heaviest first: a label that would
+  overlap one shown is hidden, and the one shown gets a `+`, like `Earth +` for the Earth and
+  the Moon from afar.
 - Hovering over any body shows its id, mass and what it orbits (of several bodies under the
   cursor, the heaviest); right-clicking it selects it, and right-clicking empty space clears the
   selection.

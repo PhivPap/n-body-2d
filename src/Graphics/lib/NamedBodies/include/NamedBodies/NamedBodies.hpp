@@ -32,17 +32,27 @@ std::optional<uint32_t> pick_marker(sf::Vector2f cursor, std::span<const uint32_
         const double* mass, const sf::VertexArray& body_vertices, float base_px,
         bool scale_by_mass);
 
-// A label to place: the marker's centre and radius in window pixels, and the text's size
+// A label to place: the marker's centre and radius in window pixels, and the text's size with
+// room for a " +" after it
 struct LabelBox {
     sf::Vector2f anchor;
     float clearance_px;
     sf::Vector2f size;
 };
 
-// Top-left corners of the labels that fit, in the boxes' (priority) order, nullopt for skipped
-// ones. A label goes `gap_px` right of, left of, above or below its marker, at the first of these
-// spots that lies inside the window and keeps clear of the labels placed before it.
-std::vector<std::optional<sf::Vector2f>> place_labels(std::span<const LabelBox> boxes,
+// Where a label goes: its top-left corner (nullopt: hidden), and whether it hides other labels,
+// which a " +" after it shows
+struct LabelPlacement {
+    std::optional<sf::Vector2f> position;
+    bool more = false;
+};
+
+// The labels' placements, in the boxes' (priority) order. A label always goes `gap_px` right of
+// its marker, centred on it vertically, so labels never jump around. One that would overlap a
+// label placed before it is hidden, and the first label it overlaps gets a " +", which the boxes
+// leave room for. Labels outside the window are skipped, others may be cut by its edges, and at
+// most `max_labels` are placed.
+std::vector<LabelPlacement> place_labels(std::span<const LabelBox> boxes,
         sf::Vector2f window_size, uint32_t max_labels, float gap_px);
 
 // The named bodies of a universe: their markers, drawn above the trails and sized by mass, and
@@ -72,6 +82,7 @@ private:
         uint32_t index;
         sf::Text* text;
         sf::FloatRect bounds;
+        float end_x;
     };
 
     const Bodies& bodies;
@@ -80,8 +91,12 @@ private:
     double max_mass = 0.0;
     std::vector<sf::Text> labels;                    // per rank
     std::vector<sf::FloatRect> label_bounds;         // local bounds, computed once
+    std::vector<float> label_ends;                   // local x where the text ends, computed once
     sf::Text selected_label;                         // for a selected body that isn't named
     std::optional<uint32_t> selected_label_index;    // whose id it shows
+    float selected_label_end = 0.f;
+    sf::Text more_label;                             // " +", after a label that hides others
+    float more_width = 0.f;                          // from where it starts to the end of the +
     sf::VertexArray markers{sf::PrimitiveType::Points};
     std::vector<LabelCandidate> label_candidates;    // reused every frame
     std::vector<LabelBox> label_boxes;
