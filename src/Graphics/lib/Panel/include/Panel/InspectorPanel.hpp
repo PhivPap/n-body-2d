@@ -3,8 +3,9 @@
 #include "Panel.hpp"
 
 
-// The selection, treated as one body, and its orbit. Values are finite or optional, never NaN,
-// which would never compare equal and re-render the panel every frame.
+// The selection: a single body and its orbit, or several bodies as a whole. Values are never NaN,
+// which would never compare equal and re-render the panel every frame; others that aren't finite
+// show as "-".
 struct InspectorDisplayedData {
     struct Orbit {
         std::string attractor;  // the primary's id
@@ -24,10 +25,12 @@ struct InspectorDisplayedData {
         bool operator==(const Orbit&) const = default;
     };
 
-    std::optional<std::string> body;  // nullopt: nothing selected
-    double mass_kg = 0.0;
-    double speed_m_s = 0.0;           // absolute, shown when there's no attractor
-    std::optional<Orbit> orbit;       // nullopt: no attractor
+    uint32_t count = 0;                  // selected bodies, 0 for none
+    std::string body;                    // the only body's id, or the heaviest's
+    double mass_kg = 0.0;                // in all
+    sf::Vector2<double> position_m{};    // the centre of mass
+    sf::Vector2<double> velocity_m_s{};  // mass-weighted
+    std::optional<Orbit> orbit;          // a single body's, nullopt without an attractor
 
     bool operator==(const InspectorDisplayedData&) const = default;
 };
