@@ -143,13 +143,9 @@ sf::RenderWindow& Graphics::get_window() {
     return window;
 }
 
-// The view follows the cursor while the left button is held, and the trails restart when it moves
 void Graphics::pan_if_view_grabbed() {
-    if (!opt_view_grabbed_pos) {
-        return;
-    }
-    const sf::Vector2i new_cursor_pos = sf::Mouse::getPosition(window);
-    if (new_cursor_pos != *opt_view_grabbed_pos) {
+    if (opt_view_grabbed_pos) {
+        const sf::Vector2i new_cursor_pos = sf::Mouse::getPosition(window);
         vp.pan(sf::Vector2f(*opt_view_grabbed_pos - new_cursor_pos));
         opt_view_grabbed_pos = new_cursor_pos;
         reset_trails();
