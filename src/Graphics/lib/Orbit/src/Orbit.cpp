@@ -245,6 +245,26 @@ std::optional<Elements> elements(Vec rel_pos, Vec rel_vel, double mu) {
     return el;
 }
 
+uint32_t climb_primaries(uint32_t primary_rank, Vec target_pos, std::span<const uint32_t> named,
+        std::span<const int32_t> primaries, const double* mass, const Vec* pos) {
+    uint32_t rank = primary_rank;
+    for (uint32_t hop = 0; hop < MAX_PRIMARY_HOPS && primaries[rank] >= 0; hop++) {
+        const uint32_t p = named[rank], q = named[primaries[rank]];
+        if (!(mass[q] > mass[p])) {
+            break;
+        }
+        const double target_distance = (pos[p] - target_pos).length();
+        const double primary_distance = (pos[q] - pos[p]).length();
+        // Climbs only if Q's m / d^3 at P is larger, which it isn't for NaNs
+        if (!(mass[q] / (primary_distance * primary_distance * primary_distance)
+                    > mass[p] / (target_distance * target_distance * target_distance))) {
+            break;
+        }
+        rank = static_cast<uint32_t>(primaries[rank]);
+    }
+    return rank;
+}
+
 std::vector<int32_t> find_primaries(std::span<const uint32_t> named, const double* mass,
         const Vec* pos) {
     std::vector<int32_t> primaries(named.size(), -1);
@@ -254,6 +274,14 @@ std::vector<int32_t> find_primaries(std::span<const uint32_t> named, const doubl
                 find_primary(mass[k], pos[k], named, mass, pos, [k](uint32_t i) { return i == k; });
         if (primary) {
             primaries[rank] = static_cast<int32_t>(*primary);
+        }
+    }
+    // Heaviest first, so that the heavier bodies a body's chain leads to have climbed theirs
+    for (uint32_t rank = 0; rank < named.size(); rank++) {
+        const uint32_t k = named[rank];
+        if (primaries[rank] >= 0) {
+            primaries[rank] = static_cast<int32_t>(climb_primaries(
+                    static_cast<uint32_t>(primaries[rank]), pos[k], named, primaries, mass, pos));
         }
     }
     return primaries;

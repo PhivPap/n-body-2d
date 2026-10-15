@@ -59,7 +59,17 @@ template <typename Excluded>
 std::optional<uint32_t> find_primary(double target_mass, Vec target_pos,
         std::span<const uint32_t> named, const double* mass, const Vec* pos, Excluded&& excluded);
 
-// Each named body's primary, as its rank in `named` (-1: none)
+// From a target's primary of rank `primary_rank` (find_primary()) up its chain of `primaries`, to
+// the first body whose sphere of influence the target is in. A body P keeps the target if
+// m_P / d(target, P)^3 >= m_Q / d(P, Q)^3, Q being P's own primary, that is if the target is within
+// 3^(1/3) Hill radii of P: a moon stays with its planet, but a planet around a binary star doesn't
+// fall to the lighter star as it passes it. The chain is only climbed to heavier bodies, which
+// can't belong to the target: bodies of equal masses can be each other's primary.
+uint32_t climb_primaries(uint32_t primary_rank, Vec target_pos, std::span<const uint32_t> named,
+        std::span<const int32_t> primaries, const double* mass, const Vec* pos);
+
+// Each named body's primary, as its rank in `named` (-1: none), climbed to the body whose sphere
+// of influence it is in
 std::vector<int32_t> find_primaries(std::span<const uint32_t> named, const double* mass,
         const Vec* pos);
 
@@ -69,8 +79,9 @@ struct Target {
     Vec pos, vel;  // a selection's centre of mass and mass-weighted velocity
 };
 
-// What a target orbits: its primary, merged with the named bodies that orbit the primary inside
-// the target's distance (a Jacobi coordinate's attractor)
+// What a target orbits: its primary, climbed to the body whose sphere of influence it is in, merged
+// with the named bodies that orbit that primary inside the target's distance (a Jacobi
+// coordinate's attractor)
 struct Attractor {
     uint32_t primary;       // body index
     uint32_t primary_rank;  // its position in `named`
@@ -147,26 +158,28 @@ std::optional<Attractor> find_attractor(const Target& target, std::span<const ui
         std::span<const int32_t> primaries, const double* mass, const Vec* pos, const Vec* vel,
         Excluded&& excluded) {
     assert(primaries.size() == named.size());
-    const std::optional<uint32_t> primary_rank =
+    const std::optional<uint32_t> nearest_primary_rank =
             find_primary(target.mass, target.pos, named, mass, pos, excluded);
-    if (!primary_rank) {
+    if (!nearest_primary_rank) {
         return std::nullopt;
     }
-    const uint32_t j = named[*primary_rank];
+    const uint32_t primary_rank =
+            climb_primaries(*nearest_primary_rank, target.pos, named, primaries, mass, pos);
+    const uint32_t j = named[primary_rank];
     const double target_distance = (pos[j] - target.pos).length();
     // The barycentre is summed relative to the primary, which keeps its precision far from the
     // origin
-    Attractor attractor{.primary = j, .primary_rank = *primary_rank, .inner_count = 0,
+    Attractor attractor{.primary = j, .primary_rank = primary_rank, .inner_count = 0,
             .mass = mass[j], .pos = {}, .vel = {}};
     for (uint32_t rank = 0; rank < named.size(); rank++) {
         const uint32_t k = named[rank];
-        if (rank == *primary_rank || excluded(k)) {
+        if (rank == primary_rank || excluded(k)) {
             continue;
         }
         int32_t body = static_cast<int32_t>(rank), child = -1;
         for (uint32_t hop = 0; hop < MAX_PRIMARY_HOPS && body >= 0 && !excluded(named[body]);
                 hop++) {
-            if (body == static_cast<int32_t>(*primary_rank)) {
+            if (body == static_cast<int32_t>(primary_rank)) {
                 if (child >= 0 && (pos[named[child]] - pos[j]).length() < target_distance) {
                     attractor.inner_count++;
                     attractor.mass += mass[k];
