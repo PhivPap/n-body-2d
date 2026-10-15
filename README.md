@@ -93,6 +93,7 @@ around the planet, press F to follow it and zoom in with the mouse wheel.
 | F                   | Follow the selection                                       |
 | C                   | Centre the view on the selection                           |
 | O                   | Show or hide the selection's predicted orbit               |
+| A                   | Show or hide the predicted orbits of all named bodies      |
 | L                   | Show or hide the names of named bodies                     |
 | M                   | Draw named bodies by mass, or all the same size            |
 | G                   | Show or hide the grid                                      |
@@ -133,7 +134,8 @@ The 1024 heaviest named bodies are kept.
   those of the barycentre of Pluto, Charon, Nix and Hydra, as the generator builds the system,
   since Charon makes Pluto itself wobble.
 - The predicted orbit is the conic of those elements, with its periapsis and apoapsis. Bodies
-  selected together have none, since they may be far apart.
+  selected together have none, since they may be far apart. `A` shows every named body's orbit in
+  light gray (off at startup).
 - While the simulation runs, velocities lag positions by half a step, so the elements carry a tiny
   error. They are exact while it's paused.
 

@@ -22,6 +22,7 @@ struct ConfigDisplayedData {
     bool selection_follow_center_of_mass;
     bool selection_show_orbit;
     bool show_labels;
+    bool show_named_orbits;
     bool scale_named_by_mass;
 
     bool operator==(const ConfigDisplayedData&) const = default;

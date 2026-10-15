@@ -119,6 +119,7 @@ void main() {
         write_handle->selection_follow_center_of_mass = follow_selected;
         write_handle->selection_show_orbit = selection_show_orbit;
         write_handle->show_labels = show_labels;
+        write_handle->show_named_orbits = show_named_orbits;
         write_handle->scale_named_by_mass = scale_named_by_mass;
     }
 
@@ -341,8 +342,47 @@ void Graphics::update_hover() {
     }
 }
 
-// The selection's osculating orbit around its attractor's barycentre, dashed, with its apsides.
-// It is traced in double precision and clipped to the window, so it stays exact at any zoom.
+// Appends an osculating orbit around its attractor's barycentre to `lines`, dashed, unless it is
+// too small to see. It is traced in double precision and clipped to the window, so it stays exact
+// at any zoom.
+bool Graphics::append_orbit(const OrbitView& orbit, const Orbit::ScreenTransform& transform,
+        sf::Color color, sf::VertexArray& lines) {
+    using namespace Constants::Graphics;
+    const Orbit::Elements& el = orbit.elements;
+    if ((el.closed() ? el.apoapsis : el.periapsis) * transform.pixels_per_meter
+            < ORBIT_MIN_SIZE_PX) {
+        return false;
+    }
+    orbit_segments.clear();
+    Orbit::trace(el, orbit.attractor.pos, transform, vp.get_window_res(), orbit_segments,
+            ORBIT_TOLERANCE_PX, ORBIT_CLIP_MARGIN_PX);
+    Orbit::append_dashes(orbit_segments, ORBIT_DASH_PX, ORBIT_GAP_PX, color, lines);
+    return true;
+}
+
+// Every named body's orbit, under the selection's, which is drawn in its own colour instead
+void Graphics::draw_named_orbits() {
+    if (!show_named_orbits) {
+        return;
+    }
+    std::optional<uint32_t> selected;
+    if (selection_show_orbit && selection_orbit) {
+        selected = cached_selection_stats->heaviest;
+    }
+    const Orbit::ScreenTransform transform{vp.get_rect().position, vp.get_pixels_per_meter()};
+    named_orbit_lines.clear();
+    for (const uint32_t index : named_bodies.indices()) {
+        if (index != selected) {
+            if (const auto orbit = body_orbit(index)) {
+                append_orbit(*orbit, transform, Constants::Graphics::NAMED_ORBIT_COLOR,
+                        named_orbit_lines);
+            }
+        }
+    }
+    window.draw(named_orbit_lines);
+}
+
+// The selection's orbit, with its apsides
 void Graphics::draw_selection_orbit() {
     using namespace Constants::Graphics;
     if (!selection_show_orbit || !selection_orbit) {
@@ -351,17 +391,12 @@ void Graphics::draw_selection_orbit() {
     const Orbit::Elements& el = selection_orbit->elements;
     const Orbit::Vec focus = selection_orbit->attractor.pos;
     const Orbit::ScreenTransform transform{vp.get_rect().position, vp.get_pixels_per_meter()};
-    if ((el.closed() ? el.apoapsis : el.periapsis) * transform.pixels_per_meter
-            < ORBIT_MIN_SIZE_PX) {
+    orbit_lines.clear();
+    if (!append_orbit(*selection_orbit, transform, ORBIT_COLOR, orbit_lines)) {
         return;
     }
-    const sf::Vector2f window_size = vp.get_window_res();
-    orbit_segments.clear();
-    Orbit::trace(el, focus, transform, window_size, orbit_segments, ORBIT_TOLERANCE_PX,
-            ORBIT_CLIP_MARGIN_PX);
-    orbit_lines.clear();
-    Orbit::append_dashes(orbit_segments, ORBIT_DASH_PX, ORBIT_GAP_PX, ORBIT_COLOR, orbit_lines);
     window.draw(orbit_lines);
+    const sf::Vector2f window_size = vp.get_window_res();
 
     const auto draw_apsis = [&](double nu, const char* name) {
         const Orbit::Vec pos = transform.to_screen(focus + el.position_at(nu));
@@ -767,6 +802,12 @@ void Graphics::toggle_selection_orbit() {
             selection_show_orbit ? "Enabled" : "Disabled"));
 }
 
+void Graphics::toggle_named_orbits() {
+    show_named_orbits = !show_named_orbits;
+    config_panel.write_handle()->show_named_orbits = show_named_orbits;
+    action_log.log(fmt::format("Named orbits: {}", show_named_orbits ? "Enabled" : "Disabled"));
+}
+
 void Graphics::toggle_labels() {
     show_labels = !show_labels;
     config_panel.write_handle()->show_labels = show_labels;
@@ -861,6 +902,7 @@ void Graphics::draw_frame() {
     draw_grid();
     draw_bodies();
     update_hover();
+    draw_named_orbits();
     draw_selection_orbit();
     draw_named_bodies();
     draw_ui();

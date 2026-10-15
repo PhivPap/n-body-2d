@@ -25,7 +25,8 @@ void ConfigPanel::set_panel_text() {
         " Sel. Follow:   {}\n"
         " Sel. Orbit:    {}\n"
         " Labels:        {}\n"
-        " Mass Sizes:    {}\n",
+        " Mass Sizes:    {}\n"
+        " Named Orbits:  {}\n",
         Log::Time::from(d.timestep_s),
         d.algorithm,
         displayed_data.show_theta ? fmt::format(" Theta:         {}\n", d.theta) : "",
@@ -45,7 +46,8 @@ void ConfigPanel::set_panel_text() {
         d.selection_follow_center_of_mass ? "ON" : "OFF",
         d.selection_show_orbit ? "ON" : "OFF",
         d.show_labels ? "ON" : "OFF",
-        d.scale_named_by_mass ? "ON" : "OFF"
+        d.scale_named_by_mass ? "ON" : "OFF",
+        d.show_named_orbits ? "ON" : "OFF"
     );
     text.setString(txt);
 }
