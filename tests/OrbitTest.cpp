@@ -486,8 +486,9 @@ struct Golden {
 // bodies, counted by distance, include Uranus, which the generator orders by semi-major axis.
 void test_golden(const char* csv_path) {
     const Bodies bodies = IO::parse_csv(csv_path, false);
-    const std::vector<uint32_t> named = find_named_bodies(bodies,
-            Constants::Graphics::NAMED_GROUP_MAX_SIZE, Constants::Graphics::NAMED_BODIES_MAX);
+    using namespace Constants::Graphics;
+    const std::vector<uint32_t> named = find_named_bodies(bodies, NAMED_GROUP_MAX_SIZE,
+            NAMED_SEQUENCE_MAX_SIZE, NAMED_BODIES_MAX);
     CHECK(named.size() == 44);
     const std::vector<int32_t> primaries =
             Orbit::find_primaries(named, bodies.mass_data(), bodies.pos_data());
