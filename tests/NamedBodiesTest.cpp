@@ -133,33 +133,57 @@ void test_pick_marker() {
 void test_place_labels() {
     const sf::Vector2f window(1600.f, 900.f), size(40.f, 10.f);
     const float gap = 4.f;
-    using Positions = std::vector<std::optional<sf::Vector2f>>;
-    // Around a marker of radius 5 at (100, 100): right, left, above, below, then no room
-    const std::vector<LabelBox> same(5, LabelBox{{100.f, 100.f}, 5.f, size});
-    const Positions placed = place_labels(same, window, 128, gap);
-    CHECK(placed[0] == sf::Vector2f(109.f, 95.f));
-    CHECK(placed[1] == sf::Vector2f(51.f, 95.f));
-    CHECK(placed[2] == sf::Vector2f(80.f, 81.f));
-    CHECK(placed[3] == sf::Vector2f(80.f, 109.f));
-    CHECK(!placed[4]);
+    using Placements = std::vector<LabelPlacement>;
+    const auto shown = [](const Placements& placements) {
+        return std::count_if(placements.begin(), placements.end(),
+                [](const LabelPlacement& p) { return p.position.has_value(); });
+    };
+    // Right of a marker of radius 5 at (100, 100), centred on it vertically: (109..149, 95..105)
+    const Placements one = place_labels(std::vector<LabelBox>{{{100.f, 100.f}, 5.f, size}},
+            window, 128, gap);
+    CHECK(one.size() == 1 && one[0].position == sf::Vector2f(109.f, 95.f) && !one[0].more);
 
-    // Near the right edge it goes left; outside the window nowhere
-    const std::vector<LabelBox> edge = {{{1590.f, 100.f}, 5.f, size}, {{-50.f, -50.f}, 5.f, size}};
-    const Positions at_edge = place_labels(edge, window, 128, gap);
-    CHECK(at_edge[0] == sf::Vector2f(1541.f, 95.f));
-    CHECK(!at_edge[1]);
+    // A label that would overlap one placed before it is hidden, and that one gets a "+". A hidden
+    // label hides nothing: the third one doesn't overlap the first. Labels LABEL_SPACING_PX apart
+    // both fit.
+    const Placements close = place_labels(std::vector<LabelBox>{{{100.f, 100.f}, 5.f, size},
+                                                  {{120.f, 105.f}, 3.f, size},
+                                                  {{150.f, 105.f}, 3.f, size},
+                                                  {{100.f, 112.f}, 5.f, size},
+                                                  {{100.f, 111.5f}, 5.f, size}},
+            window, 128, gap);
+    CHECK(close[0].position == sf::Vector2f(109.f, 95.f) && close[0].more);
+    CHECK(!close[1].position && !close[1].more);
+    CHECK(close[2].position == sf::Vector2f(157.f, 100.f) && !close[2].more);
+    CHECK(close[3].position == sf::Vector2f(109.f, 107.f) && !close[3].more);
+    CHECK(!close[4].position);  // overlaps the first and the fourth: the first has the "+"
+
+    // Of the labels a hidden one overlaps, the first gets the "+"
+    const Placements between = place_labels(std::vector<LabelBox>{{{100.f, 100.f}, 5.f, size},
+                                                    {{100.f, 113.f}, 5.f, size},
+                                                    {{110.f, 106.f}, 3.f, size}},
+            window, 128, gap);
+    CHECK(between[0].more && !between[1].more && between[1].position && !between[2].position);
+
+    // Labels never move: they may run off the window, but are skipped outside it
+    const Placements edges = place_labels(std::vector<LabelBox>{{{1590.f, 100.f}, 5.f, size},
+                                                  {{1597.f, 300.f}, 5.f, size},
+                                                  {{100.f, -3.f}, 5.f, size},
+                                                  {{100.f, -6.f}, 5.f, size},
+                                                  {{-50.f, 500.f}, 5.f, size}},
+            window, 128, gap);
+    CHECK(edges[0].position == sf::Vector2f(1599.f, 95.f));
+    CHECK(!edges[1].position && edges[2].position == sf::Vector2f(109.f, -8.f));
+    CHECK(!edges[3].position && !edges[4].position);
 
     // Labels apart from each other all fit, up to the maximum
     std::vector<LabelBox> apart;
     for (int i = 0; i < 10; i++) {
         apart.push_back({{100.f, 50.f + 80.f * i}, 5.f, size});
     }
-    const Positions all = place_labels(apart, window, 128, gap);
-    CHECK(std::all_of(all.begin(), all.end(), [](const auto& p) { return p.has_value(); }));
-    const Positions limited = place_labels(apart, window, 3, gap);
-    CHECK(std::count_if(limited.begin(), limited.end(), [](const auto& p) { return p.has_value(); })
-            == 3);
-    CHECK(limited[0] && limited[1] && limited[2]);
+    CHECK(shown(place_labels(apart, window, 128, gap)) == 10);
+    const Placements limited = place_labels(apart, window, 3, gap);
+    CHECK(shown(limited) == 3 && limited[0].position && limited[1].position && limited[2].position);
     CHECK(place_labels({}, window, 128, gap).empty());
 }
 

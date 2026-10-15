@@ -1,7 +1,6 @@
 #include "NamedBodies/NamedBodies.hpp"
 
 #include <algorithm>
-#include <array>
 #include <cmath>
 
 #include "AssetManager/AssetManager.hpp"
@@ -28,6 +27,11 @@ sf::Text make_label(const std::string& id) {
     text.setOutlineThickness(1.f);
     text.setOutlineColor(LABEL_OUTLINE_COLOR);
     return text;
+}
+
+// Where a text's last character ends, in its local coordinates
+float text_end(const sf::Text& text) {
+    return text.findCharacterPos(text.getString().getSize()).x - text.getPosition().x;
 }
 
 // Whether a marker of `diameter` pixels at `pos` shows in the window
@@ -111,50 +115,53 @@ std::optional<uint32_t> pick_marker(sf::Vector2f cursor, std::span<const uint32_
     return picked;
 }
 
-std::vector<std::optional<sf::Vector2f>> place_labels(std::span<const LabelBox> boxes,
+std::vector<LabelPlacement> place_labels(std::span<const LabelBox> boxes,
         sf::Vector2f window_size, uint32_t max_labels, float gap_px) {
     using Constants::Graphics::LABEL_SPACING_PX;
-    std::vector<std::optional<sf::Vector2f>> positions(boxes.size());
-    std::vector<sf::FloatRect> placed;
+    const sf::FloatRect window({0.f, 0.f}, window_size);
+    const sf::Vector2f spacing(LABEL_SPACING_PX, LABEL_SPACING_PX);
+    std::vector<LabelPlacement> placements(boxes.size());
+    std::vector<size_t> placed;  // positions in `boxes`
     for (size_t i = 0; i < boxes.size() && placed.size() < max_labels; i++) {
         const LabelBox& box = boxes[i];
-        const float offset = box.clearance_px + gap_px;
-        // Right (centred vertically), left, above (centred horizontally), below
-        const std::array<sf::Vector2f, 4> spots = {
-                sf::Vector2f(box.anchor.x + offset, box.anchor.y - box.size.y / 2.f),
-                sf::Vector2f(box.anchor.x - offset - box.size.x, box.anchor.y - box.size.y / 2.f),
-                sf::Vector2f(box.anchor.x - box.size.x / 2.f, box.anchor.y - offset - box.size.y),
-                sf::Vector2f(box.anchor.x - box.size.x / 2.f, box.anchor.y + offset)};
-        for (const sf::Vector2f spot : spots) {
-            const bool inside = spot.x >= 0.f && spot.y >= 0.f
-                                && spot.x + box.size.x <= window_size.x
-                                && spot.y + box.size.y <= window_size.y;
-            const sf::FloatRect grown(spot - sf::Vector2f(LABEL_SPACING_PX, LABEL_SPACING_PX),
-                    box.size + sf::Vector2f(2.f * LABEL_SPACING_PX, 2.f * LABEL_SPACING_PX));
-            if (inside && std::none_of(placed.begin(), placed.end(),
-                                  [&grown](const sf::FloatRect& r) { return overlap(grown, r); })) {
-                positions[i] = spot;
-                placed.emplace_back(spot, box.size);
-                break;
-            }
+        const sf::Vector2f spot(box.anchor.x + box.clearance_px + gap_px,
+                box.anchor.y - box.size.y / 2.f);
+        if (!overlap({spot, box.size}, window)) {
+            continue;
+        }
+        const sf::FloatRect grown(spot - spacing, box.size + 2.f * spacing);
+        const auto hiding = std::find_if(placed.begin(), placed.end(), [&](size_t j) {
+            return overlap(grown, {*placements[j].position, boxes[j].size});
+        });
+        if (hiding == placed.end()) {
+            placements[i].position = spot;
+            placed.push_back(i);
+        }
+        else {
+            placements[*hiding].more = true;
         }
     }
-    return positions;
+    return placements;
 }
 
 
-NamedBodies::NamedBodies(const Bodies& bodies) : bodies(bodies), selected_label(make_label("")) {
+NamedBodies::NamedBodies(const Bodies& bodies)
+        : bodies(bodies), selected_label(make_label("")), more_label(make_label(" +")) {
     using namespace Constants::Graphics;
     const StopWatch sw;
     named = find_named_bodies(bodies, NAMED_GROUP_MAX_SIZE, NAMED_BODIES_MAX);
     rank_of.reserve(named.size());
     labels.reserve(named.size());
     label_bounds.reserve(named.size());
+    label_ends.reserve(named.size());
     for (uint32_t rank = 0; rank < named.size(); rank++) {
         rank_of.emplace(named[rank], rank);
         labels.push_back(make_label(bodies.id(named[rank])));
         label_bounds.push_back(labels.back().getLocalBounds());
+        label_ends.push_back(text_end(labels.back()));
     }
+    const sf::FloatRect more_bounds = more_label.getLocalBounds();
+    more_width = more_bounds.position.x + more_bounds.size.x;
     if (!named.empty()) {
         max_mass = bodies.mass(named.front());
     }
@@ -205,46 +212,57 @@ void NamedBodies::draw_labels(sf::RenderTarget& target, const sf::VertexArray& b
     label_candidates.clear();
     label_boxes.clear();
     const auto add_candidate = [&](uint32_t index, sf::Text& text, const sf::FloatRect& bounds,
-                                       float diameter) {
+                                       float end_x, float diameter) {
         const sf::Vector2f pos = body_vertices[index].position;
         if (marker_visible(pos, diameter, window_size)) {
-            label_candidates.push_back({index, &text, bounds});
-            label_boxes.push_back({pos, diameter / 2.f, bounds.size});
+            label_candidates.push_back({index, &text, bounds, end_x});
+            // Up to the end of a " +" after the text
+            label_boxes.push_back({pos, diameter / 2.f,
+                    {end_x + more_width - bounds.position.x, bounds.size.y}});
         }
     };
 
     if (selected_body) {
         if (const auto it = rank_of.find(*selected_body); it != rank_of.end()) {
-            add_candidate(*selected_body, labels[it->second], label_bounds[it->second],
+            const uint32_t rank = it->second;
+            add_candidate(*selected_body, labels[rank], label_bounds[rank], label_ends[rank],
                     marker_diameter(*selected_body, base_px, scale_by_mass));
         }
         else {
             if (selected_label_index != selected_body) {
                 selected_label.setString(label_string(bodies.id(*selected_body)));
+                selected_label_end = text_end(selected_label);
                 selected_label_index = selected_body;
             }
             add_candidate(*selected_body, selected_label, selected_label.getLocalBounds(),
-                    base_px);
+                    selected_label_end, base_px);
         }
     }
     for (uint32_t rank = 0; rank < named.size(); rank++) {
         if (named[rank] != selected_body) {
-            add_candidate(named[rank], labels[rank], label_bounds[rank],
+            add_candidate(named[rank], labels[rank], label_bounds[rank], label_ends[rank],
                     marker_diameter(named[rank], base_px, scale_by_mass));
         }
     }
 
-    const auto positions = place_labels(label_boxes, window_size, LABELS_MAX, LABEL_GAP_PX);
-    for (size_t i = 0; i < positions.size(); i++) {
-        if (!positions[i]) {
+    const auto placements = place_labels(label_boxes, window_size, LABELS_MAX, LABEL_GAP_PX);
+    for (size_t i = 0; i < placements.size(); i++) {
+        if (!placements[i].position) {
             continue;
         }
         const LabelCandidate& candidate = label_candidates[i];
         // Whole pixels keep the text crisp
-        candidate.text->setPosition({std::round(positions[i]->x - candidate.bounds.position.x),
-                std::round(positions[i]->y - candidate.bounds.position.y)});
-        candidate.text->setFillColor(
-                selection_show && selection_mask[candidate.index] ? SELECT_COLOR : LABEL_COLOR);
+        const sf::Vector2f pos(std::round(placements[i].position->x - candidate.bounds.position.x),
+                std::round(placements[i].position->y - candidate.bounds.position.y));
+        const sf::Color color =
+                selection_show && selection_mask[candidate.index] ? SELECT_COLOR : LABEL_COLOR;
+        candidate.text->setPosition(pos);
+        candidate.text->setFillColor(color);
         target.draw(*candidate.text);
+        if (placements[i].more) {
+            more_label.setPosition({pos.x + std::round(candidate.end_x), pos.y});
+            more_label.setFillColor(color);
+            target.draw(more_label);
+        }
     }
 }
