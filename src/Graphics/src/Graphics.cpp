@@ -56,18 +56,6 @@ void main() {
 }
 )glsl";
 
-// The selection as the stats panel shows it
-static std::optional<StatsDisplayedData::Selection> panel_selection(
-        const std::optional<Selector::SelectionStats>& selection) {
-    if (!selection) {
-        return std::nullopt;
-    }
-    return StatsDisplayedData::Selection{.num_selected = selection->n,
-            .total_mass = selection->total_mass,
-            .center_of_mass = selection->center_of_mass,
-            .weighted_velocity = selection->weighted_velocity};
-}
-
  Graphics::Graphics(const Config& cfg, const Bodies& bodies)
         : graphics_cfg(cfg.graphics), bodies(bodies), body_positions_cache(bodies.n),
           body_vertex_array(sf::PrimitiveType::Points, bodies.n),
@@ -203,14 +191,14 @@ void Graphics::update_primaries() {
             body_positions_cache.data());
 }
 
-// The attractor of a target, and its orbit around it
-template <typename Excluded>
-std::optional<Graphics::OrbitView> Graphics::find_orbit(const Orbit::Target& target,
-        Excluded&& excluded) const {
+// A body's attractor, and its orbit around it. Velocities lag the positions by half a step while
+// the simulation runs, which the elements reflect, slightly.
+std::optional<Graphics::OrbitView> Graphics::body_orbit(uint32_t index) const {
     const auto& named = named_bodies.indices();
     const Orbit::Vec* pos = body_positions_cache.data();
+    const Orbit::Target target{bodies.mass(index), pos[index], bodies.vel(index)};
     const auto attractor = Orbit::find_attractor(target, named, primaries, bodies.mass_data(), pos,
-            bodies.vel_data(), excluded);
+            bodies.vel_data(), [index](uint32_t i) { return i == index; });
     if (!attractor) {
         return std::nullopt;
     }
@@ -339,10 +327,7 @@ void Graphics::update_hover() {
         hovered_body = heaviest_body_in_hover_radius;
     }
     if (hovered_body) {
-        const uint32_t index = *hovered_body;
-        const Orbit::Target target{bodies.mass(index), body_positions_cache[index],
-                bodies.vel(index)};
-        hovered_orbit = find_orbit(target, [index](uint32_t i) { return i == index; });
+        hovered_orbit = body_orbit(*hovered_body);
     }
 }
 
@@ -400,7 +385,8 @@ void Graphics::draw_named_bodies() {
     }
 }
 
-// The stats panel shows the selection's stats at the panel refresh rate
+// The selection's stats, every frame for the view to follow them, which the inspector shows at
+// the panel refresh rate
 void Graphics::update_selection_tracking() {
     if (!selector.has_selection()) {
         cached_selection_stats = std::nullopt;
@@ -416,17 +402,12 @@ void Graphics::update_selection_tracking() {
     cached_selection_stats = new_selection_stats;
 }
 
-// The selection's orbit, treating it as one body: velocities lag the positions by half a step
-// while the simulation runs, which the elements reflect, slightly
+// Only a single body's orbit: bodies selected together may be far apart
 void Graphics::update_selection_orbit() {
     selection_orbit = std::nullopt;
-    if (!cached_selection_stats) {
-        return;
+    if (cached_selection_stats && cached_selection_stats->n == 1) {
+        selection_orbit = body_orbit(cached_selection_stats->heaviest);
     }
-    const Selector::SelectionStats& selection = *cached_selection_stats;
-    selection_orbit = find_orbit(
-            {selection.total_mass, selection.center_of_mass, selection.weighted_velocity},
-            [this](uint32_t i) { return selector.is_selected(i); });
 }
 
 void Graphics::update_inspector_panel() {
@@ -434,21 +415,25 @@ void Graphics::update_inspector_panel() {
     const auto not_nan = [](double x) {
         return std::isnan(x) ? std::numeric_limits<double>::infinity() : x;
     };
+    const auto not_nan_vector = [&not_nan](sf::Vector2<double> v) {
+        return sf::Vector2<double>(not_nan(v.x), not_nan(v.y));
+    };
     auto write_handle = inspector_panel.write_handle();
-    write_handle->body = std::nullopt;
+    write_handle->count = 0;
+    write_handle->body.clear();
     write_handle->mass_kg = 0.0;
-    write_handle->speed_m_s = 0.0;
+    write_handle->position_m = {};
+    write_handle->velocity_m_s = {};
     write_handle->orbit = std::nullopt;
     if (!cached_selection_stats) {
         return;
     }
     const Selector::SelectionStats& selection = *cached_selection_stats;
-    const std::string& heaviest = bodies.id(selection.heaviest);
-    write_handle->body = selection.n == 1
-                                 ? heaviest
-                                 : fmt::format("{} (+{} more)", heaviest, selection.n - 1);
+    write_handle->count = selection.n;
+    write_handle->body = bodies.id(selection.heaviest);
     write_handle->mass_kg = selection.total_mass;
-    write_handle->speed_m_s = not_nan(selection.weighted_velocity.length());
+    write_handle->position_m = not_nan_vector(selection.center_of_mass);
+    write_handle->velocity_m_s = not_nan_vector(selection.weighted_velocity);
     if (!selection_orbit) {
         return;
     }
@@ -477,7 +462,6 @@ void Graphics::select_body(uint32_t index) {
     selector.select_body(index);
     action_log.log(fmt::format("Selected {}", bodies.id(index)));
     cached_selection_stats = selector.compute_stats();
-    stats_panel.write_handle()->opt_selection = panel_selection(cached_selection_stats);
     update_selection_orbit();
     update_inspector_panel();
 }
@@ -694,7 +678,6 @@ void Graphics::release_select(bool skip_select) {
     }
     cached_selection_stats = selector.has_selection() ? std::optional(selector.compute_stats())
                                                       : std::nullopt;
-    stats_panel.write_handle()->opt_selection = panel_selection(cached_selection_stats);
     update_selection_orbit();
     update_inspector_panel();
 }
@@ -850,7 +833,6 @@ void Graphics::update_simulation_stats(const SimulationStats& sim_stats) {
         write_handle->elapsed_s = sim_stats.real_elapsed_s;
         write_handle->simulated_time_s = sim_stats.simulated_elapsed_s;
         write_handle->simulation_rate = sim_stats.ips * sim_stats.timestep_s;
-        write_handle->opt_selection = panel_selection(cached_selection_stats);
     }
     update_inspector_panel();
 }

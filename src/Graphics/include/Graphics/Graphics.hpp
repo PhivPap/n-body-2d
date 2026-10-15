@@ -147,8 +147,7 @@ private:
     bool is_box_selecting() const;
     void update_hover_cursor();
     void update_primaries();
-    template <typename Excluded>
-    std::optional<OrbitView> find_orbit(const Orbit::Target& target, Excluded&& excluded) const;
+    std::optional<OrbitView> body_orbit(uint32_t index) const;
     void draw_grid();
     void draw_bodies();
     void update_hover();

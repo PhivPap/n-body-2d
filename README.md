@@ -15,8 +15,8 @@ down.
   algorithm, timestep and softening.
 - Fading trails, box or click selection with a centre-of-mass marker, and a follow mode.
 - Named bodies (planets, moons, stars, black holes) are labelled and drawn by mass. Hover any body
-  for its name, mass and orbit; the inspector panel shows the selection's orbital elements and its
-  predicted orbit.
+  for its name, mass and orbit; the inspector panel shows the selection, and a single body's
+  orbital elements and predicted orbit.
 
 ## Requirements
 
@@ -110,13 +110,14 @@ particles of Saturn's rings. The 1024 heaviest named bodies are kept.
 - Hovering over any body shows its id, mass and what it orbits (of several bodies under the
   cursor, the heaviest); right-clicking it selects it, and right-clicking empty space clears the
   selection.
-- The inspector panel treats the selection as one body, at its centre of mass, and shows its
-  orbital elements around its attractor. The attractor is the selection's primary, the heavier
-  named body with the largest m/d³ (the Earth for the Moon, although the Sun pulls the Moon
-  harder), merged with the named bodies that orbit that primary inside the selection's distance:
-  Nix orbits Pluto and Charon together, and Kepler-16b both of its suns. So right-dragging a box
-  around a planet and its moons gives the orbit of their barycentre.
-- The predicted orbit is the conic of those elements, with its periapsis and apoapsis.
+- The inspector panel shows a single selected body's position, velocity and orbital elements
+  around its attractor, and for several bodies their count, total mass, centre of mass and its
+  velocity. The attractor is the body's primary, the heavier named body with the largest m/d³ (the
+  Earth for the Moon, although the Sun pulls the Moon harder), merged with the named bodies that
+  orbit that primary inside the body's distance: Nix orbits Pluto and Charon together, and
+  Kepler-16b both of its suns.
+- The predicted orbit is the conic of those elements, with its periapsis and apoapsis. Bodies
+  selected together have none, since they may be far apart.
 - While the simulation runs, velocities lag positions by half a step, so the elements carry a tiny
   error. They are exact while it's paused.
 
