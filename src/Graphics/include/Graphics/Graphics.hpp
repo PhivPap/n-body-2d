@@ -112,11 +112,11 @@ private:
     sf::Vector2i view_grab_start{};
     float view_grab_max_drag_px = 0.f;
     std::optional<uint32_t> click_candidate{};
-    // Hovering: the cursor if bodies under it are looked for this frame, the nearest body within
+    // Hovering: the cursor if bodies under it are looked for this frame, the heaviest body within
     // HOVER_RADIUS_PX that draw_bodies() found, and the hovered body
     bool cursor_in_window = true;
     std::optional<sf::Vector2f> hover_cursor{};
-    std::optional<uint32_t> nearest_body_in_hover_radius{};
+    std::optional<uint32_t> heaviest_body_in_hover_radius{};
     std::optional<uint32_t> hovered_body{};
     sf::Text tooltip_text;
     sf::RectangleShape tooltip_box{};

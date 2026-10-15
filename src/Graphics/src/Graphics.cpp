@@ -271,24 +271,32 @@ void Graphics::draw_bodies() {
         trails_texture2.draw(prev, fade_states);
     }
 
-    nearest_body_in_hover_radius = std::nullopt;
+    heaviest_body_in_hover_radius = std::nullopt;
     if (hover_cursor) {
-        // Also looks for the body nearest to the cursor, in the same pass over the bodies
+        // Also looks for the heaviest body near the cursor (the nearest of equal masses), in the
+        // same pass over the bodies
         const sf::Vector2f cursor = *hover_cursor;
-        float nearest_distance_squared =
+        constexpr float radius_squared =
                 Constants::Graphics::HOVER_RADIUS_PX * Constants::Graphics::HOVER_RADIUS_PX;
-        uint64_t nearest = bodies.n;
+        float heaviest_distance_squared = radius_squared;
+        double heaviest_mass = -1.0;
+        uint64_t heaviest = bodies.n;
         for (uint64_t i = 0; i < bodies.n; i++) {
             const sf::Vector2f pos = vp.coords_to_pos_on_viewport(body_positions_cache[i]);
             body_vertex_array[i].position = pos;
             const float distance_squared = (pos - cursor).lengthSquared();
-            if (distance_squared < nearest_distance_squared) {
-                nearest_distance_squared = distance_squared;
-                nearest = i;
+            if (distance_squared < radius_squared) {
+                const double mass = bodies.mass(i);
+                if (mass > heaviest_mass
+                        || (mass == heaviest_mass && distance_squared < heaviest_distance_squared)) {
+                    heaviest_mass = mass;
+                    heaviest_distance_squared = distance_squared;
+                    heaviest = i;
+                }
             }
         }
-        if (nearest < bodies.n) {
-            nearest_body_in_hover_radius = static_cast<uint32_t>(nearest);
+        if (heaviest < bodies.n) {
+            heaviest_body_in_hover_radius = static_cast<uint32_t>(heaviest);
         }
     }
     else {
@@ -307,7 +315,8 @@ void Graphics::draw_bodies() {
             sf::BlendMode(sf::BlendMode::Factor::One, sf::BlendMode::Factor::OneMinusSrcAlpha));
 }
 
-// Named bodies' markers take precedence over the body nearest to the cursor
+// The heaviest body under the cursor: of the named bodies whose markers it is on, and of all the
+// bodies within HOVER_RADIUS_PX of it
 void Graphics::update_hover() {
     hovered_body = std::nullopt;
     hovered_orbit = std::nullopt;
@@ -316,8 +325,10 @@ void Graphics::update_hover() {
     }
     hovered_body = named_bodies.pick(*hover_cursor, body_vertex_array, body_diameter_pixels,
             scale_named_by_mass);
-    if (!hovered_body) {
-        hovered_body = nearest_body_in_hover_radius;
+    if (heaviest_body_in_hover_radius
+            && (!hovered_body
+                    || bodies.mass(*heaviest_body_in_hover_radius) > bodies.mass(*hovered_body))) {
+        hovered_body = heaviest_body_in_hover_radius;
     }
     if (hovered_body) {
         const uint32_t index = *hovered_body;
