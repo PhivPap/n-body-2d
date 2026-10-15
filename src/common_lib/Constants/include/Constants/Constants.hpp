@@ -53,8 +53,10 @@ constexpr uint16_t COMMANDS_PANEL_WIDTH = 370;
 constexpr uint16_t INSPECTOR_PANEL_WIDTH = 430;  // fits a position in km: 52 characters
 constexpr auto STATS_UPDATE_TIMER = std::chrono::milliseconds(8);
 // Named bodies: those whose id group (the id without a trailing number) has at most
-// NAMED_GROUP_MAX_SIZE members; only the heaviest NAMED_BODIES_MAX are kept
+// NAMED_GROUP_MAX_SIZE members, and at most NAMED_SEQUENCE_MAX_SIZE if they are numbered in
+// sequence; only the heaviest NAMED_BODIES_MAX are kept
 constexpr uint32_t NAMED_GROUP_MAX_SIZE = 64;
+constexpr uint32_t NAMED_SEQUENCE_MAX_SIZE = 8;
 constexpr uint32_t NAMED_BODIES_MAX = 1024;
 // A named body's marker is base + MIN_EXTRA to base + MAX_EXTRA pixels wide, by log-mass over
 // NAMED_MARKER_MASS_DECADES below the heaviest named body
@@ -104,6 +106,7 @@ static_assert(TRAILS_FADE_CHANGE_STEP.count() > 0);
 static_assert(INIT_BODY_PIXEL_DIAMETER >= BODY_DIAMETER_PIXELS_RANGE.first);
 static_assert(INIT_BODY_PIXEL_DIAMETER <= BODY_DIAMETER_PIXELS_RANGE.second);
 static_assert(NAMED_GROUP_MAX_SIZE >= 1 && NAMED_BODIES_MAX >= 1);
+static_assert(NAMED_SEQUENCE_MAX_SIZE <= NAMED_GROUP_MAX_SIZE);
 static_assert(NAMED_MARKER_MIN_EXTRA_PX > 0);
 static_assert(NAMED_MARKER_MIN_EXTRA_PX <= NAMED_MARKER_MAX_EXTRA_PX);
 static_assert(NAMED_MARKER_MASS_DECADES > 0);

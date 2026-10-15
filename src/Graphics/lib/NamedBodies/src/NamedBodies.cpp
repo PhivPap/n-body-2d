@@ -1,6 +1,7 @@
 #include "NamedBodies/NamedBodies.hpp"
 
 #include <algorithm>
+#include <charconv>
 #include <cmath>
 
 #include "AssetManager/AssetManager.hpp"
@@ -60,16 +61,50 @@ std::string_view id_group(std::string_view id) {
     return id.substr(0, end);
 }
 
+std::optional<uint64_t> id_number(std::string_view id) {
+    size_t start = id.size();
+    while (start > 0 && id[start - 1] >= '0' && id[start - 1] <= '9') {
+        start--;
+    }
+    // Fails without digits, and on overflow
+    uint64_t number = 0;
+    if (std::from_chars(id.data() + start, id.data() + id.size(), number).ec != std::errc()) {
+        return std::nullopt;
+    }
+    return number;
+}
+
 std::vector<uint32_t> find_named_bodies(const Bodies& bodies, uint32_t max_group_size,
-        uint32_t max_count) {
-    // Views into the bodies' ids
-    std::unordered_map<std::string_view, uint32_t> group_sizes;
+        uint32_t max_sequence_size, uint32_t max_count) {
+    struct Group {
+        uint32_t size = 0;
+        bool numbered = true;           // every member has a number
+        std::vector<uint64_t> numbers;  // kept while the group is small enough to be named
+        bool named = false;
+    };
+    // Keyed by views into the bodies' ids
+    std::unordered_map<std::string_view, Group> groups;
     for (uint64_t i = 0; i < bodies.n; i++) {
-        group_sizes[id_group(bodies.id(i))]++;
+        Group& group = groups[id_group(bodies.id(i))];
+        group.size++;
+        const std::optional<uint64_t> number = id_number(bodies.id(i));
+        group.numbered = group.numbered && number;
+        if (number && group.size <= max_group_size) {
+            group.numbers.push_back(*number);
+        }
+    }
+    for (auto& [name, group] : groups) {
+        std::sort(group.numbers.begin(), group.numbers.end());
+        bool in_sequence = group.numbered;
+        for (size_t k = 1; k < group.numbers.size() && in_sequence; k++) {
+            in_sequence = group.numbers[k] == group.numbers[k - 1] + 1;
+        }
+        group.named = group.size <= max_group_size
+                      && !(in_sequence && group.size > max_sequence_size);
     }
     std::vector<uint32_t> named;
     for (uint64_t i = 0; i < bodies.n; i++) {
-        if (group_sizes[id_group(bodies.id(i))] <= max_group_size) {
+        if (groups[id_group(bodies.id(i))].named) {
             named.push_back(static_cast<uint32_t>(i));
         }
     }
@@ -149,7 +184,8 @@ NamedBodies::NamedBodies(const Bodies& bodies)
         : bodies(bodies), selected_label(make_label("")), more_label(make_label(" +")) {
     using namespace Constants::Graphics;
     const StopWatch sw;
-    named = find_named_bodies(bodies, NAMED_GROUP_MAX_SIZE, NAMED_BODIES_MAX);
+    named = find_named_bodies(bodies, NAMED_GROUP_MAX_SIZE, NAMED_SEQUENCE_MAX_SIZE,
+            NAMED_BODIES_MAX);
     rank_of.reserve(named.size());
     labels.reserve(named.size());
     label_bounds.reserve(named.size());

@@ -46,43 +46,86 @@ void test_id_group() {
     CHECK(id_group("Ŋ-42") == "Ŋ");
 }
 
+void test_id_number() {
+    CHECK(id_number("ring-12") == 12u);
+    CHECK(id_number("S55") == 55u);
+    CHECK(id_number("moonlet-007") == 7u);
+    CHECK(id_number("123") == 123u);
+    CHECK(!id_number("Kepler-16b") && !id_number("Sgr A*") && !id_number(""));
+    CHECK(id_number("p18446744073709551615") == 18446744073709551615u);
+    CHECK(!id_number("p18446744073709551616"));  // doesn't fit in 64 bits
+}
+
 void test_find_named_bodies() {
     using V = std::vector<uint32_t>;
+    const auto count_named = [](const std::vector<std::string>& ids) {
+        return find_named_bodies(make_bodies(ids, std::vector<double>(ids.size(), 1.0)), 64, 8,
+                1024)
+                .size();
+    };
     {
         std::vector<std::string> ids = {"Sun", "Earth"};
         std::vector<double> masses = {2e30, 6e24};
         add_numbered(ids, masses, "ring-", 0, 100, 1e15);
-        CHECK(find_named_bodies(make_bodies(ids, masses), 64, 1024) == V({0, 1}));
+        CHECK(find_named_bodies(make_bodies(ids, masses), 64, 8, 1024) == V({0, 1}));
     }
     {
+        // Catalogue numbers, with gaps, name each S-star
         std::vector<std::string> ids;
         std::vector<double> masses;
-        add_numbered(ids, masses, "S", 1, 37, 2e31);
+        for (uint32_t k = 1; k <= 37; k++) {
+            ids.push_back("S" + std::to_string(k * k));
+            masses.push_back(2e31);
+        }
         ids.push_back("Sgr A*");
         masses.push_back(8e36);
-        const auto named = find_named_bodies(make_bodies(ids, masses), 64, 1024);
+        const auto named = find_named_bodies(make_bodies(ids, masses), 64, 8, 1024);
         CHECK(named.size() == 38 && named.front() == 37);
+    }
+    {
+        // Maxwell's moonlets, numbered in sequence, are a population, unlike their planet
+        std::vector<std::string> ids = {"Saturn"};
+        std::vector<double> masses = {5.7e26};
+        add_numbered(ids, masses, "moonlet-", 0, 36, 1e18);
+        CHECK(find_named_bodies(make_bodies(ids, masses), 64, 8, 1024) == V({0}));
     }
     {
         std::vector<std::string> ids;
         std::vector<double> masses;
         add_numbered(ids, masses, "p", 0, 100, 1.0);
-        CHECK(find_named_bodies(make_bodies(ids, masses), 64, 1024).empty());
+        CHECK(find_named_bodies(make_bodies(ids, masses), 64, 8, 1024).empty());
     }
-    // Groups of exactly the maximum size are named
-    for (const uint32_t count : {64u, 65u}) {
+    // A few bodies numbered in sequence are named: three suns, two black holes
+    const auto numbered = [](const std::string& prefix, uint32_t first, uint32_t count,
+                                  uint32_t step) {
         std::vector<std::string> ids;
-        std::vector<double> masses;
-        add_numbered(ids, masses, "moonlet-", 0, count, 1e18);
-        CHECK(find_named_bodies(make_bodies(ids, masses), 64, 1024).size()
-                == (count == 64 ? 64 : 0));
-    }
-    CHECK(find_named_bodies(make_bodies({"a", "b", "c", "d"}, {1, 2, 1, 2}), 64, 1024)
+        for (uint32_t k = 0; k < count; k++) {
+            ids.push_back(prefix + std::to_string(first + k * step));
+        }
+        return ids;
+    };
+    CHECK(count_named(numbered("star-", 0, 3, 1)) == 3);
+    CHECK(count_named(numbered("BH-", 1, 2, 1)) == 2);
+    CHECK(count_named(numbered("star-", 0, 8, 1)) == 8);
+    CHECK(count_named(numbered("star-", 0, 9, 1)) == 0);
+    // Groups of up to the maximum size are named, unless numbered in sequence
+    CHECK(count_named(numbered("moonlet-", 0, 64, 2)) == 64);
+    CHECK(count_named(numbered("moonlet-", 0, 65, 2)) == 0);
+    // Not sequences: a member without a number, or a number twice
+    std::vector<std::string> unnumbered = numbered("star-", 1, 9, 1);
+    unnumbered.push_back("star");
+    CHECK(count_named(unnumbered) == 10);
+    std::vector<std::string> twice = numbered("star-", 1, 9, 1);
+    twice.push_back("star_9");
+    CHECK(count_named(twice) == 10);
+
+    CHECK(find_named_bodies(make_bodies({"a", "b", "c", "d"}, {1, 2, 1, 2}), 64, 8, 1024)
             == V({1, 3, 0, 2}));
-    CHECK(find_named_bodies(make_bodies({"a", "b", "c", "d", "e"}, {1, 5, 3, 4, 2}), 64, 2)
+    CHECK(find_named_bodies(make_bodies({"a", "b", "c", "d", "e"}, {1, 5, 3, 4, 2}), 64, 8, 2)
             == V({1, 3}));
-    CHECK(find_named_bodies(make_bodies({"x", "y", "z"}, {0, 1, 0}), 64, 1024) == V({1, 0, 2}));
-    CHECK(find_named_bodies(make_bodies({}, {}), 64, 1024).empty());
+    CHECK(find_named_bodies(make_bodies({"x", "y", "z"}, {0, 1, 0}), 64, 8, 1024)
+            == V({1, 0, 2}));
+    CHECK(find_named_bodies(make_bodies({}, {}), 64, 8, 1024).empty());
 }
 
 void test_marker_diameter() {
@@ -241,6 +284,7 @@ void test_selector() {
 int main() {
     Log::verbosity = Log::Verbosity::WARNING;
     test_id_group();
+    test_id_number();
     test_find_named_bodies();
     test_marker_diameter();
     test_pick_marker();

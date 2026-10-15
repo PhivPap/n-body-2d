@@ -15,11 +15,17 @@
 // "S55" -> "S", "G1-d123" -> "G1-d", "Kepler-16b" -> "Kepler-16b", "123" -> ""
 std::string_view id_group(std::string_view id);
 
-// Bodies whose id group has at most `max_group_size` members, most massive first (ties: lower
-// index first), at most `max_count` of them. Ids that share a group number the members of a
-// population (ring particles, stars of a galaxy); the others name a body.
+// The id's trailing number: "ring-12" -> 12, "S055" -> 55; nullopt without one, or if it doesn't
+// fit in 64 bits
+std::optional<uint64_t> id_number(std::string_view id);
+
+// The named bodies, most massive first (ties: lower index first), at most `max_count` of them.
+// A body is named unless its id numbers it in a population: its group (id_group()) has more than
+// `max_group_size` members, or more than `max_sequence_size` numbered in sequence (every member
+// numbered, by consecutive numbers), as generated particles are: "moonlet-0" to "moonlet-35".
+// Numbers with gaps are catalogue designations, like the S-stars' "S1", "S2", "S4" ... "S175".
 std::vector<uint32_t> find_named_bodies(const Bodies& bodies, uint32_t max_group_size,
-        uint32_t max_count);
+        uint32_t max_sequence_size, uint32_t max_count);
 
 // Marker diameter in pixels: base + 2 for bodies 9 or more orders of magnitude lighter than the
 // heaviest named body (or massless, or without scaling), up to base + 12 for the heaviest

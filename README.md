@@ -100,10 +100,20 @@ around the planet, press F to follow it and zoom in with the mouse wheel.
 
 ## Named bodies and the inspector
 
-A body is *named* unless its id numbers it in a population: an id's group is the id without a
-trailing number (and a `-` or `_` before it), and bodies in groups of at most 64 are named. So
-`Io`, `Kepler-16b` and the 37 S-stars `S1` to `S37` are named, but not the 250,000 `ring-N`
-particles of Saturn's rings. The 1024 heaviest named bodies are kept.
+A body is *named* unless its id numbers it in a population. Ids are grouped by what comes before
+a trailing number (and a `-` or `_` before it): `ring-12` is in group `ring`, `S2` in group `S`,
+and `Io` or `Kepler-16b` in a group of its own. Then:
+
+- A group of more than 64 bodies is a population, like the 250,000 `ring-N` particles of
+  Saturn's rings.
+- A group of more than 8 bodies numbered in sequence (every one numbered, by consecutive numbers)
+  is a population too, the way the generator numbers particles: Maxwell's 36 moonlets
+  `moonlet-0` to `moonlet-35`.
+- Other bodies are named: a few numbered in sequence, like three suns `star-0` to `star-2` or
+  the black holes `BH-1` and `BH-2`, and catalogue numbers with gaps, like the 37 S-stars `S1`,
+  `S2`, `S4` ... `S175`.
+
+The 1024 heaviest named bodies are kept.
 
 - Named bodies are drawn above the trails as markers 2 to 12 px wider than the other bodies, by
   mass, and labelled with their ids, right of their markers. Heaviest first: a label that would
