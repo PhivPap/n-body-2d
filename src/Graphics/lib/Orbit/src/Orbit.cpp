@@ -15,6 +15,9 @@ constexpr double INF = std::numeric_limits<double>::infinity();
 constexpr double BARKER_MAX_EXCESS_ECCENTRICITY = 1e-6;
 // Below this eccentricity the periapsis direction is noise, and the current direction is used
 constexpr double CIRCULAR_ECCENTRICITY = 1e-12;
+// Lengths along an orbit beyond this many pixels can't place dashes to the pixel in double
+// precision: past it, dashes start wherever a visible stretch of the orbit does
+constexpr double MAX_ANCHORED_ARC_PX = 1e14;
 
 // +1 if the motion is counter-clockwise in world coordinates (clockwise on screen), else -1
 double motion_sign(const Orbit::Elements& el) {
@@ -67,6 +70,98 @@ double open_time_to_periapsis(const Orbit::Elements& el) {
     const double M = (e - 1.0) * std::sinh(F) + sinh_minus_x(F);  // e sinh(F) - F
     const double minus_a = -el.semi_major_axis;
     return -M * minus_a * std::sqrt(minus_a / el.mu);
+}
+
+// Carlson's symmetric elliptic integrals R_F(x, y, z) and R_D(x, y, z), for x, y, z >= 0 with at
+// most one of them 0 (z > 0 for R_D), by duplication (Numerical Recipes, 3rd ed., 6.12)
+double carlson_rf(double x, double y, double z) {
+    constexpr double TOLERANCE = 0.0025;  // relative error below TOLERANCE^6 / 4
+    double mean = 0.0, dx = 0.0, dy = 0.0, dz = 0.0;
+    for (int i = 0; i < 64; i++) {
+        const double sx = std::sqrt(x), sy = std::sqrt(y), sz = std::sqrt(z);
+        const double lambda = sx * (sy + sz) + sy * sz;
+        x = 0.25 * (x + lambda);
+        y = 0.25 * (y + lambda);
+        z = 0.25 * (z + lambda);
+        mean = (x + y + z) / 3.0;
+        dx = (mean - x) / mean;
+        dy = (mean - y) / mean;
+        dz = (mean - z) / mean;
+        if (!(std::max({std::abs(dx), std::abs(dy), std::abs(dz)}) > TOLERANCE)) {
+            break;
+        }
+    }
+    const double e2 = dx * dy - dz * dz, e3 = dx * dy * dz;
+    return (1.0 + (e2 / 24.0 - 0.1 - 3.0 / 44.0 * e3) * e2 + e3 / 14.0) / std::sqrt(mean);
+}
+
+double carlson_rd(double x, double y, double z) {
+    constexpr double TOLERANCE = 0.0015;
+    double sum = 0.0, factor = 1.0, mean = 0.0, dx = 0.0, dy = 0.0, dz = 0.0;
+    for (int i = 0; i < 64; i++) {
+        const double sx = std::sqrt(x), sy = std::sqrt(y), sz = std::sqrt(z);
+        const double lambda = sx * (sy + sz) + sy * sz;
+        sum += factor / (sz * (z + lambda));
+        factor *= 0.25;
+        x = 0.25 * (x + lambda);
+        y = 0.25 * (y + lambda);
+        z = 0.25 * (z + lambda);
+        mean = 0.2 * (x + y + 3.0 * z);
+        dx = (mean - x) / mean;
+        dy = (mean - y) / mean;
+        dz = (mean - z) / mean;
+        if (!(std::max({std::abs(dx), std::abs(dy), std::abs(dz)}) > TOLERANCE)) {
+            break;
+        }
+    }
+    const double ea = dx * dy, eb = dz * dz, ec = ea - eb, ed = ea - 6.0 * eb, ee = ed + 2.0 * ec;
+    return 3.0 * sum
+           + factor
+                     * (1.0 + ed * (-3.0 / 14.0 + 9.0 / 88.0 * ed - 9.0 / 52.0 * dz * ee)
+                             + dz * (ee / 6.0 + dz * (-9.0 / 22.0 * ec + dz * 3.0 / 26.0 * ea)))
+                     / (mean * std::sqrt(mean));
+}
+
+// The conics' lengths from the periapsis, in Carlson's forms scaled by p, which keep them precise
+// near e = 1: the ellipse's and the hyperbola's both tend to the parabola's there.
+// An ellipse, x = a cos E and y = b sin E from its centre, has ds = a sqrt(1 - e^2 cos^2 E) dE,
+// and for 0 <= E <= pi/2 a length of p sin E (R_F(X) + (e^2 / 3) sin^2 E R_D(X)), with
+// X = (k cos^2 E, k + e^2 sin^2 E, k) and k = 1 - e^2 (DLMF 19.25.9 with a negative parameter)
+double ellipse_arc_length(const Orbit::Elements& el, double nu) {
+    const double e = el.eccentricity, p = el.semi_latus_rectum;
+    const double k = (1.0 - e) * (1.0 + e);
+    const auto from_periapsis = [e, p, k](double E) {
+        const double s = std::sin(E), c = std::cos(E);
+        const double x = k * c * c, y = k + e * e * s * s;
+        return p * s * (carlson_rf(x, y, k) + e * e / 3.0 * s * s * carlson_rd(x, y, k));
+    };
+    const double quarter = from_periapsis(PI / 2.0);  // of the perimeter
+    const double turns = std::floor((nu + PI) / (2.0 * PI));
+    const double nu_in_turn = nu - 2.0 * PI * turns;  // [-pi, pi)
+    const double E = std::abs(2.0 * std::atan2(std::sqrt(1.0 - e) * std::sin(nu_in_turn / 2.0),
+                                     std::sqrt(1.0 + e) * std::cos(nu_in_turn / 2.0)));
+    // Symmetric about E = pi/2
+    const double length =
+            E <= PI / 2.0 ? from_periapsis(E) : 2.0 * quarter - from_periapsis(PI - E);
+    return 4.0 * quarter * turns + std::copysign(length, nu_in_turn);
+}
+
+// A hyperbola, x = |a| cosh F and y = b sinh F from its centre, has
+// ds = |a| sqrt(k + e^2 sinh^2 F) dF with k = e^2 - 1. Through tan(psi) = sinh F and by parts, its
+// length is p (sinh F sqrt(k + tanh^2 F) / k - (tanh^3 F / 3) R_D(k / cosh^2 F, k + tanh^2 F, k)).
+double hyperbola_arc_length(const Orbit::Elements& el, double nu) {
+    const double e = el.eccentricity, p = el.semi_latus_rectum;
+    const double k = (e - 1.0) * (e + 1.0);
+    const double F = 2.0 * std::atanh(std::sqrt((e - 1.0) / (e + 1.0)) * std::tan(nu / 2.0));
+    const double t = std::tanh(F), c = std::cosh(F);
+    const double y = k + t * t;
+    return p * (std::sinh(F) * std::sqrt(y) / k - t * t * t / 3.0 * carlson_rd(k / (c * c), y, k));
+}
+
+// A parabola has ds = (p / 2) sec^3(nu / 2) dnu
+double parabola_arc_length(const Orbit::Elements& el, double nu) {
+    const double t = std::tan(nu / 2.0);
+    return el.semi_latus_rectum / 2.0 * (t * std::sqrt(1.0 + t * t) + std::asinh(t));
 }
 
 // The orbit's radius at true anomaly nu
@@ -151,7 +246,7 @@ public:
         return transform.to_screen(focus + el.position_at(nu));
     }
 
-    void refine(double nu0, double nu1, Orbit::Vec p0, Orbit::Vec p1, uint32_t depth) const {
+    void refine(double nu0, double nu1, Orbit::Vec p0, Orbit::Vec p1, uint32_t depth) {
         const Box box = sector_box(el, focus, nu0, nu1);
         const Orbit::Vec box_lo = transform.to_screen(box.lo), box_hi = transform.to_screen(box.hi);
         // Also skips boxes that aren't finite
@@ -162,9 +257,7 @@ public:
         const Orbit::Vec p_mid = screen_at(nu_mid);
         if (depth >= Constants::Graphics::ORBIT_MAX_DEPTH
                 || (p_mid - 0.5 * (p0 + p1)).length() <= tolerance_px) {
-            if (const auto clipped = clip(p0, p1, lo, hi)) {
-                out.push_back({sf::Vector2f(clipped->first), sf::Vector2f(clipped->second)});
-            }
+            keep(nu0, nu1, p0, p1);
             return;
         }
         refine(nu0, nu_mid, p0, p_mid, depth + 1);
@@ -172,12 +265,31 @@ public:
     }
 
 private:
+    // Keeps a chord's part in the window, with how far along the orbit it starts: on from the
+    // chord before it if they meet, else measured from the periapsis
+    void keep(double nu0, double nu1, Orbit::Vec p0, Orbit::Vec p1) {
+        if (nu0 != last_nu1) {
+            arc_end_px = Orbit::arc_length(el, nu0) * transform.pixels_per_meter;
+            if (!(std::abs(arc_end_px) < MAX_ANCHORED_ARC_PX)) {
+                arc_end_px = 0.0;
+            }
+        }
+        if (const auto clipped = clip(p0, p1, lo, hi)) {
+            out.push_back({sf::Vector2f(clipped->first), sf::Vector2f(clipped->second),
+                    arc_end_px + (clipped->first - p0).length()});
+        }
+        arc_end_px += (p1 - p0).length();
+        last_nu1 = nu1;
+    }
+
     const Orbit::Elements& el;
     const Orbit::Vec focus;
     const Orbit::ScreenTransform& transform;
     const Orbit::Vec lo, hi;  // the window grown by the margin
     const double tolerance_px;
     std::vector<Orbit::Segment>& out;
+    double last_nu1 = std::numeric_limits<double>::quiet_NaN();  // where the last chord ended
+    double arc_end_px = 0.0;                                     // and how far along the orbit
 };
 }  // namespace
 
@@ -263,6 +375,16 @@ uint32_t climb_primaries(uint32_t primary_rank, Vec target_pos, std::span<const 
         rank = static_cast<uint32_t>(primaries[rank]);
     }
     return rank;
+}
+
+double arc_length(const Elements& el, double nu) {
+    if (el.eccentricity < 1.0) {
+        return ellipse_arc_length(el, nu);
+    }
+    if (el.eccentricity > 1.0) {
+        return hyperbola_arc_length(el, nu);
+    }
+    return parabola_arc_length(el, nu);
 }
 
 std::vector<int32_t> find_primaries(std::span<const uint32_t> named, const double* mass,
@@ -380,7 +502,7 @@ void trace(const Elements& el, Vec focus, const ScreenTransform& transform,
         nu_begin = -nu_end;
     }
 
-    const Tracer tracer(el, focus, transform, window_size, tolerance_px, margin_px, out);
+    Tracer tracer(el, focus, transform, window_size, tolerance_px, margin_px, out);
     double nu0 = nu_begin;
     Vec p0 = tracer.screen_at(nu0);
     for (uint32_t i = 1; i <= ORBIT_INITIAL_SEGMENTS; i++) {
@@ -397,29 +519,34 @@ void append_dashes(std::span<const Segment> segments, float dash_px, float gap_p
     if (!(dash_px > 0.f && gap_px > 0.f)) {
         return;
     }
-    bool in_dash = true;
-    double remaining = dash_px;  // of the current dash or gap
+    const double period = static_cast<double>(dash_px) + gap_px;
     for (const Segment& segment : segments) {
         const sf::Vector2f direction = segment.b - segment.a;
         const double length = Vec(direction).length();
+        if (!(length > 0.0)) {
+            continue;
+        }
         const auto append = [&](double t0, double t1) {
             lines.append({segment.a + direction * static_cast<float>(t0 / length), color});
             lines.append({segment.a + direction * static_cast<float>(t1 / length), color});
         };
-        double t = 0.0;
-        // Every dash or gap that ends inside the segment
-        while (remaining < length - t) {
-            if (in_dash && remaining > 0.0) {
-                append(t, t + remaining);
+        // Where the segment starts in the pattern: dashes begin at multiples of the period
+        double phase = std::fmod(segment.arc_px, period);
+        if (phase < 0.0) {
+            phase += period;
+        }
+        double t = 0.0;  // from the segment's start
+        while (t < length) {
+            if (phase < dash_px) {
+                append(t, std::min(length, t + dash_px - phase));
+                t += dash_px - phase;
+                phase = dash_px;
             }
-            t += remaining;
-            in_dash = !in_dash;
-            remaining = in_dash ? dash_px : gap_px;
+            else {
+                t += period - phase;
+                phase = 0.0;
+            }
         }
-        if (in_dash && t < length) {
-            append(t, length);
-        }
-        remaining -= length - t;
     }
 }
 }  // namespace Orbit

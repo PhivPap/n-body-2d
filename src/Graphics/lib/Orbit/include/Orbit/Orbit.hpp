@@ -46,6 +46,11 @@ struct Elements {
 // inf by definition: an open orbit's apoapsis, period and time to a periapsis it passed.
 std::optional<Elements> elements(Vec rel_pos, Vec rel_vel, double mu);
 
+// The length of the conic from its periapsis to true anomaly `nu` [m], negative before the
+// periapsis; closed orbits count on past it, so nu = 2 pi is one perimeter. Exact (elliptic
+// integrals) for every eccentricity.
+double arc_length(const Elements& el, double nu);
+
 // Chains of primaries are followed for at most this many hops: equal-mass bodies can be each
 // other's primary
 constexpr uint32_t MAX_PRIMARY_HOPS = 16;
@@ -131,17 +136,20 @@ struct ScreenTransform {
 
 struct Segment {
     sf::Vector2f a, b;
+    double arc_px = 0.0;  // how far along the orbit `a` is from the periapsis, in window pixels
 };
 
 // The conic of `el` around `focus` as window-pixel segments, in order along the orbit from its
 // periapsis (closed orbits) or its incoming end (open ones), refined until the curve is within
-// `tolerance_px` of its chords, and clipped to the window grown by `margin_px`
+// `tolerance_px` of its chords, and clipped to the window grown by `margin_px`. Where a stretch of
+// them starts, arc_px is arc_length(); along it, the chords add up.
 void trace(const Elements& el, Vec focus, const ScreenTransform& transform,
         sf::Vector2f window_size, std::vector<Segment>& out, double tolerance_px,
         double margin_px);
 
-// Dashes along consecutive segments, the first one starting at the first segment's start, as
-// pairs of vertices for sf::PrimitiveType::Lines
+// Dashes along segments, as pairs of vertices for sf::PrimitiveType::Lines. They are laid out by
+// the segments' arc_px from the periapsis, so they keep their places on the orbit whatever part of
+// it the window shows: a followed body passes them, as it passes the grid's lines.
 void append_dashes(std::span<const Segment> segments, float dash_px, float gap_px,
         sf::Color color, sf::VertexArray& lines);
 
