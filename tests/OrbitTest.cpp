@@ -56,6 +56,22 @@ double time_between(double e, double p, double nu0, double nu1) {
     return sum * step / 3.0;
 }
 
+// Length along an orbit of eccentricity e and semi-latus rectum p from true anomaly nu0 to nu1:
+// the integral of ds/dnu = p sqrt(1 + 2 e cos(nu) + e^2) / (1 + e cos(nu))^2, by Simpson's rule
+double length_between(double e, double p, double nu0, double nu1) {
+    constexpr int INTERVALS = 200'000;
+    const auto ds_dnu = [&](double nu) {
+        const double d = 1.0 + e * std::cos(nu);
+        return p * std::sqrt(1.0 + 2.0 * e * std::cos(nu) + e * e) / (d * d);
+    };
+    const double step = (nu1 - nu0) / INTERVALS;
+    double sum = ds_dnu(nu0) + ds_dnu(nu1);
+    for (int i = 1; i < INTERVALS; i++) {
+        sum += (i % 2 == 1 ? 4.0 : 2.0) * ds_dnu(nu0 + i * step);
+    }
+    return sum * step / 3.0;
+}
+
 void test_circular() {
     const double r = 1.5e11, speed = std::sqrt(MU / r);
     const Orbit::Elements el = elements({r, 0.0}, {0.0, speed});
@@ -157,6 +173,39 @@ void test_parabola() {
         const Orbit::Elements el = elements(pos_e, vel_e);
         CHECK(el.closed() == (e < 1.0));
         CHECK_REL(el.time_to_periapsis, time_between(e, p, -PI / 2.0, 0.0), 1e-8);
+    }
+}
+
+void test_arc_length() {
+    const double p = 1e11;
+    const auto arc_length = [p](double e, double nu) {
+        Orbit::Elements el;
+        el.eccentricity = e;
+        el.semi_latus_rectum = p;
+        return Orbit::arc_length(el, nu);
+    };
+    // Ellipses, on to several turns, and before the periapsis
+    for (const double e : {0.0, 0.3, 0.9, 0.999}) {
+        for (const double nu : {0.4, 2.0, 3.1, -1.2, 2.0 * PI - 0.3, 2.0 * PI + 1.0}) {
+            CHECK_REL(arc_length(e, nu), length_between(e, p, 0.0, nu), 1e-9);
+        }
+    }
+    CHECK_REL(arc_length(0.0, 2.0 * PI), 2.0 * PI * p, 1e-14);
+    // Hyperbolas, within their asymptotes
+    for (const double e : {1.5, 3.0}) {
+        for (const double nu : {0.5, -1.0, 1.6}) {
+            CHECK_REL(arc_length(e, nu), length_between(e, p, 0.0, nu), 1e-9);
+        }
+    }
+    // Near e = 1 both sides tend to the parabola, without losing precision
+    for (const double e : {1.0 - 1e-12, 1.0, 1.0 + 1e-12}) {
+        for (const double nu : {0.5, -2.0, 2.5}) {
+            CHECK_REL(arc_length(e, nu), length_between(1.0, p, 0.0, nu), 1e-9);
+        }
+    }
+    for (const double e : {0.0, 0.5, 1.0, 2.0}) {
+        CHECK(arc_length(e, 0.0) == 0.0);
+        CHECK_NEAR(arc_length(e, -0.7), -arc_length(e, 0.7), 1e-15 * p);
     }
 }
 
@@ -397,12 +446,18 @@ void test_trace_visible() {
     const double a = el.semi_major_axis, b = a * std::sqrt(1.0 - el.eccentricity * el.eccentricity);
     const double perimeter = PI * (3.0 * (a + b) - std::sqrt((3.0 * a + b) * (a + 3.0 * b)));
     CHECK_REL(length, perimeter * ppm, 0.01);
-    // In order along the orbit, starting at its periapsis
+    // In order along the orbit, starting at its periapsis, and how far along it they are
     CHECK_NEAR((Vec(segments.front().a) - transform.to_screen(el.position_at(0.0))).length(), 0.0,
             1e-3);
+    CHECK(segments.front().arc_px == 0.0);
     for (size_t i = 1; i < segments.size(); i++) {
         CHECK_NEAR((segments[i].a - segments[i - 1].b).length(), 0.0, 1e-3);
+        const double previous_length = (segments[i - 1].b - segments[i - 1].a).length();
+        CHECK_NEAR(segments[i].arc_px, segments[i - 1].arc_px + previous_length, 1e-3);
     }
+    // The chords fall short of the arcs by a fraction of a pixel
+    const double end = segments.back().arc_px + (segments.back().b - segments.back().a).length();
+    CHECK_NEAR(end, Orbit::arc_length(el, 2.0 * PI) * ppm, 1.0);
 }
 
 void test_trace_deep_zoom() {
@@ -421,6 +476,15 @@ void test_trace_deep_zoom() {
         nearest = std::min(nearest, static_cast<double>((segment.a + t * d - centre).length()));
     }
     CHECK(nearest <= 1.0);
+
+    // Too far along the orbit in pixels (1e15) to place dashes precisely: they are placed from
+    // where the chord through the window starts
+    const double deep = 1e4;
+    const auto deeper = trace(el, {el.position_at(1.0) - Vec(WINDOW) / 2.0 / deep, deep});
+    CHECK(!deeper.empty());
+    for (const auto& segment : deeper) {
+        CHECK(segment.arc_px >= 0.0 && segment.arc_px < 1e9);
+    }
 }
 
 void test_trace_off_screen() {
@@ -442,7 +506,7 @@ void test_trace_open() {
 }
 
 void test_dashes() {
-    const std::vector<Orbit::Segment> segments = {{{10.f, 20.f}, {110.f, 20.f}}};
+    const std::vector<Orbit::Segment> segments = {{{10.f, 20.f}, {110.f, 20.f}, 0.0}};
     sf::VertexArray lines(sf::PrimitiveType::Lines);
     Orbit::append_dashes(segments, 8.f, 6.f, sf::Color::Red, lines);
     CHECK(lines.getVertexCount() == 16);
@@ -456,18 +520,57 @@ void test_dashes() {
         CHECK(lines[0].color == sf::Color::Red);
     }
 
-    // The pattern carries on across segments: dashes 0..5 and 5..8, a gap to 14, then 14..20
-    sf::VertexArray split(sf::PrimitiveType::Lines);
-    Orbit::append_dashes(std::vector<Orbit::Segment>{{{0.f, 0.f}, {5.f, 0.f}},
-                                 {{5.f, 0.f}, {10.f, 0.f}}, {{10.f, 0.f}, {20.f, 0.f}}},
-            8.f, 6.f, sf::Color::Red, split);
-    CHECK(split.getVertexCount() == 6);
-    if (split.getVertexCount() == 6) {
-        CHECK(split[1].position == sf::Vector2f(5.f, 0.f));
-        CHECK(split[3].position == sf::Vector2f(8.f, 0.f));
-        CHECK(split[4].position == sf::Vector2f(14.f, 0.f));
-        CHECK(split[5].position == sf::Vector2f(20.f, 0.f));
+    // Dashes end and start where the segments' lengths along the orbit say
+    const auto dashes = [](std::vector<Orbit::Segment> segments) {
+        sf::VertexArray lines(sf::PrimitiveType::Lines);
+        Orbit::append_dashes(segments, 8.f, 6.f, sf::Color::Red, lines);
+        std::vector<float> xs;
+        for (size_t i = 0; i < lines.getVertexCount(); i++) {
+            xs.push_back(lines[i].position.x);
+        }
+        return xs;
+    };
+    using Xs = std::vector<float>;
+    // Across segments that meet: dashes 0..5 and 5..8, a gap to 14, then 14..20
+    CHECK(dashes({{{0.f, 0.f}, {5.f, 0.f}, 0.0}, {{5.f, 0.f}, {10.f, 0.f}, 5.0},
+                  {{10.f, 0.f}, {20.f, 0.f}, 10.0}})
+            == Xs({0.f, 5.f, 5.f, 8.f, 14.f, 20.f}));
+    // 3 px into a dash, and 3 px before one
+    CHECK(dashes({{{0.f, 0.f}, {20.f, 0.f}, 3.0}}) == Xs({0.f, 5.f, 11.f, 19.f}));
+    CHECK(dashes({{{0.f, 0.f}, {20.f, 0.f}, -3.0}}) == Xs({3.f, 11.f, 17.f, 20.f}));
+    // After a jump along the orbit: 100 px is 2 px into a dash
+    CHECK(dashes({{{0.f, 0.f}, {10.f, 0.f}, 0.0}, {{30.f, 0.f}, {40.f, 0.f}, 100.0}})
+            == Xs({0.f, 8.f, 30.f, 36.f}));
+}
+
+// Dashes keep their places on an orbit as the view moves along it, as when it follows a body
+void test_dashes_stay_put() {
+    const Orbit::Elements el = ellipse();
+    const double ppm = 1e-7;  // the orbit is 1e5 px around
+    const Vec shift(400.0, 150.0);
+    const Orbit::ScreenTransform view{el.position_at(1.0) - Vec(WINDOW) / 2.0 / ppm, ppm};
+    const Orbit::ScreenTransform moved{view.origin + shift / ppm, ppm};
+    sf::VertexArray dashes(sf::PrimitiveType::Lines), moved_dashes(sf::PrimitiveType::Lines);
+    Orbit::append_dashes(trace(el, view), 8.f, 6.f, sf::Color::White, dashes);
+    Orbit::append_dashes(trace(el, moved), 8.f, 6.f, sf::Color::White, moved_dashes);
+    const auto well_inside = [](sf::Vector2f p) {
+        return p.x > 40.f && p.x < WINDOW.x - 40.f && p.y > 40.f && p.y < WINDOW.y - 40.f;
+    };
+    size_t compared = 0, matched = 0;
+    for (size_t i = 0; i < dashes.getVertexCount(); i++) {
+        const sf::Vector2f end = dashes[i].position;
+        const sf::Vector2f moved_end = end - sf::Vector2f(shift);
+        if (!well_inside(end) || !well_inside(moved_end)) {
+            continue;
+        }
+        compared++;
+        float nearest = INF;
+        for (size_t j = 0; j < moved_dashes.getVertexCount(); j++) {
+            nearest = std::min(nearest, (moved_dashes[j].position - moved_end).length());
+        }
+        matched += nearest < 0.05f;
     }
+    CHECK(compared > 20 && matched == compared);
 }
 
 // A selection of committed Solar System bodies, treated as one body, and the generator's input
@@ -656,6 +759,7 @@ int main(int argc, const char* argv[]) {
     test_from_elements();
     test_hyperbola();
     test_parabola();
+    test_arc_length();
     test_degenerate();
     test_primaries();
     test_attractors();
@@ -667,6 +771,7 @@ int main(int argc, const char* argv[]) {
     test_trace_off_screen();
     test_trace_open();
     test_dashes();
+    test_dashes_stay_put();
     if (argc > 1) {
         test_golden(argv[1]);
     }

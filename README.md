@@ -135,7 +135,8 @@ The 1024 heaviest named bodies are kept.
   since Charon makes Pluto itself wobble.
 - The predicted orbit is the conic of those elements, with its periapsis and apoapsis. Bodies
   selected together have none, since they may be far apart. `A` shows every named body's orbit in
-  light gray (off at startup).
+  light gray (off at startup). Dashes keep their places along an orbit, counted from its
+  periapsis, so a followed body moves past them, as it does past the grid.
 - While the simulation runs, velocities lag positions by half a step, so the elements carry a tiny
   error. They are exact while it's paused.
 
