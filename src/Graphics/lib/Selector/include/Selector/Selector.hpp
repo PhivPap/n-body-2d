@@ -26,9 +26,8 @@ public:
     bool has_selection() const;
     uint32_t num_selected() const;
     std::optional<uint32_t> selected_body() const;  // the selection's only body
-    bool is_selected(uint32_t index) const;
     const std::vector<uint8_t>& selection_mask() const;  // per body, 1 = selected
-    SelectionStats compute_stats() const;
+    SelectionStats compute_stats() const;  // of a selection that isn't empty
 
 private:
     const Bodies& bodies;

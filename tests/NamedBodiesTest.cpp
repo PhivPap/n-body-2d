@@ -264,7 +264,8 @@ void test_selector() {
     selector.select_body(1);
     auto stats = selector.compute_stats();
     CHECK(stats.n == 1 && selector.num_selected() == 1);
-    CHECK(selector.is_selected(1) && !selector.is_selected(0));
+    CHECK(selector.selection_mask() == std::vector<uint8_t>({0, 1, 0, 0}));
+    CHECK(selector.selected_body() == 1u);
     CHECK(stats.heaviest == 1);
     CHECK(stats.center_of_mass == bodies.pos(1) && stats.weighted_velocity == bodies.vel(1));
     CHECK(vertices[1].color == SELECT_COLOR && vertices[0].color == BODY_COLOR);
@@ -293,7 +294,7 @@ void test_selector() {
     // Hidden selections keep the body colour
     selector.set_show(false);
     selector.select_body(0);
-    CHECK(selector.is_selected(0) && vertices[0].color == BODY_COLOR);
+    CHECK(selector.selection_mask()[0] == 1 && vertices[0].color == BODY_COLOR);
 }
 }  // namespace
 

@@ -1,6 +1,7 @@
 #include "Selector/Selector.hpp"
 
 #include "Constants/Constants.hpp"
+#include "Orbit/Orbit.hpp"
 
 
 Selector::Selector(const Bodies& bodies, 
@@ -62,51 +63,20 @@ std::optional<uint32_t> Selector::selected_body() const {
                                              : std::nullopt;
 }
 
-bool Selector::is_selected(uint32_t index) const {
-    return mask[index] != 0;
-}
-
 const std::vector<uint8_t>& Selector::selection_mask() const {
     return mask;
 }
 
+// The selection as one body, summed relative to its first body, which keeps the centre of mass
+// precise far from the origin
 Selector::SelectionStats Selector::compute_stats() const {
-    double total_mass = 0.0;
-    sf::Vector2<double> center_of_mass{0.0, 0.0};
-    sf::Vector2<double> weighted_velocity{0.0, 0.0};
-    uint32_t heaviest = 0;
-    double heaviest_mass = -1.0;
-
-    for (const uint32_t index : selected_body_indices) {
-        const double mass = bodies.mass(index);
-        total_mass += mass;
-        center_of_mass += mass * body_positions_cache[index];
-        weighted_velocity += mass * bodies.vel(index);
-        if (mass > heaviest_mass) {
-            heaviest = index;
-            heaviest_mass = mass;
-        }
-    }
-
-    if (total_mass > 0.0) {
-        center_of_mass /= total_mass;
-        weighted_velocity /= total_mass;
-    }
-    else if (!selected_body_indices.empty()) {
-        // Massless bodies: plain means
-        for (const uint32_t index : selected_body_indices) {
-            center_of_mass += body_positions_cache[index];
-            weighted_velocity += bodies.vel(index);
-        }
-        center_of_mass /= static_cast<double>(selected_body_indices.size());
-        weighted_velocity /= static_cast<double>(selected_body_indices.size());
-    }
-
+    const Orbit::Target target = Orbit::barycentre(selected_body_indices, bodies.mass_data(),
+            body_positions_cache.data(), bodies.vel_data());
     return SelectionStats{
         .n = static_cast<uint32_t>(selected_body_indices.size()),
-        .total_mass = total_mass,
-        .center_of_mass = center_of_mass,
-        .weighted_velocity = weighted_velocity,
-        .heaviest = heaviest
+        .total_mass = target.mass,
+        .center_of_mass = target.pos,
+        .weighted_velocity = target.vel,
+        .heaviest = target.heaviest
     };
 }
