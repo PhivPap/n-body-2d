@@ -125,10 +125,10 @@ The 1024 heaviest named bodies are kept.
   selection.
 - The inspector panel shows a single selected body's position, velocity and orbital elements
   around its attractor, and for several bodies their count, total mass, centre of mass and its
-  velocity. The attractor is the body's primary: the heavier named body with the largest m/d³ (the
-  Earth for the Moon, although the Sun pulls the Moon harder), or what that one orbits if the body
-  is outside its sphere of influence, so Kepler-16b doesn't fall to its lighter sun as it passes
-  it. It is merged with the named bodies that orbit that primary inside the body's distance: Nix
+  velocity. The attractor is the body's primary: of the named bodies at least as heavy, the one
+  with the largest m/d³ (the Earth for the Moon, although the Sun pulls the Moon harder, and for
+  each of two equal stars the other), or what that one orbits if the body is outside its sphere of
+  influence, so Kepler-16b doesn't fall to its lighter sun as it passes it. It is merged with the named bodies that orbit that primary inside the body's distance: Nix
   orbits Pluto and Charon together, and Kepler-16b both of its suns. The body's satellites, the
   lighter named bodies inside its sphere of influence, orbit along with it: Pluto's elements are
   those of the barycentre of Pluto, Charon, Nix and Hydra, as the generator builds the system,
