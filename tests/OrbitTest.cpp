@@ -182,6 +182,7 @@ void test_arc_length() {
         Orbit::Elements el;
         el.eccentricity = e;
         el.semi_latus_rectum = p;
+        el.semi_major_axis = e == 1.0 ? INF : p / ((1.0 - e) * (1.0 + e));
         return Orbit::arc_length(el, nu);
     };
     // Ellipses, on to several turns, and before the periapsis
@@ -206,6 +207,97 @@ void test_arc_length() {
     for (const double e : {0.0, 0.5, 1.0, 2.0}) {
         CHECK(arc_length(e, 0.0) == 0.0);
         CHECK_NEAR(arc_length(e, -0.7), -arc_length(e, 0.7), 1e-15 * p);
+    }
+}
+
+// Time to fall from r to the focus along a radial orbit of semi-major axis a (< 0 if unbound), from
+// r = a (1 - cos(E)) or r = -a (cosh(F) - 1)
+double radial_fall_time(double r, double a) {
+    if (a > 0.0) {
+        const double E = 2.0 * std::atan2(std::sqrt(r / (2.0 * a)),
+                                       std::sqrt(std::max(0.0, 1.0 - r / (2.0 * a))));
+        return std::sqrt(a * a * a / MU) * (E - std::sin(E));
+    }
+    const double F = std::acosh(1.0 - r / a);
+    return std::sqrt(-a * a * a / MU) * (std::sinh(F) - F);
+}
+
+// Nearly radial orbits, as of bodies released at rest, have e = 1 to double precision: the energy
+// tells them apart, and gives their size
+void test_nearly_radial() {
+    const double r = AU;
+    for (const double radial_speed : {-1e4, -1e3, 0.0, 1e3}) {
+        const Vec vel(radial_speed, 1e-6);
+        const Orbit::Elements el = elements({r, 0.0}, vel);
+        const double energy = vel.lengthSquared() / 2.0 - MU / r, a = -MU / (2.0 * energy);
+        CHECK(el.closed() && el.eccentricity < 1.0);
+        CHECK_REL(el.semi_major_axis, a, 1e-12);
+        CHECK_REL(el.apoapsis, 2.0 * a - el.periapsis, 1e-12);
+        CHECK_REL(el.period, 2.0 * PI * std::sqrt(a * a * a / MU), 1e-12);
+        // Falling in, or out to the apoapsis and back
+        const double fall = radial_fall_time(r, a);
+        CHECK_REL(el.time_to_periapsis, radial_speed <= 0.0 ? fall : el.period - fall, 1e-8);
+    }
+    // Falling faster than the escape speed
+    const Orbit::Elements open = elements({r, 0.0}, {-6e4, 1e-6});
+    const double a = -MU / (2.0 * ((6e4 * 6e4 + 1e-12) / 2.0 - MU / r));
+    CHECK(!open.closed() && open.eccentricity > 1.0);
+    CHECK_REL(open.semi_major_axis, a, 1e-12);
+    CHECK_REL(open.time_to_periapsis, radial_fall_time(r, a), 1e-8);
+    CHECK(elements({r, 0.0}, {6e4, 1e-6}).time_to_periapsis == INF);
+
+    // Drawn as a line from the focus out to the apoapsis, or as far out as open orbits go, and back
+    const double ppm = 1e-9;
+    const Orbit::ScreenTransform transform{-Vec(800.0, 450.0) / ppm, ppm};
+    for (const Vec vel : {Vec(1e3, 1e-6), Vec(-6e4, 1e-6)}) {
+        const Orbit::Elements el = elements({r, 0.0}, vel);
+        std::vector<Orbit::Segment> segments;
+        Orbit::trace(el, {0.0, 0.0}, transform, {1600.f, 900.f}, segments, 0.5, 2.0);
+        double length = 0.0, farthest = 0.0;
+        for (const auto& segment : segments) {
+            CHECK(std::isfinite(segment.arc_px));
+            for (const sf::Vector2f end : {segment.a, segment.b}) {
+                CHECK(std::isfinite(end.x) && std::isfinite(end.y));
+                farthest = std::max(farthest, (Vec(end) - Vec(800.0, 450.0)).length());
+            }
+            length += (segment.b - segment.a).length();
+        }
+        CHECK(Orbit::extent(el) == (el.closed() ? el.apoapsis : 4.0 * r));
+        CHECK_NEAR(farthest, Orbit::extent(el) * ppm, 0.5);
+        CHECK_NEAR(length, 2.0 * Orbit::extent(el) * ppm, 1.0);
+        sf::VertexArray dashes(sf::PrimitiveType::Lines);
+        Orbit::append_dashes(segments, 8.f, 6.f, sf::Color::White, dashes);
+        CHECK(dashes.getVertexCount() >= 40);
+    }
+}
+
+// Near parabolic orbits far out, where Barker's equation is off by (e - 1) tan^2(nu / 2)
+void test_far_near_parabolic() {
+    const double p = 1e11, r = 6.7e5 * p;
+    for (const double excess : {5e-7, 2e-6, 1e-3}) {
+        const double e = 1.0 + excess;
+        const double nu = -std::acos((p / r - 1.0) / e);  // incoming
+        const auto [pos, vel] = state_at(e, p, nu);
+        // The hyperbolic Kepler equation, in extended precision
+        const long double E = e, a = p / ((E - 1.0L) * (E + 1.0L));
+        const long double F = 2.0L * std::atanh(std::sqrt((E - 1.0L) / (E + 1.0L))
+                                                * std::tan(static_cast<long double>(nu) / 2.0L));
+        const long double time = -(E * std::sinh(F) - F) * a * std::sqrt(a / MU);
+        CHECK_REL(elements(pos, vel).time_to_periapsis, static_cast<double>(time), 1e-8);
+    }
+}
+
+// At the periapsis, the next one is now, not in -0 s; a circular orbit's is where the body is
+void test_time_to_periapsis_edges() {
+    const double q = 1e11;
+    const Orbit::Elements el = elements({q, 0.0}, {0.0, std::sqrt(MU * 1.5 / q)});
+    CHECK(el.time_to_periapsis == 0.0 && !std::signbit(el.time_to_periapsis));
+    const double r = 1.5e11, speed = std::sqrt(MU / r);
+    for (const double angle : {0.0, 0.3, 1.0, 2.0, -2.5}) {
+        const Vec dir(std::cos(angle), std::sin(angle));
+        const Orbit::Elements circular = elements(r * dir, speed * Vec(-dir.y, dir.x));
+        CHECK(circular.true_anomaly == 0.0 && circular.time_to_periapsis == 0.0);
+        CHECK_NEAR(circular.periapsis_angle, angle, 1e-15);
     }
 }
 
@@ -760,6 +852,9 @@ int main(int argc, const char* argv[]) {
     test_hyperbola();
     test_parabola();
     test_arc_length();
+    test_nearly_radial();
+    test_far_near_parabolic();
+    test_time_to_periapsis_edges();
     test_degenerate();
     test_primaries();
     test_attractors();

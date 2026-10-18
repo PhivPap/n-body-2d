@@ -16,17 +16,19 @@
 namespace Orbit {
 using Vec = sf::Vector2<double>;
 
-// Osculating two-body elements of a relative state, for any conic
+// Osculating two-body elements of a relative state, for any conic. The energy tells closed orbits
+// from open ones, and e is kept on its side of 1: nearly radial orbits have e = 1 to double
+// precision, and their shape comes from p and a.
 struct Elements {
     double mu = 0.0;                 // G (m1 + m2) [m^3/s^2]
     double distance = 0.0;           // |r| [m]
     double speed = 0.0;              // |v| [m/s]
     double angular_momentum = 0.0;   // h = r.x v.y - r.y v.x [m^2/s]; > 0 is clockwise on screen
     double eccentricity = 0.0;
-    double semi_latus_rectum = 0.0;  // p = h^2 / mu [m]
-    double semi_major_axis = 0.0;    // p / (1 - e^2): < 0 for hyperbolas, inf for parabolas [m]
+    double semi_latus_rectum = 0.0;  // p = h^2 / mu = a (1 - e^2) [m]
+    double semi_major_axis = 0.0;    // -mu / (2 energy): < 0 for open orbits, inf for parabolas [m]
     double periapsis = 0.0;          // p / (1 + e) [m]
-    double apoapsis = 0.0;           // p / (1 - e) for closed orbits, else inf [m]
+    double apoapsis = 0.0;           // a (1 + e) for closed orbits, else inf [m]
     double periapsis_angle = 0.0;    // world direction from the focus to the periapsis [rad]
     double true_anomaly = 0.0;       // from the periapsis in the direction of motion, (-pi, pi]
     double period = 0.0;             // closed orbits, else inf [s]
@@ -43,8 +45,12 @@ struct Elements {
 // The elements of a body at `rel_pos`, moving at `rel_vel`, relative to the body it orbits, with
 // mu = G (m1 + m2). nullopt unless mu > 0, the distance is > 0, the motion isn't purely radial
 // (which has no conic) and the inputs and results are finite, except for the values that are
-// inf by definition: an open orbit's apoapsis, period and time to a periapsis it passed.
+// inf by definition: an open orbit's apoapsis, period and time to a periapsis it passed. A
+// circular orbit's periapsis is where the body is (e < 1e-12, whose periapsis is rounding noise).
 std::optional<Elements> elements(Vec rel_pos, Vec rel_vel, double mu);
+
+// How far from its focus trace() draws an orbit: its apoapsis, or how far out an open one goes
+double extent(const Elements& el);
 
 // The length of the conic from its periapsis to true anomaly `nu` [m], negative before the
 // periapsis; closed orbits count on past it, so nu = 2 pi is one perimeter. Exact (elliptic
@@ -140,9 +146,9 @@ struct Segment {
 };
 
 // The conic of `el` around `focus` as window-pixel segments, in order along the orbit from its
-// periapsis (closed orbits) or its incoming end (open ones), refined until the curve is within
-// `tolerance_px` of its chords, and clipped to the window grown by `margin_px`. Where a stretch of
-// them starts, arc_px is arc_length(); along it, the chords add up.
+// periapsis (closed orbits) or its incoming end (open ones, out to extent()), refined until the
+// curve is within `tolerance_px` of its chords, and clipped to the window grown by `margin_px`.
+// Where a stretch of them starts, arc_px is arc_length(); along it, the chords add up.
 void trace(const Elements& el, Vec focus, const ScreenTransform& transform,
         sf::Vector2f window_size, std::vector<Segment>& out, double tolerance_px,
         double margin_px);
