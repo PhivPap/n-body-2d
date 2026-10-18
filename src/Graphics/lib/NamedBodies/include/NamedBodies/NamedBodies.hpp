@@ -67,7 +67,6 @@ class NamedBodies {
 public:
     explicit NamedBodies(const Bodies& bodies);
     const std::vector<uint32_t>& indices() const;  // most massive first
-    bool is_named(uint32_t index) const;
     std::optional<uint32_t> rank(uint32_t index) const;  // a named body's position in indices()
     // A named body's marker diameter in pixels
     float marker_diameter(uint32_t index, float base_px, bool scale_by_mass) const;

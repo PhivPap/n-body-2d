@@ -8,3 +8,4 @@ target_include_directories(${PROJECT_NAME} PUBLIC ${CMAKE_CURRENT_LIST_DIR}/incl
 target_link_libraries(${PROJECT_NAME} PUBLIC lib-body)
 target_link_libraries(${PROJECT_NAME} PUBLIC sfml-graphics)
 target_link_libraries(${PROJECT_NAME} PRIVATE lib-constants)
+target_link_libraries(${PROJECT_NAME} PRIVATE lib-graphics-orbit)

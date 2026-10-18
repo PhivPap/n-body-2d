@@ -544,7 +544,7 @@ void Graphics::draw_hover_ring() {
         return;
     }
     const uint32_t index = *hovered_body;
-    const float diameter = named_bodies.is_named(index)
+    const float diameter = named_bodies.rank(index)
                                    ? named_bodies.marker_diameter(index, body_diameter_pixels,
                                              scale_named_by_mass)
                                    : body_diameter_pixels;
