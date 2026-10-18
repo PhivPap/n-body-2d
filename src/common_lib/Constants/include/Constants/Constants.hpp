@@ -71,8 +71,12 @@ constexpr float LABEL_GAP_PX = 4.f;      // between a label and its marker
 constexpr float LABEL_SPACING_PX = 2.f;  // between labels
 constexpr sf::Color LABEL_COLOR(230, 230, 230, 255);
 constexpr sf::Color LABEL_OUTLINE_COLOR(0, 0, 0, 200);
-constexpr float HOVER_RADIUS_PX = 6.f;  // any body
-constexpr float HOVER_MARGIN_PX = 3.f;  // around a named body's marker
+// Bodies are hovered within HOVER_RADIUS_PX, or HOVER_MARGIN_PX around bigger ones and named
+// bodies' markers. They are looked for in chunks of HOVER_CHUNK_SIZE: those near the cursor are
+// searched again.
+constexpr float HOVER_RADIUS_PX = 6.f;
+constexpr float HOVER_MARGIN_PX = 3.f;
+constexpr uint64_t HOVER_CHUNK_SIZE = 64;
 constexpr sf::Color HOVER_COLOR(255, 220, 0, 220);
 constexpr float CLICK_MAX_DRAG_PX = 3.f;
 constexpr auto PRIMARIES_UPDATE_TIMER = std::chrono::milliseconds(250);
@@ -111,6 +115,7 @@ static_assert(NAMED_SEQUENCE_MAX_SIZE <= NAMED_GROUP_MAX_SIZE);
 static_assert(NAMED_MARKER_MIN_EXTRA_PX > 0);
 static_assert(NAMED_MARKER_MIN_EXTRA_PX <= NAMED_MARKER_MAX_EXTRA_PX);
 static_assert(NAMED_MARKER_MASS_DECADES > 0);
+static_assert(HOVER_CHUNK_SIZE > 0);
 static_assert(LABEL_MAX_CHARS > 3);  // room for the "..." of a truncated id
 static_assert(ORBIT_DASH_PX > 0 && ORBIT_GAP_PX > 0);
 static_assert(ORBIT_TOLERANCE_PX > 0 && ORBIT_CLIP_MARGIN_PX >= 0);

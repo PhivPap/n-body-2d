@@ -56,9 +56,37 @@ void main() {
 }
 )glsl";
 
+namespace {
+// The heaviest of the bodies offered to it, the nearest of equal masses
+struct HeaviestBody {
+    std::optional<uint32_t> index;
+    double mass = -1.0;
+    float distance_squared = 0.f;
+
+    void offer(uint32_t i, double body_mass, float body_distance_squared) {
+        if (body_mass > mass || (body_mass == mass && body_distance_squared < distance_squared)) {
+            index = i;
+            mass = body_mass;
+            distance_squared = body_distance_squared;
+        }
+    }
+};
+
+// Offers `heaviest` the bodies begin..end whose vertices are within `radius` of `point`
+void find_bodies_near(HeaviestBody& heaviest, sf::Vector2f point, float radius,
+        const sf::VertexArray& vertices, const double* mass, uint64_t begin, uint64_t end) {
+    for (uint64_t i = begin; i < end; i++) {
+        const float distance_squared = (vertices[i].position - point).lengthSquared();
+        if (distance_squared < radius * radius) {
+            heaviest.offer(static_cast<uint32_t>(i), mass[i], distance_squared);
+        }
+    }
+}
+}  // namespace
+
  Graphics::Graphics(const Config& cfg, const Bodies& bodies)
         : graphics_cfg(cfg.graphics), bodies(bodies), body_positions_cache(bodies.n),
-          body_vertex_array(sf::PrimitiveType::Points, bodies.n),
+          body_velocities_cache(bodies.n), body_vertex_array(sf::PrimitiveType::Points, bodies.n),
           window(sf::VideoMode(sf::Vector2u(graphics_cfg.resolution)), "N-Body Sim"),
           vp(sf::Vector2f(graphics_cfg.resolution), graphics_cfg.pixel_scale),
           selector(bodies, body_positions_cache, body_vertex_array),
@@ -135,7 +163,7 @@ void main() {
     }
     update_inspector_panel();
 
-    // No primaries until the first frame has the bodies' positions
+    // No primaries until a frame's orbits need them (draw_frame())
     primaries.assign(named_bodies.indices().size(), -1);
     reset_trails(true);
 }
@@ -182,17 +210,97 @@ void Graphics::update_hover_cursor() {
     }
 }
 
+// The velocities of the bodies whose orbits the frame works out, read right after the positions:
+// at a million steps a second, a moon's velocity read a few hundred microseconds later is some
+// way further round its orbit, which then looks eccentric. The named bodies' (the attractors' and
+// A's) and the selected body's; update_hover() reads the hovered body's, which only the tooltip's
+// distance and speed show. While the simulation runs, velocities still lag positions by half a
+// step, which the elements reflect slightly.
+void Graphics::snapshot_velocities() {
+    for (const uint32_t index : named_bodies.indices()) {
+        body_velocities_cache[index] = bodies.vel(index);
+    }
+    if (const auto selected = selector.selected_body()) {
+        body_velocities_cache[*selected] = bodies.vel(*selected);
+    }
+}
+
 // Every named body's primary, which attractors are found from. Primaries change slowly.
 void Graphics::update_primaries() {
     primaries = Orbit::find_primaries(named_bodies.indices(), bodies.mass_data(),
             body_positions_cache.data());
 }
 
-// A body's orbit, with its satellites. Velocities lag the positions by half a step while the
-// simulation runs, which the elements reflect, slightly.
+// A body's orbit, with its satellites, for a named, selected or hovered body: those whose
+// velocities the frame read (snapshot_velocities())
 std::optional<Orbit::BodyOrbit> Graphics::body_orbit(uint32_t index) const {
     return Orbit::body_orbit(index, named_bodies.rank(index), named_bodies.indices(), primaries,
-            bodies.mass_data(), body_positions_cache.data(), bodies.vel_data());
+            bodies.mass_data(), body_positions_cache.data(), body_velocities_cache.data());
+}
+
+// How far from a body's centre the cursor is on it: bodies drawn bigger give it more room
+float Graphics::hover_radius() const {
+    using namespace Constants::Graphics;
+    return std::max(HOVER_RADIUS_PX, body_diameter_pixels / 2.f + HOVER_MARGIN_PX);
+}
+
+// The bodies' window positions, and the heaviest body within hover_radius() of the hover cursor
+// (the nearest of equal masses). A vectorized pass tells whether chunks of bodies have one near
+// the cursor, in world coordinates with a pixel to spare for the rounding of window positions to
+// float, and only those chunks are searched: a search in the pass would keep it from vectorizing.
+std::optional<uint32_t> Graphics::transform_bodies() {
+    if (bodies.n == 0) {
+        return std::nullopt;
+    }
+    const ScreenTransform transform = vp.screen_transform();
+    const sf::Vector2<double>* positions = body_positions_cache.data();
+    sf::Vertex* vertices = &body_vertex_array[0];
+    if (!hover_cursor) {
+        for (uint64_t i = 0; i < bodies.n; i++) {
+            vertices[i].position = sf::Vector2f(transform.to_screen(positions[i]));
+        }
+        return std::nullopt;
+    }
+    const float radius = hover_radius();
+    const sf::Vector2<double> cursor =
+            transform.origin + sf::Vector2<double>(*hover_cursor) / transform.pixels_per_meter;
+    const double world_radius = (radius + 1.0) / transform.pixels_per_meter;
+    const double world_radius_squared = world_radius * world_radius;
+    HeaviestBody heaviest;
+    for (uint64_t begin = 0; begin < bodies.n; begin += Constants::Graphics::HOVER_CHUNK_SIZE) {
+        const uint64_t end = std::min(bodies.n, begin + Constants::Graphics::HOVER_CHUNK_SIZE);
+        bool near = false;
+        for (uint64_t i = begin; i < end; i++) {
+            vertices[i].position = sf::Vector2f(transform.to_screen(positions[i]));
+            near |= (positions[i] - cursor).lengthSquared() < world_radius_squared;
+        }
+        if (near) {
+            find_bodies_near(heaviest, *hover_cursor, radius, body_vertex_array, bodies.mass_data(),
+                    begin, end);
+        }
+    }
+    return heaviest.index;
+}
+
+// The heaviest body drawn under `point`: of the named bodies whose markers it is on, and
+// `heaviest_near`, the heaviest body within hover_radius()
+std::optional<uint32_t> Graphics::pick_body(sf::Vector2f point,
+        std::optional<uint32_t> heaviest_near) const {
+    const std::optional<uint32_t> marker =
+            named_bodies.pick(point, body_vertex_array, body_diameter_pixels, scale_named_by_mass);
+    if (heaviest_near && (!marker || bodies.mass(*heaviest_near) > bodies.mass(*marker))) {
+        return heaviest_near;
+    }
+    return marker;
+}
+
+// The body under the hover cursor. Its velocity is read now if snapshot_velocities() didn't.
+void Graphics::update_hover(std::optional<uint32_t> heaviest_near_cursor) {
+    hovered_body = hover_cursor ? pick_body(*hover_cursor, heaviest_near_cursor) : std::nullopt;
+    if (hovered_body && !named_bodies.rank(*hovered_body)
+            && hovered_body != selector.selected_body()) {
+        body_velocities_cache[*hovered_body] = bodies.vel(*hovered_body);
+    }
 }
 
 // This calculation guarantees:
@@ -249,40 +357,6 @@ void Graphics::draw_bodies() {
         trails_texture2.draw(prev, fade_states);
     }
 
-    heaviest_body_in_hover_radius = std::nullopt;
-    if (hover_cursor) {
-        // Also looks for the heaviest body near the cursor (the nearest of equal masses), in the
-        // same pass over the bodies
-        const sf::Vector2f cursor = *hover_cursor;
-        constexpr float radius_squared =
-                Constants::Graphics::HOVER_RADIUS_PX * Constants::Graphics::HOVER_RADIUS_PX;
-        float heaviest_distance_squared = radius_squared;
-        double heaviest_mass = -1.0;
-        uint64_t heaviest = bodies.n;
-        for (uint64_t i = 0; i < bodies.n; i++) {
-            const sf::Vector2f pos = vp.coords_to_pos_on_viewport(body_positions_cache[i]);
-            body_vertex_array[i].position = pos;
-            const float distance_squared = (pos - cursor).lengthSquared();
-            if (distance_squared < radius_squared) {
-                const double mass = bodies.mass(i);
-                const bool nearer = distance_squared < heaviest_distance_squared;
-                if (mass > heaviest_mass || (mass == heaviest_mass && nearer)) {
-                    heaviest_mass = mass;
-                    heaviest_distance_squared = distance_squared;
-                    heaviest = i;
-                }
-            }
-        }
-        if (heaviest < bodies.n) {
-            heaviest_body_in_hover_radius = static_cast<uint32_t>(heaviest);
-        }
-    }
-    else {
-        for (uint64_t i = 0; i < bodies.n; i++) {
-            body_vertex_array[i].position = vp.coords_to_pos_on_viewport(body_positions_cache[i]);
-        }
-    }
-
     trails_texture2.draw(body_vertex_array, sf::RenderStates(&body_shader));
     trails_texture2.display();
 
@@ -293,26 +367,6 @@ void Graphics::draw_bodies() {
             sf::BlendMode(sf::BlendMode::Factor::One, sf::BlendMode::Factor::OneMinusSrcAlpha));
 }
 
-// The heaviest body under the cursor: of the named bodies whose markers it is on, and of all the
-// bodies within HOVER_RADIUS_PX of it
-void Graphics::update_hover() {
-    hovered_body = std::nullopt;
-    hovered_orbit = std::nullopt;
-    if (!hover_cursor) {
-        return;
-    }
-    hovered_body = named_bodies.pick(*hover_cursor, body_vertex_array, body_diameter_pixels,
-            scale_named_by_mass);
-    if (heaviest_body_in_hover_radius
-            && (!hovered_body
-                    || bodies.mass(*heaviest_body_in_hover_radius) > bodies.mass(*hovered_body))) {
-        hovered_body = heaviest_body_in_hover_radius;
-    }
-    if (hovered_body) {
-        hovered_orbit = body_orbit(*hovered_body);
-    }
-}
-
 // Appends an osculating orbit around its attractor's barycentre to `lines`, dashed, unless it is
 // too small to see. It is traced in double precision and clipped to the window, so it stays exact
 // at any zoom.
@@ -320,8 +374,7 @@ bool Graphics::append_orbit(const Orbit::BodyOrbit& orbit, const ScreenTransform
         sf::Color color, sf::VertexArray& lines) {
     using namespace Constants::Graphics;
     const Orbit::Elements& el = orbit.elements;
-    if ((el.closed() ? el.apoapsis : el.periapsis) * transform.pixels_per_meter
-            < ORBIT_MIN_SIZE_PX) {
+    if (Orbit::extent(el) * transform.pixels_per_meter < ORBIT_MIN_SIZE_PX) {
         return false;
     }
     orbit_segments.clear();
@@ -336,10 +389,8 @@ void Graphics::draw_named_orbits() {
     if (!show_named_orbits) {
         return;
     }
-    std::optional<uint32_t> selected;
-    if (selection_show_orbit && selection_orbit) {
-        selected = cached_selection_stats->heaviest;
-    }
+    const std::optional<uint32_t> selected =
+            selection_show_orbit && selection_orbit ? selector.selected_body() : std::nullopt;
     const ScreenTransform transform = vp.screen_transform();
     named_orbit_lines.clear();
     for (const uint32_t index : named_bodies.indices()) {
@@ -392,12 +443,8 @@ void Graphics::draw_named_bodies() {
     named_bodies.draw_markers(window, marker_shader, body_vertex_array, base_px,
             scale_named_by_mass, selector.selection_mask(), selection_show);
     if (show_labels) {
-        const std::optional<uint32_t> selected_body =
-                selector.num_selected() == 1 && cached_selection_stats
-                        ? std::optional(cached_selection_stats->heaviest)
-                        : std::nullopt;
         named_bodies.draw_labels(window, body_vertex_array, base_px, scale_named_by_mass,
-                selected_body, selector.selection_mask(), selection_show);
+                selector.selected_body(), selector.selection_mask(), selection_show);
     }
 }
 
@@ -420,10 +467,8 @@ void Graphics::update_selection_tracking() {
 
 // Only a single body's orbit: bodies selected together may be far apart
 void Graphics::update_selection_orbit() {
-    selection_orbit = std::nullopt;
-    if (cached_selection_stats && cached_selection_stats->n == 1) {
-        selection_orbit = body_orbit(cached_selection_stats->heaviest);
-    }
+    const std::optional<uint32_t> body = selector.selected_body();
+    selection_orbit = body ? body_orbit(*body) : std::nullopt;
 }
 
 void Graphics::update_inspector_panel() {
@@ -472,15 +517,6 @@ void Graphics::update_inspector_panel() {
             .clockwise = el.angular_momentum > 0.0,
             .retrograde = selection_orbit->retrograde,
             .satellite_count = selection_orbit->satellite_count};
-}
-
-// Like release_select(), for a clicked body
-void Graphics::select_body(uint32_t index) {
-    selector.select_body(index);
-    action_log.log(fmt::format("Selected {}", bodies.id(index)));
-    cached_selection_stats = selector.compute_stats();
-    update_selection_orbit();
-    update_inspector_panel();
 }
 
 void Graphics::draw_selection_overlay() {
@@ -533,12 +569,12 @@ void Graphics::draw_tooltip() {
     }
     const uint32_t index = *hovered_body;
     std::string text = fmt::format("{}\nMass: {:.4g}kg\n", bodies.id(index), bodies.mass(index));
-    if (hovered_orbit) {
-        const Orbit::Attractor& attractor = hovered_orbit->attractor;
+    if (const auto orbit = body_orbit(index)) {
+        const Orbit::Attractor& attractor = orbit->attractor;
         text += fmt::format("Around {}{}: {}, {}/s", bodies.id(attractor.primary),
                 attractor.inner_count > 0 ? fmt::format(" (+{} inner)", attractor.inner_count) : "",
-                Log::Distance::from(hovered_orbit->elements.distance),
-                Log::Distance::from(hovered_orbit->elements.speed));
+                Log::Distance::from(orbit->elements.distance),
+                Log::Distance::from(orbit->elements.speed));
     }
     else {
         const double speed = bodies.vel(index).length();
@@ -630,9 +666,7 @@ void Graphics::zoom_view(double delta) {
 }
 
 void Graphics::grab_view() {
-    if (opt_select_grabbed_pos) {
-        release_select(true);
-    }
+    cancel_select();
     static const std::optional grabbed_cursor =
             sf::Cursor::createFromSystem(sf::Cursor::Type::Cross);
     if (grabbed_cursor) {
@@ -656,47 +690,58 @@ void Graphics::release_view() {
 }
 
 // A right press during a left press cancels the pan
-void Graphics::grab_select() {
+void Graphics::grab_select(sf::Vector2i position) {
     if (opt_view_grabbed_pos) {
         release_view();
     }
-    opt_select_grabbed_pos = sf::Mouse::getPosition(window);
+    opt_select_grabbed_pos = position;
     select_grab_max_drag_px = 0.f;
-    click_candidate = hovered_body;
 }
 
-void Graphics::release_select(bool skip_select) {
-    if (skip_select) {
-        opt_select_grabbed_pos = std::nullopt;
-    }
+// A left press during a right press cancels the selection
+void Graphics::cancel_select() {
+    opt_select_grabbed_pos = std::nullopt;
+}
+
+void Graphics::release_select(sf::Vector2i position) {
     if (!opt_select_grabbed_pos) {
         return;
     }
-    update_select_drag();  // the cursor may have moved since the last frame
     const sf::Vector2i press = *opt_select_grabbed_pos;
+    select_grab_max_drag_px =
+            std::max(select_grab_max_drag_px, sf::Vector2f(position - press).length());
     const bool click = !is_box_selecting();
     opt_select_grabbed_pos = std::nullopt;
-    if (click && click_candidate) {
-        select_body(*click_candidate);
-        return;
-    }
-    // A click on empty space selects nothing, like an empty box
-    sf::Rect<float> region{};
-    if (!click) {
-        region = {sf::Vector2f(press), sf::Vector2f(sf::Mouse::getPosition(window) - press)};
-    }
     const bool had_selection = selector.has_selection();
-    selector.select(region);
-    if (const auto num_selected = selector.num_selected(); num_selected > 0) {
-        action_log.log(fmt::format("Selected {} bodies", num_selected));
+    std::optional<uint32_t> clicked;
+    if (click) {
+        // What the window shows under the press, which may not have been hovered: the last frame's
+        // vertices, searched once
+        HeaviestBody heaviest;
+        find_bodies_near(heaviest, sf::Vector2f(press), hover_radius(), body_vertex_array,
+                bodies.mass_data(), 0, bodies.n);
+        clicked = pick_body(sf::Vector2f(press), heaviest.index);
     }
-    else if (had_selection) {
-        action_log.log("Cleared selection");
+    if (clicked) {
+        selector.select_body(*clicked);
+        action_log.log(fmt::format("Selected {}", bodies.id(*clicked)));
+    }
+    else {
+        // A click on empty space selects nothing, like an empty box
+        const sf::Rect<float> box(sf::Vector2f(press), sf::Vector2f(position - press));
+        selector.select(click ? sf::Rect<float>{} : box);
+        if (const auto num_selected = selector.num_selected(); num_selected > 0) {
+            action_log.log(fmt::format("Selected {} bodies", num_selected));
+        }
+        else if (had_selection) {
+            action_log.log("Cleared selection");
+        }
     }
     cached_selection_stats = selector.has_selection() ? std::optional(selector.compute_stats())
                                                       : std::nullopt;
-    update_selection_orbit();
-    update_inspector_panel();
+    // The next frame works out the orbit, with velocities read with its positions
+    selection_orbit = std::nullopt;
+    inspector_update_pending = true;
 }
 
 void Graphics::body_size_increase() {
@@ -867,12 +912,20 @@ void Graphics::draw_frame() {
     update_hover_cursor();
     std::memcpy(body_positions_cache.data(), bodies.pos_data(),
             bodies.n * sizeof(sf::Vector2<double>));
-    primaries_update_rate_limiter.try_call(std::bind(&Graphics::update_primaries, this));
+    snapshot_velocities();
     update_selection_tracking();
+    update_hover(transform_bodies());
+    // Primaries only for the orbits drawn or shown
+    if (selector.selected_body() || hovered_body || show_named_orbits) {
+        primaries_update_rate_limiter.try_call(std::bind(&Graphics::update_primaries, this));
+    }
     update_selection_orbit();
+    if (inspector_update_pending) {
+        update_inspector_panel();
+        inspector_update_pending = false;
+    }
     draw_grid();
     draw_bodies();
-    update_hover();
     draw_named_orbits();
     draw_selection_orbit();
     draw_named_bodies();
