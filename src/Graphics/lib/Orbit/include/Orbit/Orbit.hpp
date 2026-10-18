@@ -1,6 +1,5 @@
 #pragma once
 
-#include <cassert>
 #include <cstdint>
 #include <optional>
 #include <span>
@@ -57,44 +56,41 @@ double extent(const Elements& el);
 // integrals) for every eccentricity.
 double arc_length(const Elements& el, double nu);
 
-// Chains of primaries are followed for at most this many hops: equal-mass bodies can be each
-// other's primary
+// Chains of primaries lead to bodies listed earlier in `named`, so they end, but they are followed
+// for at most this many hops
 constexpr uint32_t MAX_PRIMARY_HOPS = 16;
 
-// The primary of a target of mass `target_mass` at `target_pos`: among the named bodies that
-// aren't `excluded`, with a mass > 0 and at least the target's, the one with the largest m / d^3.
-// That is roughly the body whose Hill sphere the target is deepest in: the Earth for the Moon,
-// although the Sun pulls the Moon harder. Returned as its rank in `named`, which lists body
-// indices, most massive first; `mass` and `pos` are indexed by body index.
-template <typename Excluded>
+// The primary of a target of mass `target_mass` at `target_pos`: among the named bodies with a
+// mass > 0 and at least the target's, the one with the largest m / d^3. That is roughly the body
+// whose Hill sphere the target is deepest in: the Earth for the Moon, although the Sun pulls the
+// Moon harder. Returned as its rank in `named`, which lists body indices, most massive first;
+// `mass` and `pos` are indexed by body index, and `excluded` (empty for none) by rank.
 std::optional<uint32_t> find_primary(double target_mass, Vec target_pos,
-        std::span<const uint32_t> named, const double* mass, const Vec* pos, Excluded&& excluded);
+        std::span<const uint32_t> named, const double* mass, const Vec* pos,
+        std::span<const uint8_t> excluded = {});
 
-// From a target's primary of rank `primary_rank` (find_primary()) up its chain of `primaries`, to
-// the first body whose sphere of influence the target is in. A body P keeps the target if
-// m_P / d(target, P)^3 >= m_Q / d(P, Q)^3, Q being P's own primary, that is if the target is within
-// 3^(1/3) Hill radii of P: a moon stays with its planet, but a planet around a binary star doesn't
-// fall to the lighter star as it passes it. The chain is only climbed to heavier bodies, which
-// can't belong to the target: bodies of equal masses can be each other's primary.
-uint32_t climb_primaries(uint32_t primary_rank, Vec target_pos, std::span<const uint32_t> named,
-        std::span<const int32_t> primaries, const double* mass, const Vec* pos);
-
-// Each named body's primary, as its rank in `named` (-1: none), climbed to the body whose sphere
-// of influence it is in
+// Each named body's primary, as its rank in `named` (-1: none): find_primary() among the bodies
+// listed before it, which are at least as heavy, so that chains of primaries end even among equal
+// masses. It is then climbed up its chain to the first body whose sphere of influence the body is
+// in: P keeps it if m_P / d(body, P)^3 >= m_Q / d(P, Q)^3, Q being P's own primary, that is if it
+// is within 3^(1/3) Hill radii of P. A moon stays with its planet, but a planet around a binary
+// star doesn't fall to the lighter star as it passes it.
 std::vector<int32_t> find_primaries(std::span<const uint32_t> named, const double* mass,
         const Vec* pos);
 
 // The named bodies that orbit the named body of rank `rank`, directly or through each other,
 // inside its sphere of influence: the lighter bodies whose chain of primaries reaches it, like the
 // Moon for the Earth or Charon, Nix and Hydra for Pluto, but not a planet around a binary of equal
-// stars. Returned as body indices, most massive first.
+// stars. The sphere is the body's within its primary's pull, or the first of equal stars' within
+// the other's. Returned as ranks in `named`, most massive first.
 std::vector<uint32_t> find_satellites(uint32_t rank, std::span<const uint32_t> named,
         std::span<const int32_t> primaries, const double* mass, const Vec* pos);
 
 // What orbits: a body, or bodies treated as one, like a planet with its satellites
 struct Target {
-    double mass;   // total mass [kg], 0 for massless
-    Vec pos, vel;  // their centre of mass and mass-weighted velocity
+    double mass;        // total mass [kg], 0 for massless
+    uint32_t heaviest;  // its heaviest body (the first of equal masses), which bounds its primary
+    Vec pos, vel;       // their centre of mass and mass-weighted velocity
 };
 
 // Bodies `members` (body indices, at least one) as one target: their total mass, barycentre and
@@ -114,14 +110,15 @@ struct Attractor {
     Vec pos, vel;           // their barycentre
 };
 
-// The attractor of `target`, given the named bodies' cached `primaries` (find_primaries).
-// `excluded(i)`: whether body i belongs to the target. A named body is inner if its chain of
-// primaries reaches the target's primary, without passing through the target, from a body that
-// is closer to the primary than the target. The arrays are indexed by body index.
-template <typename Excluded>
+// The attractor of `target`, given the named bodies' cached `primaries` (find_primaries()) and
+// which of them belong to the target (`excluded`, by rank). Its primary is at least as heavy as
+// the target's heaviest body, and is climbed like find_primaries(), but never into the target. A
+// named body is inner if its chain of primaries reaches the primary, without passing through the
+// target, from a body that is closer to the primary than the target. The arrays are indexed by
+// body index.
 std::optional<Attractor> find_attractor(const Target& target, std::span<const uint32_t> named,
         std::span<const int32_t> primaries, const double* mass, const Vec* pos, const Vec* vel,
-        Excluded&& excluded);
+        std::span<const uint8_t> excluded);
 
 // Whether a target with `angular_momentum` around `attractor` goes around the other way than the
 // attractor's primary goes around its own primary, like Triton around Neptune. Never for a
@@ -129,6 +126,22 @@ std::optional<Attractor> find_attractor(const Target& target, std::span<const ui
 bool retrograde(double angular_momentum, const Attractor& attractor,
         std::span<const uint32_t> named, std::span<const int32_t> primaries, const Vec* pos,
         const Vec* vel);
+
+// A body's orbit as the inspector shows it: the body with its satellites (find_satellites()), as
+// the generator builds systems, around their attractor. Their barycentre orbits smoothly, while a
+// heavy moon like Charon makes its planet's own orbit wobble.
+struct BodyOrbit {
+    Attractor attractor;
+    Elements elements;
+    bool retrograde;
+    uint32_t satellite_count;  // merged with the body
+};
+
+// The orbit of body `index`, whose rank in `named` is `rank` if it is named; nullopt without an
+// attractor or elements
+std::optional<BodyOrbit> body_orbit(uint32_t index, std::optional<uint32_t> rank,
+        std::span<const uint32_t> named, std::span<const int32_t> primaries, const double* mass,
+        const Vec* pos, const Vec* vel);
 
 // World (m) to window pixels, what ViewPort::coords_to_pos_on_viewport does, in double precision
 struct ScreenTransform {
@@ -158,69 +171,4 @@ void trace(const Elements& el, Vec focus, const ScreenTransform& transform,
 // it the window shows: a followed body passes them, as it passes the grid's lines.
 void append_dashes(std::span<const Segment> segments, float dash_px, float gap_px,
         sf::Color color, sf::VertexArray& lines);
-
-
-template <typename Excluded>
-std::optional<uint32_t> find_primary(double target_mass, Vec target_pos,
-        std::span<const uint32_t> named, const double* mass, const Vec* pos, Excluded&& excluded) {
-    std::optional<uint32_t> primary;
-    double best_score = 0.0;
-    for (uint32_t rank = 0; rank < named.size(); rank++) {
-        const uint32_t k = named[rank];
-        if (!(mass[k] > 0.0) || mass[k] < target_mass || excluded(k)) {
-            continue;
-        }
-        const double distance = (pos[k] - target_pos).length();
-        const double score = mass[k] / (distance * distance * distance);
-        if (distance > 0.0 && score > best_score) {
-            primary = rank;
-            best_score = score;
-        }
-    }
-    return primary;
-}
-
-template <typename Excluded>
-std::optional<Attractor> find_attractor(const Target& target, std::span<const uint32_t> named,
-        std::span<const int32_t> primaries, const double* mass, const Vec* pos, const Vec* vel,
-        Excluded&& excluded) {
-    assert(primaries.size() == named.size());
-    const std::optional<uint32_t> nearest_primary_rank =
-            find_primary(target.mass, target.pos, named, mass, pos, excluded);
-    if (!nearest_primary_rank) {
-        return std::nullopt;
-    }
-    const uint32_t primary_rank =
-            climb_primaries(*nearest_primary_rank, target.pos, named, primaries, mass, pos);
-    const uint32_t j = named[primary_rank];
-    const double target_distance = (pos[j] - target.pos).length();
-    // The barycentre is summed relative to the primary, which keeps its precision far from the
-    // origin
-    Attractor attractor{.primary = j, .primary_rank = primary_rank, .inner_count = 0,
-            .mass = mass[j], .pos = {}, .vel = {}};
-    for (uint32_t rank = 0; rank < named.size(); rank++) {
-        const uint32_t k = named[rank];
-        if (rank == primary_rank || excluded(k)) {
-            continue;
-        }
-        int32_t body = static_cast<int32_t>(rank), child = -1;
-        for (uint32_t hop = 0; hop < MAX_PRIMARY_HOPS && body >= 0 && !excluded(named[body]);
-                hop++) {
-            if (body == static_cast<int32_t>(primary_rank)) {
-                if (child >= 0 && (pos[named[child]] - pos[j]).length() < target_distance) {
-                    attractor.inner_count++;
-                    attractor.mass += mass[k];
-                    attractor.pos += mass[k] * (pos[k] - pos[j]);
-                    attractor.vel += mass[k] * (vel[k] - vel[j]);
-                }
-                break;
-            }
-            child = body;
-            body = primaries[body];
-        }
-    }
-    attractor.pos = pos[j] + attractor.pos / attractor.mass;
-    attractor.vel = vel[j] + attractor.vel / attractor.mass;
-    return attractor;
-}
 }  // namespace Orbit

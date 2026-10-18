@@ -188,40 +188,11 @@ void Graphics::update_primaries() {
             body_positions_cache.data());
 }
 
-// A body's attractor, and its orbit around it together with its satellites, as the generator builds
-// systems: their barycentre orbits smoothly, while a heavy moon like Charon makes its planet's own
-// orbit wobble. Velocities lag the positions by half a step while the simulation runs, which the
-// elements reflect, slightly.
-std::optional<Graphics::OrbitView> Graphics::body_orbit(uint32_t index) const {
-    const auto& named = named_bodies.indices();
-    const Orbit::Vec* pos = body_positions_cache.data();
-    std::vector<uint32_t> members{index};
-    if (const auto rank = named_bodies.rank(index)) {
-        const auto satellites =
-                Orbit::find_satellites(*rank, named, primaries, bodies.mass_data(), pos);
-        members.insert(members.end(), satellites.begin(), satellites.end());
-    }
-    const Orbit::Target target =
-            Orbit::barycentre(members, bodies.mass_data(), pos, bodies.vel_data());
-    const auto satellite_count = static_cast<uint32_t>(members.size() - 1);
-    std::sort(members.begin(), members.end());
-    const auto attractor = Orbit::find_attractor(target, named, primaries, bodies.mass_data(), pos,
-            bodies.vel_data(), [&members](uint32_t i) {
-                return std::binary_search(members.begin(), members.end(), i);
-            });
-    if (!attractor) {
-        return std::nullopt;
-    }
-    const auto elements = Orbit::elements(target.pos - attractor->pos,
-            target.vel - attractor->vel,
-            Constants::Simulation::G * (target.mass + attractor->mass));
-    if (!elements) {
-        return std::nullopt;
-    }
-    return OrbitView{.attractor = *attractor, .elements = *elements,
-            .retrograde = Orbit::retrograde(elements->angular_momentum, *attractor, named,
-                    primaries, pos, bodies.vel_data()),
-            .satellite_count = satellite_count};
+// A body's orbit, with its satellites. Velocities lag the positions by half a step while the
+// simulation runs, which the elements reflect, slightly.
+std::optional<Orbit::BodyOrbit> Graphics::body_orbit(uint32_t index) const {
+    return Orbit::body_orbit(index, named_bodies.rank(index), named_bodies.indices(), primaries,
+            bodies.mass_data(), body_positions_cache.data(), bodies.vel_data());
 }
 
 // This calculation guarantees:
@@ -345,7 +316,7 @@ void Graphics::update_hover() {
 // Appends an osculating orbit around its attractor's barycentre to `lines`, dashed, unless it is
 // too small to see. It is traced in double precision and clipped to the window, so it stays exact
 // at any zoom.
-bool Graphics::append_orbit(const OrbitView& orbit, const Orbit::ScreenTransform& transform,
+bool Graphics::append_orbit(const Orbit::BodyOrbit& orbit, const Orbit::ScreenTransform& transform,
         sf::Color color, sf::VertexArray& lines) {
     using namespace Constants::Graphics;
     const Orbit::Elements& el = orbit.elements;
