@@ -75,13 +75,6 @@ private:
         uint64_t frame;
         float fps;
     };
-    // A body's attractor and elements this frame, with its satellites
-    struct OrbitView {
-        Orbit::Attractor attractor;
-        Orbit::Elements elements;
-        bool retrograde;
-        uint32_t satellite_count;
-    };
 
     const Config::Graphics& graphics_cfg;
     const Bodies& bodies;
@@ -106,7 +99,7 @@ private:
     NamedBodies named_bodies{bodies};
     std::vector<int32_t> primaries;  // per named body, see Orbit::find_primaries
     RLCaller primaries_update_rate_limiter{Constants::Graphics::PRIMARIES_UPDATE_TIMER};
-    std::optional<OrbitView> selection_orbit{}, hovered_orbit{};
+    std::optional<Orbit::BodyOrbit> selection_orbit{}, hovered_orbit{};
     uint64_t frame = 0;
     bool paused = false;
     std::optional<Selector::SelectionStats> cached_selection_stats{};
@@ -151,11 +144,11 @@ private:
     bool is_box_selecting() const;
     void update_hover_cursor();
     void update_primaries();
-    std::optional<OrbitView> body_orbit(uint32_t index) const;
+    std::optional<Orbit::BodyOrbit> body_orbit(uint32_t index) const;
     void draw_grid();
     void draw_bodies();
     void update_hover();
-    bool append_orbit(const OrbitView& orbit, const Orbit::ScreenTransform& transform,
+    bool append_orbit(const Orbit::BodyOrbit& orbit, const Orbit::ScreenTransform& transform,
             sf::Color color, sf::VertexArray& lines);
     void draw_named_orbits();
     void draw_selection_orbit();

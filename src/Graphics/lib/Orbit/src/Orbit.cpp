@@ -1,6 +1,7 @@
 #include "Orbit/Orbit.hpp"
 
 #include <algorithm>
+#include <cassert>
 #include <cmath>
 #include <limits>
 #include <numbers>
@@ -310,6 +311,37 @@ private:
     double last_nu1 = std::numeric_limits<double>::quiet_NaN();  // where the last chord ended
     double arc_end_px = 0.0;                                     // and how far along the orbit
 };
+
+// Whether a body at `distance` from P (of mass `mass`) is inside P's sphere of influence, P being
+// `outer_distance` from the body it orbits (of mass `outer_mass`): whether P's m / d^3 at the
+// body is at least that one's at P. False for NaNs.
+bool inside_sphere(double mass, double distance, double outer_mass, double outer_distance) {
+    return mass / (distance * distance * distance)
+           >= outer_mass / (outer_distance * outer_distance * outer_distance);
+}
+
+// Whether the named body of rank `rank` belongs to a target (`excluded` is empty for none)
+bool is_excluded(std::span<const uint8_t> excluded, uint32_t rank) {
+    return !excluded.empty() && excluded[rank] != 0;
+}
+
+// From the named body of rank `rank` up its chain of primaries, to the first body whose sphere of
+// influence a target at `target_pos` is in, short of the target's own bodies
+uint32_t climb_primaries(uint32_t rank, Orbit::Vec target_pos, std::span<const uint32_t> named,
+        std::span<const int32_t> primaries, const double* mass, const Orbit::Vec* pos,
+        std::span<const uint8_t> excluded) {
+    for (uint32_t hop = 0; hop < Orbit::MAX_PRIMARY_HOPS && primaries[rank] >= 0; hop++) {
+        const auto outer = static_cast<uint32_t>(primaries[rank]);
+        const uint32_t p = named[rank], q = named[outer];
+        if (is_excluded(excluded, outer)
+                || inside_sphere(mass[p], (pos[p] - target_pos).length(), mass[q],
+                        (pos[q] - pos[p]).length())) {
+            break;
+        }
+        rank = outer;
+    }
+    return rank;
+}
 }  // namespace
 
 
@@ -393,26 +425,6 @@ std::optional<Elements> elements(Vec rel_pos, Vec rel_vel, double mu) {
     return el;
 }
 
-uint32_t climb_primaries(uint32_t primary_rank, Vec target_pos, std::span<const uint32_t> named,
-        std::span<const int32_t> primaries, const double* mass, const Vec* pos) {
-    uint32_t rank = primary_rank;
-    for (uint32_t hop = 0; hop < MAX_PRIMARY_HOPS && primaries[rank] >= 0; hop++) {
-        const uint32_t p = named[rank], q = named[primaries[rank]];
-        if (!(mass[q] > mass[p])) {
-            break;
-        }
-        const double target_distance = (pos[p] - target_pos).length();
-        const double primary_distance = (pos[q] - pos[p]).length();
-        // Climbs only if Q's m / d^3 at P is larger, which it isn't for NaNs
-        if (!(mass[q] / (primary_distance * primary_distance * primary_distance)
-                    > mass[p] / (target_distance * target_distance * target_distance))) {
-            break;
-        }
-        rank = static_cast<uint32_t>(primaries[rank]);
-    }
-    return rank;
-}
-
 double extent(const Elements& el) {
     using namespace Constants::Graphics;
     return el.closed() ? el.apoapsis
@@ -430,23 +442,38 @@ double arc_length(const Elements& el, double nu) {
     return parabola_arc_length(el, nu);
 }
 
+std::optional<uint32_t> find_primary(double target_mass, Vec target_pos,
+        std::span<const uint32_t> named, const double* mass, const Vec* pos,
+        std::span<const uint8_t> excluded) {
+    std::optional<uint32_t> primary;
+    double best_score = 0.0;
+    for (uint32_t rank = 0; rank < named.size(); rank++) {
+        const uint32_t k = named[rank];
+        if (mass[k] < target_mass) {
+            break;  // so are the bodies after it
+        }
+        if (!(mass[k] > 0.0) || is_excluded(excluded, rank)) {
+            continue;
+        }
+        const double distance = (pos[k] - target_pos).length();
+        const double score = mass[k] / (distance * distance * distance);
+        if (distance > 0.0 && score > best_score) {
+            primary = rank;
+            best_score = score;
+        }
+    }
+    return primary;
+}
+
 std::vector<int32_t> find_primaries(std::span<const uint32_t> named, const double* mass,
         const Vec* pos) {
     std::vector<int32_t> primaries(named.size(), -1);
+    // Heaviest first: the chain a body climbs is final
     for (uint32_t rank = 0; rank < named.size(); rank++) {
         const uint32_t k = named[rank];
-        const auto primary =
-                find_primary(mass[k], pos[k], named, mass, pos, [k](uint32_t i) { return i == k; });
-        if (primary) {
-            primaries[rank] = static_cast<int32_t>(*primary);
-        }
-    }
-    // Heaviest first, so that the heavier bodies a body's chain leads to have climbed theirs
-    for (uint32_t rank = 0; rank < named.size(); rank++) {
-        const uint32_t k = named[rank];
-        if (primaries[rank] >= 0) {
-            primaries[rank] = static_cast<int32_t>(climb_primaries(
-                    static_cast<uint32_t>(primaries[rank]), pos[k], named, primaries, mass, pos));
+        if (const auto primary = find_primary(mass[k], pos[k], named.first(rank), mass, pos)) {
+            primaries[rank] = static_cast<int32_t>(
+                    climb_primaries(*primary, pos[k], named, primaries, mass, pos, {}));
         }
     }
     return primaries;
@@ -456,27 +483,30 @@ std::vector<uint32_t> find_satellites(uint32_t rank, std::span<const uint32_t> n
         std::span<const int32_t> primaries, const double* mass, const Vec* pos) {
     assert(primaries.size() == named.size());
     const uint32_t j = named[rank];
-    // A satellite's chain reaches the body from inside its sphere, whose edge has the m / d^3 of
-    // the body's primary at the body. Primaries are at least as heavy as their bodies, so a chain
-    // that reaches the body's mass elsewhere never reaches it.
-    double edge_score = 0.0;
-    if (const int32_t outer = primaries[rank]; outer >= 0) {
-        const double d = (pos[named[outer]] - pos[j]).length();
-        edge_score = mass[named[outer]] / (d * d * d);
+    // What the body orbits: its primary, or for the first of equal masses, which has none, the
+    // others, listed after it
+    int32_t outer = primaries[rank];
+    if (outer < 0) {
+        if (const auto twin = find_primary(mass[j], pos[j], named.subspan(rank + 1), mass, pos)) {
+            outer = static_cast<int32_t>(rank + 1 + *twin);
+        }
     }
+    const double outer_mass = outer >= 0 ? mass[named[outer]] : 0.0;
+    const double outer_distance = outer >= 0 ? (pos[named[outer]] - pos[j]).length() : INF;
+    // Lighter bodies are listed after it, and their chains reach it through lighter bodies: one as
+    // heavy, a twin, has its own satellites
     std::vector<uint32_t> satellites;
-    for (uint32_t other = 0; other < named.size(); other++) {
+    for (uint32_t other = rank + 1; other < named.size(); other++) {
         int32_t body = static_cast<int32_t>(other);
-        for (uint32_t hop = 0; hop < MAX_PRIMARY_HOPS && mass[named[body]] < mass[j]; hop++) {
+        for (uint32_t hop = 0; hop < MAX_PRIMARY_HOPS && body > static_cast<int32_t>(rank)
+                               && mass[named[body]] < mass[j];
+                hop++) {
             const int32_t next = primaries[body];
             if (next == static_cast<int32_t>(rank)) {
-                const double d = (pos[named[body]] - pos[j]).length();
-                if (mass[j] / (d * d * d) >= edge_score) {
-                    satellites.push_back(named[other]);
+                if (inside_sphere(mass[j], (pos[named[body]] - pos[j]).length(), outer_mass,
+                            outer_distance)) {
+                    satellites.push_back(other);
                 }
-                break;
-            }
-            if (next < 0) {
                 break;
             }
             body = next;
@@ -489,11 +519,14 @@ Target barycentre(std::span<const uint32_t> members, const double* mass, const V
         const Vec* vel) {
     assert(!members.empty());
     const uint32_t first = members.front();
-    Target target{0.0, {}, {}};
+    Target target{0.0, first, {}, {}};
     for (const uint32_t i : members) {
         target.mass += mass[i];
         target.pos += mass[i] * (pos[i] - pos[first]);
         target.vel += mass[i] * (vel[i] - vel[first]);
+        if (mass[i] > mass[target.heaviest]) {
+            target.heaviest = i;
+        }
     }
     if (target.mass > 0.0) {
         target.pos /= target.mass;
@@ -512,6 +545,48 @@ Target barycentre(std::span<const uint32_t> members, const double* mass, const V
     return target;
 }
 
+std::optional<Attractor> find_attractor(const Target& target, std::span<const uint32_t> named,
+        std::span<const int32_t> primaries, const double* mass, const Vec* pos, const Vec* vel,
+        std::span<const uint8_t> excluded) {
+    assert(primaries.size() == named.size());
+    assert(excluded.empty() || excluded.size() == named.size());
+    const std::optional<uint32_t> nearest_primary_rank =
+            find_primary(mass[target.heaviest], target.pos, named, mass, pos, excluded);
+    if (!nearest_primary_rank) {
+        return std::nullopt;
+    }
+    const uint32_t primary_rank = climb_primaries(*nearest_primary_rank, target.pos, named,
+            primaries, mass, pos, excluded);
+    const uint32_t j = named[primary_rank];
+    const double target_distance = (pos[j] - target.pos).length();
+    // The barycentre is summed relative to the primary, which keeps its precision far from the
+    // origin
+    Attractor attractor{.primary = j, .primary_rank = primary_rank, .inner_count = 0,
+            .mass = mass[j], .pos = {}, .vel = {}};
+    // Chains that reach the primary start after it
+    const auto primary = static_cast<int32_t>(primary_rank);
+    for (uint32_t rank = primary_rank + 1; rank < named.size(); rank++) {
+        int32_t body = static_cast<int32_t>(rank);
+        for (uint32_t hop = 0;
+                hop < MAX_PRIMARY_HOPS && body > primary && !is_excluded(excluded, body); hop++) {
+            if (primaries[body] == primary) {
+                if ((pos[named[body]] - pos[j]).length() < target_distance) {
+                    const uint32_t k = named[rank];
+                    attractor.inner_count++;
+                    attractor.mass += mass[k];
+                    attractor.pos += mass[k] * (pos[k] - pos[j]);
+                    attractor.vel += mass[k] * (vel[k] - vel[j]);
+                }
+                break;
+            }
+            body = primaries[body];
+        }
+    }
+    attractor.pos = pos[j] + attractor.pos / attractor.mass;
+    attractor.vel = vel[j] + attractor.vel / attractor.mass;
+    return attractor;
+}
+
 bool retrograde(double angular_momentum, const Attractor& attractor,
         std::span<const uint32_t> named, std::span<const int32_t> primaries, const Vec* pos,
         const Vec* vel) {
@@ -523,6 +598,33 @@ bool retrograde(double angular_momentum, const Attractor& attractor,
     const double primary_angular_momentum = (pos[j] - pos[k]).cross(vel[j] - vel[k]);
     return primary_angular_momentum != 0.0
            && (primary_angular_momentum > 0.0) != (angular_momentum > 0.0);
+}
+
+std::optional<BodyOrbit> body_orbit(uint32_t index, std::optional<uint32_t> rank,
+        std::span<const uint32_t> named, std::span<const int32_t> primaries, const double* mass,
+        const Vec* pos, const Vec* vel) {
+    std::vector<uint32_t> members{index};
+    std::vector<uint8_t> excluded(named.size(), 0);
+    if (rank) {
+        excluded[*rank] = 1;
+        for (const uint32_t satellite : find_satellites(*rank, named, primaries, mass, pos)) {
+            members.push_back(named[satellite]);
+            excluded[satellite] = 1;
+        }
+    }
+    const Target target = barycentre(members, mass, pos, vel);
+    const auto attractor = find_attractor(target, named, primaries, mass, pos, vel, excluded);
+    if (!attractor) {
+        return std::nullopt;
+    }
+    const auto el = elements(target.pos - attractor->pos, target.vel - attractor->vel,
+            Constants::Simulation::G * (target.mass + attractor->mass));
+    if (!el) {
+        return std::nullopt;
+    }
+    return BodyOrbit{.attractor = *attractor, .elements = *el,
+            .retrograde = retrograde(el->angular_momentum, *attractor, named, primaries, pos, vel),
+            .satellite_count = static_cast<uint32_t>(members.size() - 1)};
 }
 
 void trace(const Elements& el, Vec focus, const ScreenTransform& transform,
