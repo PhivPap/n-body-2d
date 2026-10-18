@@ -4,17 +4,17 @@
 #include <charconv>
 #include <cmath>
 
-#include "AssetManager/AssetManager.hpp"
 #include "Constants/Constants.hpp"
 #include "Logger/Logger.hpp"
 #include "StopWatch/StopWatch.hpp"
+#include "Text/Text.hpp"
 
 
 namespace {
 // An id as a label: decoded as UTF-8, and cut to LABEL_MAX_CHARS code points
 sf::String label_string(const std::string& id) {
     using Constants::Graphics::LABEL_MAX_CHARS;
-    sf::String label = sf::String::fromUtf8(id.begin(), id.end());
+    sf::String label = Text::from_utf8(id);
     if (label.getSize() > LABEL_MAX_CHARS) {
         label = label.substring(0, LABEL_MAX_CHARS - 3) + "...";
     }
@@ -23,8 +23,7 @@ sf::String label_string(const std::string& id) {
 
 sf::Text make_label(const std::string& id) {
     using namespace Constants::Graphics;
-    sf::Text text(AssetManager::instance().get<sf::Font>("fonts/UbuntuMono-R.ttf"),
-            label_string(id), LABEL_CHARACTER_SIZE);
+    sf::Text text(Text::font(), label_string(id), LABEL_CHARACTER_SIZE);
     text.setOutlineThickness(1.f);
     text.setOutlineColor(LABEL_OUTLINE_COLOR);
     return text;

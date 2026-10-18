@@ -4,11 +4,10 @@
 #include <algorithm>
 #include <numbers>
 
-#include "AssetManager/AssetManager.hpp"
 #include "Constants/Constants.hpp"
-#include "Logger/Distance.hpp"
 #include "Logger/Logger.hpp"
 #include "Logger/Time.hpp"
+#include "Text/Text.hpp"
 
 
 constexpr std::string_view body_vertex_shader = R"glsl(
@@ -90,10 +89,8 @@ void find_bodies_near(HeaviestBody& heaviest, sf::Vector2f point, float radius,
           window(sf::VideoMode(sf::Vector2u(graphics_cfg.resolution)), "N-Body Sim"),
           vp(sf::Vector2f(graphics_cfg.resolution), graphics_cfg.pixel_scale),
           selector(bodies, body_positions_cache, body_vertex_array),
-          tooltip_text(AssetManager::instance().get<sf::Font>("fonts/UbuntuMono-R.ttf"), "",
-                  Constants::Graphics::TOOLTIP_CHARACTER_SIZE),
-          apsis_label(AssetManager::instance().get<sf::Font>("fonts/UbuntuMono-R.ttf"), "",
-                  Constants::Graphics::APSIS_CHARACTER_SIZE) {
+          tooltip_text(Text::font(), "", Constants::Graphics::TOOLTIP_CHARACTER_SIZE),
+          apsis_label(Text::font(), "", Constants::Graphics::APSIS_CHARACTER_SIZE) {
     window.setFramerateLimit(graphics_cfg.fps);
     window.setVerticalSyncEnabled(graphics_cfg.vsync_enabled);
 
@@ -568,20 +565,19 @@ void Graphics::draw_tooltip() {
         return;
     }
     const uint32_t index = *hovered_body;
-    std::string text = fmt::format("{}\nMass: {:.4g}kg\n", bodies.id(index), bodies.mass(index));
+    std::string text = fmt::format("{}\nMass: {}\n", bodies.id(index),
+            InspectorFormat::mass(bodies.mass(index)));
     if (const auto orbit = body_orbit(index)) {
-        const Orbit::Attractor& attractor = orbit->attractor;
-        text += fmt::format("Around {}{}: {}, {}/s", bodies.id(attractor.primary),
-                attractor.inner_count > 0 ? fmt::format(" (+{} inner)", attractor.inner_count) : "",
-                Log::Distance::from(orbit->elements.distance),
-                Log::Distance::from(orbit->elements.speed));
+        text += fmt::format("Around {}: {}, {}",
+                InspectorFormat::attractor(bodies.id(orbit->attractor.primary),
+                        orbit->attractor.inner_count),
+                InspectorFormat::distance(orbit->elements.distance),
+                InspectorFormat::speed(orbit->elements.speed));
     }
     else {
-        const double speed = bodies.vel(index).length();
-        text += fmt::format("Speed: {}",
-                std::isfinite(speed) ? fmt::format("{}/s", Log::Distance::from(speed)) : "-");
+        text += fmt::format("Speed: {}", InspectorFormat::speed(bodies.vel(index).length()));
     }
-    tooltip_text.setString(sf::String::fromUtf8(text.begin(), text.end()));
+    tooltip_text.setString(Text::from_utf8(text));
 
     // Below right of the cursor, or left of it or above it if it doesn't fit there
     const sf::FloatRect bounds = tooltip_text.getLocalBounds();

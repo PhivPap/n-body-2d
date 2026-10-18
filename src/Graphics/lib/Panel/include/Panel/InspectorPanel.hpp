@@ -1,7 +1,18 @@
 #pragma once
 
+#include <string_view>
+
 #include "Panel.hpp"
 
+
+// Values as the inspector shows them, and the hover tooltip with it: "-" if they aren't finite
+namespace InspectorFormat {
+std::string distance(double m);
+std::string speed(double m_s);
+std::string time(double s);
+std::string mass(double kg);
+std::string attractor(std::string_view id, uint32_t inner_count);  // "Mars (+1 inner)"
+}  // namespace InspectorFormat
 
 // The selection: a single body and its orbit, or several bodies as a whole. Values are never NaN,
 // which would never compare equal and re-render the panel every frame; others that aren't finite

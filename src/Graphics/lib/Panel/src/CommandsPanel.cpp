@@ -13,15 +13,13 @@ void CommandsPanel::set_panel_text() {
  C:               Center on selection CoM
  O:               Toggle selection orbit
  A:               Toggle named orbits
- L:               Toggle labels
- M:               Toggle mass-scaled markers
+ L/M:             Toggle labels/mass sizes
  F1-F5:           Toggle panels
  Left/Right:      Decrease/Increase timestep
  Up/Down:         Increase/Decrease body size
  Scroll:          Zoom view
  LClick & Drag:   Pan view
- RClick:          Select body
- RClick & Drag:   Select bodies
+ RClick (& Drag): Select body (bodies)
  Ctrl Left/Right: Decrease/Increase trails
 )";
     text.setString(txt);
