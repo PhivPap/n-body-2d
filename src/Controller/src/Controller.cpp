@@ -41,7 +41,7 @@ void Controller::handle_events(sf::RenderWindow& window) {
                 graphics.grab_view();
             }
             else if (mouse_clicked->button == sf::Mouse::Button::Right) {
-                graphics.grab_select();
+                graphics.grab_select(mouse_clicked->position);
             }
         }
         else if (const auto* mouse_released = event->getIf<sf::Event::MouseButtonReleased>()) {
@@ -49,7 +49,7 @@ void Controller::handle_events(sf::RenderWindow& window) {
                 graphics.release_view();
             }
             else if (mouse_released->button == sf::Mouse::Button::Right) {
-                graphics.release_select();
+                graphics.release_select(mouse_released->position);
             }
         }
         else if (const auto* key_pressed = event->getIf<sf::Event::KeyPressed>()) {

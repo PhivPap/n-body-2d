@@ -40,10 +40,11 @@ public:
     void zoom_view(double delta);
     void grab_view();
     void release_view();
-    // A right press released within CLICK_MAX_DRAG_PX is a click, which selects the body under the
-    // cursor (or clears the selection on empty space); dragged further, it selects a box
-    void grab_select();
-    void release_select(bool skip_select = false);
+    // A right press released within CLICK_MAX_DRAG_PX is a click, which selects the body drawn
+    // under the press (or clears the selection on empty space); dragged further, it selects a box.
+    // `position`: the event's.
+    void grab_select(sf::Vector2i position);
+    void release_select(sf::Vector2i position);
     void body_size_increase();
     void body_size_decrease();
     void trails_length_increase();
@@ -89,6 +90,9 @@ private:
     bool scale_named_by_mass = graphics_cfg.named_bodies_scale_by_mass;
     std::chrono::duration<double> trails_fade = graphics_cfg.trails_fade;
     std::vector<sf::Vector2<double>> body_positions_cache;
+    // Velocities read right after the positions, for the bodies whose orbits are worked out this
+    // frame: see snapshot_velocities()
+    std::vector<sf::Vector2<double>> body_velocities_cache;
     StopWatch sw;
     sf::VertexArray body_vertex_array;
     sf::RenderWindow window;
@@ -99,20 +103,18 @@ private:
     NamedBodies named_bodies{bodies};
     std::vector<int32_t> primaries;  // per named body, see Orbit::find_primaries
     RLCaller primaries_update_rate_limiter{Constants::Graphics::PRIMARIES_UPDATE_TIMER};
-    std::optional<Orbit::BodyOrbit> selection_orbit{}, hovered_orbit{};
+    std::optional<Orbit::BodyOrbit> selection_orbit{};
     uint64_t frame = 0;
     bool paused = false;
     std::optional<Selector::SelectionStats> cached_selection_stats{};
+    // The selection changed: the inspector shows it once the frame has worked out its orbit
+    bool inspector_update_pending = false;
     std::optional<sf::Vector2i> opt_view_grabbed_pos{};
     std::optional<sf::Vector2i> opt_select_grabbed_pos{};
-    // Right press: how far the cursor went from it, and the body under the cursor at the press
-    float select_grab_max_drag_px = 0.f;
-    std::optional<uint32_t> click_candidate{};
-    // Hovering: the cursor if bodies under it are looked for this frame, the heaviest body within
-    // HOVER_RADIUS_PX that draw_bodies() found, and the hovered body
+    float select_grab_max_drag_px = 0.f;  // how far the cursor went from the right press
+    // Hovering: the cursor if bodies under it are looked for this frame, and the hovered body
     bool cursor_in_window = true;
     std::optional<sf::Vector2f> hover_cursor{};
-    std::optional<uint32_t> heaviest_body_in_hover_radius{};
     std::optional<uint32_t> hovered_body{};
     sf::Text tooltip_text;
     sf::RectangleShape tooltip_box{};
@@ -142,12 +144,18 @@ private:
     void pan_if_view_grabbed();
     void update_select_drag();
     bool is_box_selecting() const;
+    void cancel_select();
     void update_hover_cursor();
+    void snapshot_velocities();
     void update_primaries();
     std::optional<Orbit::BodyOrbit> body_orbit(uint32_t index) const;
+    float hover_radius() const;
+    std::optional<uint32_t> transform_bodies();
+    std::optional<uint32_t> pick_body(sf::Vector2f point,
+            std::optional<uint32_t> heaviest_near) const;
+    void update_hover(std::optional<uint32_t> heaviest_near_cursor);
     void draw_grid();
     void draw_bodies();
-    void update_hover();
     bool append_orbit(const Orbit::BodyOrbit& orbit, const ScreenTransform& transform,
             sf::Color color, sf::VertexArray& lines);
     void draw_named_orbits();
@@ -156,7 +164,6 @@ private:
     void update_selection_tracking();
     void update_selection_orbit();
     void update_inspector_panel();
-    void select_body(uint32_t index);
     void draw_selection_overlay();
     void draw_hover_ring();
     void draw_tooltip();

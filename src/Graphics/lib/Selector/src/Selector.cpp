@@ -57,6 +57,11 @@ uint32_t Selector::num_selected() const {
     return static_cast<uint32_t>(selected_body_indices.size());
 }
 
+std::optional<uint32_t> Selector::selected_body() const {
+    return selected_body_indices.size() == 1 ? std::optional(selected_body_indices.front())
+                                             : std::nullopt;
+}
+
 bool Selector::is_selected(uint32_t index) const {
     return mask[index] != 0;
 }

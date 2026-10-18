@@ -1,5 +1,6 @@
 #pragma once
 
+#include <optional>
 #include <vector>
 
 #include "Body/Body.hpp"
@@ -24,6 +25,7 @@ public:
     void set_show(bool show);
     bool has_selection() const;
     uint32_t num_selected() const;
+    std::optional<uint32_t> selected_body() const;  // the selection's only body
     bool is_selected(uint32_t index) const;
     const std::vector<uint8_t>& selection_mask() const;  // per body, 1 = selected
     SelectionStats compute_stats() const;
