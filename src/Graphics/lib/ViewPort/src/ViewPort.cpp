@@ -67,7 +67,7 @@ void ViewPort::center_on_coords(sf::Vector2<double> coords) {
 }
 
 sf::Vector2f ViewPort::coords_to_pos_on_viewport(const sf::Vector2<double>& coords) const {
-    return sf::Vector2f((coords - rect.position) * pixels_per_meter);
+    return sf::Vector2f(screen_transform().to_screen(coords));
 }
 
 sf::Vector2<double> ViewPort::pos_on_viewport_to_coords(const sf::Vector2f& pos) const {
@@ -83,6 +83,6 @@ sf::Rect<double> ViewPort::get_rect() const {
     return rect;
 }
 
-double ViewPort::get_pixels_per_meter() const {
-    return pixels_per_meter;
+ScreenTransform ViewPort::screen_transform() const {
+    return {rect.position, pixels_per_meter};
 }

@@ -316,7 +316,7 @@ void Graphics::update_hover() {
 // Appends an osculating orbit around its attractor's barycentre to `lines`, dashed, unless it is
 // too small to see. It is traced in double precision and clipped to the window, so it stays exact
 // at any zoom.
-bool Graphics::append_orbit(const Orbit::BodyOrbit& orbit, const Orbit::ScreenTransform& transform,
+bool Graphics::append_orbit(const Orbit::BodyOrbit& orbit, const ScreenTransform& transform,
         sf::Color color, sf::VertexArray& lines) {
     using namespace Constants::Graphics;
     const Orbit::Elements& el = orbit.elements;
@@ -340,7 +340,7 @@ void Graphics::draw_named_orbits() {
     if (selection_show_orbit && selection_orbit) {
         selected = cached_selection_stats->heaviest;
     }
-    const Orbit::ScreenTransform transform{vp.get_rect().position, vp.get_pixels_per_meter()};
+    const ScreenTransform transform = vp.screen_transform();
     named_orbit_lines.clear();
     for (const uint32_t index : named_bodies.indices()) {
         if (index != selected) {
@@ -361,7 +361,7 @@ void Graphics::draw_selection_orbit() {
     }
     const Orbit::Elements& el = selection_orbit->elements;
     const Orbit::Vec focus = selection_orbit->attractor.pos;
-    const Orbit::ScreenTransform transform{vp.get_rect().position, vp.get_pixels_per_meter()};
+    const ScreenTransform transform = vp.screen_transform();
     orbit_lines.clear();
     if (!append_orbit(*selection_orbit, transform, ORBIT_COLOR, orbit_lines)) {
         return;
