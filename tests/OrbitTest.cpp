@@ -248,7 +248,7 @@ void test_nearly_radial() {
 
     // Drawn as a line from the focus out to the apoapsis, or as far out as open orbits go, and back
     const double ppm = 1e-9;
-    const Orbit::ScreenTransform transform{-Vec(800.0, 450.0) / ppm, ppm};
+    const ScreenTransform transform{-Vec(800.0, 450.0) / ppm, ppm};
     for (const Vec vel : {Vec(1e3, 1e-6), Vec(-6e4, 1e-6)}) {
         const Orbit::Elements el = elements({r, 0.0}, vel);
         std::vector<Orbit::Segment> segments;
@@ -580,7 +580,7 @@ bool in_grown_window(sf::Vector2f p) {
 }
 
 std::vector<Orbit::Segment> trace(const Orbit::Elements& el,
-        const Orbit::ScreenTransform& transform) {
+        const ScreenTransform& transform) {
     std::vector<Orbit::Segment> segments;
     Orbit::trace(el, {0.0, 0.0}, transform, WINDOW, segments, TOLERANCE_PX, MARGIN_PX);
     return segments;
@@ -590,7 +590,7 @@ void test_trace_visible() {
     const Orbit::Elements el = ellipse();
     // The ellipse's centre, at (-a e, 0), in the middle of the window
     const double ppm = 2e-9;
-    const Orbit::ScreenTransform transform{Vec(-1e11, 0.0) - Vec(WINDOW) / 2.0 / ppm, ppm};
+    const ScreenTransform transform{Vec(-1e11, 0.0) - Vec(WINDOW) / 2.0 / ppm, ppm};
     const auto segments = trace(el, transform);
     CHECK(!segments.empty() && segments.size() < 2000);
 
@@ -628,7 +628,7 @@ void test_trace_visible() {
 void test_trace_deep_zoom() {
     const Orbit::Elements el = ellipse();
     const double ppm = 1.0;  // 1 m per pixel
-    const Orbit::ScreenTransform transform{el.position_at(1.0) - Vec(WINDOW) / 2.0 / ppm, ppm};
+    const ScreenTransform transform{el.position_at(1.0) - Vec(WINDOW) / 2.0 / ppm, ppm};
     const auto segments = trace(el, transform);
     CHECK(!segments.empty() && segments.size() < 200);
 
@@ -653,7 +653,7 @@ void test_trace_deep_zoom() {
 }
 
 void test_trace_off_screen() {
-    const Orbit::ScreenTransform transform{{1e13, 1e13}, 2e-9};
+    const ScreenTransform transform{{1e13, 1e13}, 2e-9};
     CHECK(trace(ellipse(), transform).empty());
 }
 
@@ -713,8 +713,8 @@ void test_dashes_stay_put() {
     const Orbit::Elements el = ellipse();
     const double ppm = 1e-7;  // the orbit is 1e5 px around
     const Vec shift(400.0, 150.0);
-    const Orbit::ScreenTransform view{el.position_at(1.0) - Vec(WINDOW) / 2.0 / ppm, ppm};
-    const Orbit::ScreenTransform moved{view.origin + shift / ppm, ppm};
+    const ScreenTransform view{el.position_at(1.0) - Vec(WINDOW) / 2.0 / ppm, ppm};
+    const ScreenTransform moved{view.origin + shift / ppm, ppm};
     sf::VertexArray dashes(sf::PrimitiveType::Lines), moved_dashes(sf::PrimitiveType::Lines);
     Orbit::append_dashes(trace(el, view), 8.f, 6.f, sf::Color::White, dashes);
     Orbit::append_dashes(trace(el, moved), 8.f, 6.f, sf::Color::White, moved_dashes);

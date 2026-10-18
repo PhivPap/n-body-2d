@@ -251,7 +251,7 @@ std::optional<std::pair<Orbit::Vec, Orbit::Vec>> clip(Orbit::Vec a, Orbit::Vec b
 // Refines the conic's arcs into flat enough chords, skipping arcs that can't reach the window
 class Tracer {
 public:
-    Tracer(const Orbit::Elements& el, Orbit::Vec focus, const Orbit::ScreenTransform& transform,
+    Tracer(const Orbit::Elements& el, Orbit::Vec focus, const ScreenTransform& transform,
             sf::Vector2f window_size, double tolerance_px, double margin_px,
             std::vector<Orbit::Segment>& out)
             : el(el), focus(focus), transform(transform), lo(-margin_px, -margin_px),
@@ -304,7 +304,7 @@ private:
 
     const Orbit::Elements& el;
     const Orbit::Vec focus;
-    const Orbit::ScreenTransform& transform;
+    const ScreenTransform& transform;
     const Orbit::Vec lo, hi;  // the window grown by the margin
     const double tolerance_px;
     std::vector<Orbit::Segment>& out;

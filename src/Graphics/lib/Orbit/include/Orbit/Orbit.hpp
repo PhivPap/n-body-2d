@@ -7,6 +7,7 @@
 
 #include "SFML/Graphics.hpp"
 #include "SFML/System.hpp"
+#include "ViewPort/ViewPort.hpp"
 
 
 // Two-body orbits of bodies around the named bodies they orbit, and the conics they trace on
@@ -142,16 +143,6 @@ struct BodyOrbit {
 std::optional<BodyOrbit> body_orbit(uint32_t index, std::optional<uint32_t> rank,
         std::span<const uint32_t> named, std::span<const int32_t> primaries, const double* mass,
         const Vec* pos, const Vec* vel);
-
-// World (m) to window pixels, what ViewPort::coords_to_pos_on_viewport does, in double precision
-struct ScreenTransform {
-    Vec origin;               // world position of the window's top-left corner
-    double pixels_per_meter;  // uniform scale
-
-    Vec to_screen(Vec world) const {
-        return (world - origin) * pixels_per_meter;
-    }
-};
 
 struct Segment {
     sf::Vector2f a, b;

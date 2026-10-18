@@ -6,6 +6,16 @@
 #include "SFML/System.hpp"
 
 
+// World (m) to window pixels, in double precision
+struct ScreenTransform {
+    sf::Vector2<double> origin;  // world position of the window's top-left corner
+    double pixels_per_meter;     // uniform scale
+
+    sf::Vector2<double> to_screen(sf::Vector2<double> world) const {
+        return (world - origin) * pixels_per_meter;
+    }
+};
+
 class ViewPort {
 public:
     enum class Zoom { IN, OUT };
@@ -21,7 +31,8 @@ public:
     sf::Vector2<double> pos_on_viewport_to_coords(const sf::Vector2f& pos) const;
     sf::Vector2f get_window_res() const;
     sf::Rect<double> get_rect() const;
-    double get_pixels_per_meter() const;
+    // What coords_to_pos_on_viewport() does, before it rounds to float
+    ScreenTransform screen_transform() const;
 
 private:
     sf::Vector2f window_res;

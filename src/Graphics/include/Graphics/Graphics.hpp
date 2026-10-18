@@ -148,7 +148,7 @@ private:
     void draw_grid();
     void draw_bodies();
     void update_hover();
-    bool append_orbit(const Orbit::BodyOrbit& orbit, const Orbit::ScreenTransform& transform,
+    bool append_orbit(const Orbit::BodyOrbit& orbit, const ScreenTransform& transform,
             sf::Color color, sf::VertexArray& lines);
     void draw_named_orbits();
     void draw_selection_orbit();
