@@ -14,7 +14,7 @@ add_test(NAME input-output COMMAND test-input-output)
 add_executable(test-orbit ${CMAKE_CURRENT_LIST_DIR}/OrbitTest.cpp)
 target_link_libraries(test-orbit PRIVATE lib-graphics-orbit lib-graphics-named-bodies
         lib-input-output lib-constants lib-logger)
-add_test(NAME orbital-elements
+add_test(NAME kepler
         COMMAND test-orbit ${CMAKE_SOURCE_DIR}/scenarios/solar-system.csv)
 
 add_executable(test-named-bodies ${CMAKE_CURRENT_LIST_DIR}/NamedBodiesTest.cpp)
