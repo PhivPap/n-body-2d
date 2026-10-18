@@ -11,9 +11,7 @@
 namespace {
 constexpr double PI = std::numbers::pi;
 constexpr double INF = std::numeric_limits<double>::infinity();
-// Open orbits closer than this to parabolic use Barker's equation for the time to periapsis
-constexpr double BARKER_MAX_EXCESS_ECCENTRICITY = 1e-6;
-// Below this eccentricity the periapsis direction is noise, and the current direction is used
+// Below this eccentricity the periapsis direction is noise: the body is taken to be at it
 constexpr double CIRCULAR_ECCENTRICITY = 1e-12;
 // Lengths along an orbit beyond this many pixels can't place dashes to the pixel in double
 // precision: past it, dashes start wherever a visible stretch of the orbit does
@@ -22,6 +20,12 @@ constexpr double MAX_ANCHORED_ARC_PX = 1e14;
 // +1 if the motion is counter-clockwise in world coordinates (clockwise on screen), else -1
 double motion_sign(const Orbit::Elements& el) {
     return el.angular_momentum >= 0.0 ? 1.0 : -1.0;
+}
+
+// 1 - e, from p = a (1 - e^2): > 0 for closed orbits, 0 for parabolas, < 0 for open orbits. Unlike
+// e, it keeps its precision near e = 1, where nearly radial orbits have e = 1 to double precision.
+double one_minus_e(const Orbit::Elements& el) {
+    return el.semi_latus_rectum / (el.semi_major_axis * (1.0 + el.eccentricity));
 }
 
 // x - sin(x) and sinh(x) - x, without the cancellation of small x: they keep Kepler's equations
@@ -50,26 +54,34 @@ double sinh_minus_x(double x) {
     return sum;
 }
 
-// Time to the next periapsis on a closed orbit, from Kepler's equation
-double closed_time_to_periapsis(const Orbit::Elements& el) {
-    const double e = el.eccentricity, nu = el.true_anomaly;
-    const double E = 2.0 * std::atan2(std::sqrt(1.0 - e) * std::sin(nu / 2.0),
-                                 std::sqrt(1.0 + e) * std::cos(nu / 2.0));
-    const double M = (1.0 - e) * std::sin(E) + x_minus_sin(E);  // E - e sin(E), in [-pi, pi]
-    return (M <= 0.0 ? -M : 2.0 * PI - M) / (2.0 * PI) * el.period;
-}
-
-// Time to the periapsis of an open orbit that hasn't reached it yet (nu < 0)
-double open_time_to_periapsis(const Orbit::Elements& el) {
-    const double e = el.eccentricity, nu = el.true_anomaly, p = el.semi_latus_rectum;
-    if (e - 1.0 <= BARKER_MAX_EXCESS_ECCENTRICITY) {
-        const double D = std::tan(nu / 2.0);
-        return -0.5 * p * std::sqrt(p / el.mu) * (D + D * D * D / 3.0);
+// Time to the next periapsis (inf if leaving on an open orbit), from Kepler's equation, with the
+// eccentric anomaly from the radial motion `rv` = r.v rather than from the true anomaly, which
+// can't place a nearly radial body. Barker's equation only for exact parabolas: near them, it is
+// off by (e - 1) tan^2(nu / 2), which grows without bound far out.
+double time_to_periapsis(const Orbit::Elements& el, double rv) {
+    const double e = el.eccentricity, a = el.semi_major_axis, p = el.semi_latus_rectum;
+    const double mu = el.mu;
+    if (el.closed()) {
+        if (e < CIRCULAR_ECCENTRICITY) {
+            return 0.0;  // at its periapsis, by convention
+        }
+        // e sin(E) = r.v / sqrt(mu a) and e cos(E) = 1 - r / a
+        const double E = std::atan2(rv / std::sqrt(mu * a), 1.0 - el.distance / a);
+        const double M = one_minus_e(el) * std::sin(E) + x_minus_sin(E);  // E - e sin(E)
+        return (M <= 0.0 ? std::abs(M) : 2.0 * PI - M) / (2.0 * PI) * el.period;
     }
-    const double F = 2.0 * std::atanh(std::sqrt((e - 1.0) / (e + 1.0)) * std::tan(nu / 2.0));
-    const double M = (e - 1.0) * std::sinh(F) + sinh_minus_x(F);  // e sinh(F) - F
-    const double minus_a = -el.semi_major_axis;
-    return -M * minus_a * std::sqrt(minus_a / el.mu);
+    if (rv >= 0.0) {
+        return INF;
+    }
+    if (a == INF) {
+        const double D = rv / std::sqrt(mu * p);  // tan(nu / 2)
+        return -0.5 * p * std::sqrt(p / mu) * (D + D * D * D / 3.0);
+    }
+    // e sinh(F) = r.v / sqrt(-mu a)
+    const double minus_a = -a;
+    const double F = std::asinh(rv / (e * std::sqrt(mu * minus_a)));
+    const double M = -one_minus_e(el) * std::sinh(F) + sinh_minus_x(F);  // e sinh(F) - F
+    return -M * minus_a * std::sqrt(minus_a / mu);
 }
 
 // Carlson's symmetric elliptic integrals R_F(x, y, z) and R_D(x, y, z), for x, y, z >= 0 with at
@@ -128,8 +140,8 @@ double carlson_rd(double x, double y, double z) {
 // and for 0 <= E <= pi/2 a length of p sin E (R_F(X) + (e^2 / 3) sin^2 E R_D(X)), with
 // X = (k cos^2 E, k + e^2 sin^2 E, k) and k = 1 - e^2 (DLMF 19.25.9 with a negative parameter)
 double ellipse_arc_length(const Orbit::Elements& el, double nu) {
-    const double e = el.eccentricity, p = el.semi_latus_rectum;
-    const double k = (1.0 - e) * (1.0 + e);
+    const double e = el.eccentricity, p = el.semi_latus_rectum, one_minus = one_minus_e(el);
+    const double k = one_minus * (1.0 + e);
     const auto from_periapsis = [e, p, k](double E) {
         const double s = std::sin(E), c = std::cos(E);
         const double x = k * c * c, y = k + e * e * s * s;
@@ -138,7 +150,7 @@ double ellipse_arc_length(const Orbit::Elements& el, double nu) {
     const double quarter = from_periapsis(PI / 2.0);  // of the perimeter
     const double turns = std::floor((nu + PI) / (2.0 * PI));
     const double nu_in_turn = nu - 2.0 * PI * turns;  // [-pi, pi)
-    const double E = std::abs(2.0 * std::atan2(std::sqrt(1.0 - e) * std::sin(nu_in_turn / 2.0),
+    const double E = std::abs(2.0 * std::atan2(std::sqrt(one_minus) * std::sin(nu_in_turn / 2.0),
                                      std::sqrt(1.0 + e) * std::cos(nu_in_turn / 2.0)));
     // Symmetric about E = pi/2
     const double length =
@@ -150,9 +162,9 @@ double ellipse_arc_length(const Orbit::Elements& el, double nu) {
 // ds = |a| sqrt(k + e^2 sinh^2 F) dF with k = e^2 - 1. Through tan(psi) = sinh F and by parts, its
 // length is p (sinh F sqrt(k + tanh^2 F) / k - (tanh^3 F / 3) R_D(k / cosh^2 F, k + tanh^2 F, k)).
 double hyperbola_arc_length(const Orbit::Elements& el, double nu) {
-    const double e = el.eccentricity, p = el.semi_latus_rectum;
-    const double k = (e - 1.0) * (e + 1.0);
-    const double F = 2.0 * std::atanh(std::sqrt((e - 1.0) / (e + 1.0)) * std::tan(nu / 2.0));
+    const double e = el.eccentricity, p = el.semi_latus_rectum, e_minus_1 = -one_minus_e(el);
+    const double k = e_minus_1 * (e + 1.0);
+    const double F = 2.0 * std::atanh(std::sqrt(e_minus_1 / (e + 1.0)) * std::tan(nu / 2.0));
     const double t = std::tanh(F), c = std::cosh(F);
     const double y = k + t * t;
     return p * (std::sinh(F) * std::sqrt(y) / k - t * t * t / 3.0 * carlson_rd(k / (c * c), y, k));
@@ -164,9 +176,12 @@ double parabola_arc_length(const Orbit::Elements& el, double nu) {
     return el.semi_latus_rectum / 2.0 * (t * std::sqrt(1.0 + t * t) + std::asinh(t));
 }
 
-// The orbit's radius at true anomaly nu
+// The orbit's radius at true anomaly nu, from 1 + e cos(nu) = (1 - e) + 2 e cos^2(nu / 2), which
+// unlike the left side keeps nearly radial orbits' apoapses and asymptotes
 double radius_at(const Orbit::Elements& el, double nu) {
-    return el.semi_latus_rectum / (1.0 + el.eccentricity * std::cos(nu));
+    const double half_cos = std::cos(nu / 2.0);
+    return el.semi_latus_rectum
+           / (one_minus_e(el) + 2.0 * el.eccentricity * half_cos * half_cos);
 }
 
 struct Box {
@@ -246,11 +261,15 @@ public:
         return transform.to_screen(focus + el.position_at(nu));
     }
 
-    void refine(double nu0, double nu1, Orbit::Vec p0, Orbit::Vec p1, uint32_t depth) {
+    // Whether the arc nu0..nu1 may reach the window: false for boxes that aren't finite
+    bool reaches_window(double nu0, double nu1) const {
         const Box box = sector_box(el, focus, nu0, nu1);
         const Orbit::Vec box_lo = transform.to_screen(box.lo), box_hi = transform.to_screen(box.hi);
-        // Also skips boxes that aren't finite
-        if (!(box_hi.x >= lo.x && box_lo.x <= hi.x && box_hi.y >= lo.y && box_lo.y <= hi.y)) {
+        return box_hi.x >= lo.x && box_lo.x <= hi.x && box_hi.y >= lo.y && box_lo.y <= hi.y;
+    }
+
+    void refine(double nu0, double nu1, Orbit::Vec p0, Orbit::Vec p1, uint32_t depth) {
+        if (!reaches_window(nu0, nu1)) {
             return;
         }
         const double nu_mid = 0.5 * (nu0 + nu1);
@@ -313,35 +332,52 @@ std::optional<Elements> elements(Vec rel_pos, Vec rel_vel, double mu) {
     const double speed_squared = rel_vel.lengthSquared();
     el.speed = std::sqrt(speed_squared);
     el.angular_momentum = rel_pos.cross(rel_vel);
-    const Vec e_vec =
-            ((speed_squared - mu / distance) * rel_pos - rel_pos.dot(rel_vel) * rel_vel) / mu;
-    const double e = e_vec.length(), p = el.angular_momentum * el.angular_momentum / mu;
+    const double rv = rel_pos.dot(rel_vel);
+    const Vec e_vec = ((speed_squared - mu / distance) * rel_pos - rv * rel_vel) / mu;
+    const double p = el.angular_momentum * el.angular_momentum / mu;
     if (!(p > 0.0)) {
         return std::nullopt;
     }
+    // The energy, not e, tells closed orbits from open ones and gives the semi-major axis: nearly
+    // radial orbits have e = 1 to double precision, bound or not, and elsewhere near e = 1 the
+    // energy's sign is as reliable as e's at the periapsis, and more so farther out
+    const double energy = speed_squared / 2.0 - mu / distance;
+    double e = e_vec.length();
+    if (energy < 0.0) {
+        e = std::min(e, std::nextafter(1.0, 0.0));
+    }
+    else if (energy > 0.0) {
+        e = std::max(e, std::nextafter(1.0, 2.0));
+    }
+    else {
+        e = 1.0;
+    }
     el.eccentricity = e;
     el.semi_latus_rectum = p;
-    // Rather than -mu / (2 x energy), which loses its sign near e = 1
-    el.semi_major_axis = e == 1.0 ? INF : p / ((1.0 - e) * (1.0 + e));
+    el.semi_major_axis = energy == 0.0 ? INF : -mu / (2.0 * energy);
     el.periapsis = p / (1.0 + e);
-    el.apoapsis = e < 1.0 ? p / (1.0 - e) : INF;
-    el.periapsis_angle = e < CIRCULAR_ECCENTRICITY ? std::atan2(rel_pos.y, rel_pos.x)
-                                                   : std::atan2(e_vec.y, e_vec.x);
-    const double cos_w = std::cos(el.periapsis_angle), sin_w = std::sin(el.periapsis_angle);
-    const double nu = motion_sign(el) * std::atan2(cos_w * rel_pos.y - sin_w * rel_pos.x,
-                                                cos_w * rel_pos.x + sin_w * rel_pos.y);
-    el.true_anomaly = nu == -PI ? PI : nu;
+    el.apoapsis = el.closed() ? el.semi_major_axis * (1.0 + e) : INF;
+    if (e < CIRCULAR_ECCENTRICITY) {
+        el.periapsis_angle = std::atan2(rel_pos.y, rel_pos.x);
+        el.true_anomaly = 0.0;
+    }
+    else {
+        el.periapsis_angle = std::atan2(e_vec.y, e_vec.x);
+        const double cos_w = std::cos(el.periapsis_angle), sin_w = std::sin(el.periapsis_angle);
+        const double nu = motion_sign(el) * std::atan2(cos_w * rel_pos.y - sin_w * rel_pos.x,
+                                                    cos_w * rel_pos.x + sin_w * rel_pos.y);
+        el.true_anomaly = nu == -PI ? PI : nu;
+    }
     if (el.closed()) {
         const double a = el.semi_major_axis;
         el.period = 2.0 * PI * a * std::sqrt(a / mu);
-        el.time_to_periapsis = closed_time_to_periapsis(el);
         el.excess_speed = 0.0;
     }
     else {
         el.period = INF;
-        el.time_to_periapsis = el.true_anomaly >= 0.0 ? INF : open_time_to_periapsis(el);
-        el.excess_speed = std::sqrt(std::max(0.0, speed_squared - 2.0 * mu / distance));
+        el.excess_speed = std::sqrt(2.0 * std::max(0.0, energy));
     }
+    el.time_to_periapsis = time_to_periapsis(el, rv);
 
     const bool finite = std::isfinite(el.speed) && std::isfinite(el.angular_momentum)
                         && std::isfinite(e) && std::isfinite(p) && std::isfinite(el.periapsis)
@@ -375,6 +411,13 @@ uint32_t climb_primaries(uint32_t primary_rank, Vec target_pos, std::span<const 
         rank = static_cast<uint32_t>(primaries[rank]);
     }
     return rank;
+}
+
+double extent(const Elements& el) {
+    using namespace Constants::Graphics;
+    return el.closed() ? el.apoapsis
+                       : std::max(ORBIT_OPEN_DISTANCE_FACTOR * el.distance,
+                                 ORBIT_OPEN_PERIAPSIS_FACTOR * el.periapsis);
 }
 
 double arc_length(const Elements& el, double nu) {
@@ -490,19 +533,21 @@ void trace(const Elements& el, Vec focus, const ScreenTransform& transform,
             || !(transform.pixels_per_meter > 0.0)) {
         return;
     }
-    // Closed orbits from periapsis to periapsis, open ones out to a few times their distance
+    // Closed orbits from periapsis to periapsis, open ones out to extent(): there, (1 - e) +
+    // 2 e cos^2(nu / 2) = p / extent, which keeps nearly radial orbits' ends finite
     double nu_begin = 0.0, nu_end = 2.0 * PI;
     if (!el.closed()) {
-        const double e = el.eccentricity;
-        const double r_max = std::max(ORBIT_OPEN_DISTANCE_FACTOR * el.distance,
-                ORBIT_OPEN_PERIAPSIS_FACTOR * el.periapsis);
-        const double nu_asymptote = std::acos(-1.0 / e);
-        nu_end = std::min(nu_asymptote - 1e-9,
-                std::acos(std::clamp((el.semi_latus_rectum / r_max - 1.0) / e, -1.0, 1.0)));
+        const double half_cos_squared =
+                (el.semi_latus_rectum / extent(el) - one_minus_e(el)) / (2.0 * el.eccentricity);
+        nu_end = 2.0 * std::acos(std::sqrt(std::clamp(half_cos_squared, 0.0, 1.0)));
         nu_begin = -nu_end;
     }
 
     Tracer tracer(el, focus, transform, window_size, tolerance_px, margin_px, out);
+    // Zoomed in, most orbits miss the window, and one test skips them
+    if (!std::isfinite(radius_at(el, nu_end)) || !tracer.reaches_window(nu_begin, nu_end)) {
+        return;
+    }
     double nu0 = nu_begin;
     Vec p0 = tracer.screen_at(nu0);
     for (uint32_t i = 1; i <= ORBIT_INITIAL_SEGMENTS; i++) {
