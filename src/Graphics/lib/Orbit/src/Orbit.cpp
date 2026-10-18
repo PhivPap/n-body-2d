@@ -262,6 +262,19 @@ public:
         return transform.to_screen(focus + el.position_at(nu));
     }
 
+    // Whether the ring between the orbit's periapsis and its extent() crosses the window: an orbit
+    // around a body outside the window, or a large one around a body near it, may not reach it
+    bool ring_reaches_window() const {
+        const Orbit::Vec centre = transform.to_screen(focus);
+        const Orbit::Vec nearest(std::clamp(centre.x, lo.x, hi.x),
+                std::clamp(centre.y, lo.y, hi.y));
+        const Orbit::Vec farthest(centre.x < 0.5 * (lo.x + hi.x) ? hi.x : lo.x,
+                centre.y < 0.5 * (lo.y + hi.y) ? hi.y : lo.y);
+        const double ppm = transform.pixels_per_meter;
+        return (nearest - centre).length() <= Orbit::extent(el) * ppm
+               && (farthest - centre).length() >= el.periapsis * ppm;
+    }
+
     // Whether the arc nu0..nu1 may reach the window: false for boxes that aren't finite
     bool reaches_window(double nu0, double nu1) const {
         const Box box = sector_box(el, focus, nu0, nu1);
@@ -646,8 +659,9 @@ void trace(const Elements& el, Vec focus, const ScreenTransform& transform,
     }
 
     Tracer tracer(el, focus, transform, window_size, tolerance_px, margin_px, out);
-    // Zoomed in, most orbits miss the window, and one test skips them
-    if (!std::isfinite(radius_at(el, nu_end)) || !tracer.reaches_window(nu_begin, nu_end)) {
+    // Zoomed in, most orbits miss the window, and two tests skip them
+    if (!std::isfinite(radius_at(el, nu_end)) || !tracer.ring_reaches_window()
+            || !tracer.reaches_window(nu_begin, nu_end)) {
         return;
     }
     double nu0 = nu_begin;
