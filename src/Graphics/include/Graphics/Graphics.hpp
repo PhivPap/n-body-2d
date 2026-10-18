@@ -148,7 +148,7 @@ private:
     void update_hover_cursor();
     void snapshot_velocities();
     void update_primaries();
-    std::optional<Orbit::BodyOrbit> body_orbit(uint32_t index) const;
+    std::optional<Orbit::BodyOrbit> body_orbit(uint32_t index);
     float hover_radius() const;
     std::optional<uint32_t> transform_bodies();
     std::optional<uint32_t> pick_body(sf::Vector2f point,
