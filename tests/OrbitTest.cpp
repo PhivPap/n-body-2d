@@ -655,6 +655,12 @@ void test_trace_deep_zoom() {
 void test_trace_off_screen() {
     const ScreenTransform transform{{1e13, 1e13}, 2e-9};
     CHECK(trace(ellipse(), transform).empty());
+    // A window inside a large orbit's ring, around its focus, and one the ring crosses
+    const double r = 1e12;
+    const Orbit::Elements circle = elements({r, 0.0}, {0.0, std::sqrt(MU / r)});
+    const double ppm = 2e-9;  // the window spans 8e11 x 4.5e11 m
+    CHECK(trace(circle, {-Vec(WINDOW) / 2.0 / ppm, ppm}).empty());
+    CHECK(!trace(circle, {Vec(r, 0.0) - Vec(WINDOW) / 2.0 / ppm, ppm}).empty());
 }
 
 void test_trace_open() {
