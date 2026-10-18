@@ -160,7 +160,7 @@ void find_bodies_near(HeaviestBody& heaviest, sf::Vector2f point, float radius,
     }
     update_inspector_panel();
 
-    // No primaries until a frame's orbits need them (draw_frame())
+    // No primaries until an orbit needs them (body_orbit())
     primaries.assign(named_bodies.indices().size(), -1);
     reset_trails(true);
 }
@@ -229,8 +229,10 @@ void Graphics::update_primaries() {
 }
 
 // A body's orbit, with its satellites, for a named, selected or hovered body: those whose
-// velocities the frame read (snapshot_velocities())
-std::optional<Orbit::BodyOrbit> Graphics::body_orbit(uint32_t index) const {
+// velocities the frame read (snapshot_velocities()). Primaries are only refreshed while orbits
+// are worked out.
+std::optional<Orbit::BodyOrbit> Graphics::body_orbit(uint32_t index) {
+    primaries_update_rate_limiter.try_call(std::bind(&Graphics::update_primaries, this));
     return Orbit::body_orbit(index, named_bodies.rank(index), named_bodies.indices(), primaries,
             bodies.mass_data(), body_positions_cache.data(), body_velocities_cache.data());
 }
@@ -911,10 +913,6 @@ void Graphics::draw_frame() {
     snapshot_velocities();
     update_selection_tracking();
     update_hover(transform_bodies());
-    // Primaries only for the orbits drawn or shown
-    if (selector.selected_body() || hovered_body || show_named_orbits) {
-        primaries_update_rate_limiter.try_call(std::bind(&Graphics::update_primaries, this));
-    }
     update_selection_orbit();
     if (inspector_update_pending) {
         update_inspector_panel();
