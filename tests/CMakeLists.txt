@@ -19,7 +19,7 @@ add_test(NAME orbital-elements
 
 add_executable(test-named-bodies ${CMAKE_CURRENT_LIST_DIR}/NamedBodiesTest.cpp)
 target_link_libraries(test-named-bodies PRIVATE lib-graphics-named-bodies
-        lib-graphics-selector lib-body lib-constants lib-logger)
+        lib-graphics-selector lib-graphics-text lib-body lib-constants lib-logger)
 add_test(NAME named-bodies COMMAND test-named-bodies)
 
 # test-simulation <test> <algorithm> runs one physics test on one algorithm, linked like the

@@ -2,10 +2,10 @@
 
 #include <optional>
 
-#include "AssetManager/AssetManager.hpp"
 #include "SFML/Graphics.hpp"
 #include "SFML/System.hpp"
 #include "Logger/Logger.hpp"
+#include "Text/Text.hpp"
 
 class IPanel : public sf::Drawable, public sf::Transformable {
 public:
@@ -96,7 +96,7 @@ DisplayedData* PanelBase<Derived, DisplayedData>::WriteHandle::operator->() {
 
 template <typename Derived, typename DisplayedData>
 PanelBase<Derived, DisplayedData>::PanelBase(uint32_t width)
-        : text(AssetManager::instance().get<sf::Font>("fonts/UbuntuMono-R.ttf")),
+        : text(Text::font()),
           texture({width, 1}), sprite(texture.getTexture()), visible(true) {
     text.setPosition({5.0f, 3.0f});
     text.setCharacterSize(16);

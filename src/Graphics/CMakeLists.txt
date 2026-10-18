@@ -3,6 +3,7 @@ project(lib-graphics)
 set(LOCAL_LIB_DIR "${CMAKE_CURRENT_SOURCE_DIR}/lib")
 
 # Add local lib directories
+add_subdirectory(${LOCAL_LIB_DIR}/Text)
 add_subdirectory(${LOCAL_LIB_DIR}/ViewPort)
 add_subdirectory(${LOCAL_LIB_DIR}/Panel)
 add_subdirectory(${LOCAL_LIB_DIR}/Selector)
@@ -27,4 +28,5 @@ target_link_libraries(${PROJECT_NAME} PUBLIC lib-graphics-selector)
 target_link_libraries(${PROJECT_NAME} PUBLIC lib-graphics-action-log)
 target_link_libraries(${PROJECT_NAME} PUBLIC lib-graphics-named-bodies)
 target_link_libraries(${PROJECT_NAME} PUBLIC lib-graphics-orbit)
+target_link_libraries(${PROJECT_NAME} PRIVATE lib-graphics-text)
 target_link_libraries(${PROJECT_NAME} PRIVATE lib-logger)

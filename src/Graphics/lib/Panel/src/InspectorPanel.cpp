@@ -6,8 +6,7 @@
 #include "Logger/Time.hpp"
 
 
-namespace {
-// The values as the panel shows them, "-" if they aren't finite
+namespace InspectorFormat {
 std::string distance(double m) {
     return std::isfinite(m) ? Log::Distance::from(m).to_string() : "-";
 }
@@ -20,14 +19,26 @@ std::string time(double s) {
     return std::isfinite(s) ? Log::Time::from(s).to_string() : "-";
 }
 
+std::string mass(double kg) {
+    return std::isfinite(kg) ? fmt::format("{:.4g}kg", kg) : "-";
+}
+
+std::string attractor(std::string_view id, uint32_t inner_count) {
+    return inner_count > 0 ? fmt::format("{} (+{} inner)", id, inner_count) : std::string(id);
+}
+}  // namespace InspectorFormat
+
+
+namespace {
+using namespace InspectorFormat;
+
 // What the inspector shows of a single body's orbit
 std::string orbit_text(const InspectorDisplayedData::Orbit& o) {
     std::string txt = fmt::format(
-        " Orbits:        {}{}\n"
+        " Orbits:        {}\n"
         " Distance:      {}\n"
         " Rel. Speed:    {}\n",
-        o.attractor,
-        o.inner_count > 0 ? fmt::format(" (+{} inner)", o.inner_count) : "",
+        attractor(o.attractor, o.inner_count),
         distance(o.distance_m),
         speed(o.relative_speed_m_s)
     );
@@ -39,10 +50,10 @@ std::string orbit_text(const InspectorDisplayedData::Orbit& o) {
     if (o.period_s) {
         txt += fmt::format(" Period:        {}\n", time(*o.period_s));
     }
-    txt += fmt::format(" Periapsis:     {}\n", distance(o.periapsis_m));
-    if (o.apoapsis_m) {
-        txt += fmt::format(" Apoapsis:      {}\n", distance(*o.apoapsis_m));
-    }
+    // On one line: under the commands, with the action log below, the panel fits 900 px
+    txt += o.apoapsis_m ? fmt::format(" Pe / Ap:       {} / {}\n", distance(o.periapsis_m),
+                                  distance(*o.apoapsis_m))
+                        : fmt::format(" Periapsis:     {}\n", distance(o.periapsis_m));
     if (o.excess_speed_m_s) {
         txt += fmt::format(" Excess Speed:  {}\n", speed(*o.excess_speed_m_s));
     }
@@ -71,12 +82,12 @@ void InspectorPanel::set_panel_text() {
         txt += fmt::format(
             " Selected:      {} bodies\n"
             " Heaviest:      {}\n"
-            " Total Mass:    {:.4g}kg\n"
+            " Total Mass:    {}\n"
             " CoM:           ({}, {})\n"
             " CoM Velocity:  ({}, {})\n",
             d.count,
             d.body,
-            d.mass_kg,
+            mass(d.mass_kg),
             distance(d.position_m.x),
             distance(d.position_m.y),
             speed(d.velocity_m_s.x),
@@ -91,12 +102,12 @@ void InspectorPanel::set_panel_text() {
         }
         txt += fmt::format(
             " Body:          {}{}\n"
-            " Mass:          {:.4g}kg\n"
+            " Mass:          {}\n"
             " Position:      ({}, {})\n"
             " Velocity:      ({}, {})\n",
             d.body,
             satellites,
-            d.mass_kg,
+            mass(d.mass_kg),
             distance(d.position_m.x),
             distance(d.position_m.y),
             speed(d.velocity_m_s.x),
@@ -104,5 +115,5 @@ void InspectorPanel::set_panel_text() {
         );
         txt += d.orbit ? orbit_text(*d.orbit) : " Orbits:        none\n";
     }
-    text.setString(sf::String::fromUtf8(txt.begin(), txt.end()));
+    text.setString(Text::from_utf8(txt));
 }

@@ -9,6 +9,7 @@
 #include "Logger/Logger.hpp"
 #include "NamedBodies/NamedBodies.hpp"
 #include "Selector/Selector.hpp"
+#include "Text/Text.hpp"
 
 using Vector = sf::Vector2<double>;
 
@@ -54,6 +55,22 @@ void test_id_number() {
     CHECK(!id_number("Kepler-16b") && !id_number("Sgr A*") && !id_number(""));
     CHECK(id_number("p18446744073709551615") == 18446744073709551615u);
     CHECK(!id_number("p18446744073709551616"));  // doesn't fit in 64 bits
+}
+
+// Ids are decoded as UTF-8, and a byte that doesn't fit doesn't swallow what follows it
+void test_from_utf8() {
+    using U32 = std::u32string;
+    const auto decoded = [](std::string_view utf8) { return Text::from_utf8(utf8).toUtf32(); };
+    CHECK(decoded("Earth") == U"Earth");
+    CHECK(decoded("") == U"");
+    CHECK(decoded("\xC5\x8A-42") == U"\u014A-42");             // Ŋ-42
+    CHECK(decoded("\xF0\x9F\x98\x80") == U32(1, U'\U0001F600'));  // 4 bytes
+    CHECK(decoded("B\xE9\n[") == U"B\uFFFD\n[");               // Latin-1 é, then a new line
+    CHECK(decoded("\xE2\x82x") == U"\uFFFDx");                  // cut short
+    CHECK(decoded("\x80\xBF") == U"\uFFFD\uFFFD");               // continuation bytes alone
+    CHECK(decoded("\xC0\xAF") == U"\uFFFD");                     // overlong /
+    CHECK(decoded("\xED\xA0\x80") == U"\uFFFD");                 // a surrogate
+    CHECK(decoded("\xF4\x90\x80\x80") == U"\uFFFD");             // beyond U+10FFFF
 }
 
 void test_find_named_bodies() {
@@ -285,6 +302,7 @@ int main() {
     Log::verbosity = Log::Verbosity::WARNING;
     test_id_group();
     test_id_number();
+    test_from_utf8();
     test_find_named_bodies();
     test_marker_diameter();
     test_pick_marker();
