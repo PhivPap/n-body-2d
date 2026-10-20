@@ -1,5 +1,6 @@
 #include "Config/Config.hpp"
 
+#include <charconv>
 #include <cmath>
 #include <filesystem>
 #include <fstream>
@@ -44,6 +45,14 @@ Config::Config(const fs::path& path) {
         const auto j_graphics = json_cfg.at("Graphics");
         const auto j_selection = j_graphics.at("selection");
         const auto j_named_bodies = j_graphics.at("named_bodies");
+        const auto j_render = j_graphics.at("render");
+        std::map<std::string, Graphics::GroupStyle> group_styles;
+        // An object (it throws otherwise) of {"color": "#rrggbb", "brightness": number}
+        for (const auto& [key, j_style] :
+                j_render.at("groups").get<std::map<std::string, json>>()) {
+            group_styles.emplace(key, Graphics::GroupStyle{.color_str = j_style.at("color"),
+                    .brightness = j_style.at("brightness")});
+        }
         graphics = Graphics{.enabled = j_graphics.at("enabled"),
                 .resolution = {j_graphics.at("resolution").at(0),
                         j_graphics.at("resolution").at(1)},
@@ -57,6 +66,7 @@ Config::Config(const fs::path& path) {
                 .show_stats_panel = j_graphics.at("show_stats_panel"),
                 .show_action_log_panel = j_graphics.at("show_action_log_panel"),
                 .show_inspector_panel = j_graphics.at("show_inspector_panel"),
+                .show_legend_panel = j_graphics.at("show_legend_panel"),
                 .selection_show = j_selection.at("show"),
                 .selection_show_center_of_mass = j_selection.at("show_center_of_mass"),
                 .follow_selected = j_selection.at("follow"),
@@ -64,7 +74,11 @@ Config::Config(const fs::path& path) {
                 .named_bodies_show_labels = j_named_bodies.at("show_labels"),
                 .named_bodies_scale_by_mass = j_named_bodies.at("scale_by_mass"),
                 .trails_fade = std::chrono::duration<double>(j_graphics.at("trails_fade_time_s")
-                        .get<double>())};
+                        .get<double>()),
+                .color_mode_str = j_render.at("color_mode"),
+                .exposure_ev = j_render.at("exposure_ev"),
+                .bloom = j_render.at("bloom"),
+                .group_styles = std::move(group_styles)};
     }
     catch (const std::exception& e) {
         Log::error("{}", e.what());
@@ -138,6 +152,30 @@ bool Config::validate() {
     return io_cfg_ok && sim_cfg_ok && graphics_cfg_ok;
 }
 
+static std::string to_lower(std::string_view sv) {
+    std::string s;
+    s.reserve(sv.size());
+    for (char c : sv) {
+        s += std::tolower(static_cast<unsigned char>(c));
+    }
+    return s;
+}
+
+// "#rrggbb", in either letter case
+static std::optional<sf::Color> parse_hex_color(std::string_view str) {
+    uint32_t rgb = 0;
+    if (str.size() != 7 || str[0] != '#') {
+        return std::nullopt;
+    }
+    const char* end = str.data() + str.size();
+    if (const auto [ptr, ec] = std::from_chars(str.data() + 1, end, rgb, 16);
+            ec != std::errc() || ptr != end) {
+        return std::nullopt;
+    }
+    return sf::Color(static_cast<uint8_t>(rgb >> 16), static_cast<uint8_t>(rgb >> 8),
+            static_cast<uint8_t>(rgb));
+}
+
 template <typename T>
 bool in_range(const T& value, const std::pair<T, T>& range) {
     return value >= range.first && value <= range.second;
@@ -196,14 +234,6 @@ std::string_view Config::Simulation::simtype_to_string(SimType simtype) {
 }
 
 bool Config::Simulation::parse_simtype() {
-    const auto to_lower = [](std::string_view sv) {
-        std::string s;
-        s.reserve(sv.size());
-        for (char c : sv) {
-            s += std::tolower(static_cast<unsigned char>(c));
-        }
-        return s;
-    };
     const auto simtype_str_lower = to_lower(simtype_str);
 
     bool ok = true;
@@ -304,6 +334,7 @@ std::string Config::Graphics::to_string() const {
     show_stats_panel:    {}
     show_action_log:     {}
     show_inspector:      {}
+    show_legend:         {}
     panel_update_hz      {}
     selection_show:      {}
     selection_show_CoM:  {}
@@ -311,15 +342,50 @@ std::string Config::Graphics::to_string() const {
     selection_orbit:     {}
     show_labels:         {}
     scale_by_mass:       {}
-    trails_fade_time_s:  {})";
+    trails_fade_time_s:  {}
+    color_mode:          `{}`
+    exposure_ev:         {}
+    bloom:               {}
+    group_styles:        {})";
     return fmt::format(fmt_str, enabled, resolution.x, resolution.y, vsync_enabled, fps,
             pixel_scale, show_grid, show_commands_panel, show_config_panel, show_stats_panel,
-            show_action_log_panel, show_inspector_panel, panel_update_hz, selection_show,
-            selection_show_center_of_mass, follow_selected, selection_show_orbit,
-            named_bodies_show_labels, named_bodies_scale_by_mass, trails_fade.count());
+            show_action_log_panel, show_inspector_panel, show_legend_panel, panel_update_hz,
+            selection_show, selection_show_center_of_mass, follow_selected, selection_show_orbit,
+            named_bodies_show_labels, named_bodies_scale_by_mass, trails_fade.count(),
+            color_mode_str, exposure_ev, bloom, group_styles.size());
 }
 
-bool Config::Graphics::validate() const {
+std::string_view Config::Graphics::color_mode_to_string(ColorMode color_mode) {
+    switch (color_mode) {
+    case ColorMode::WHITE:
+        return "White";
+    case ColorMode::GROUPS:
+        return "Groups";
+    case ColorMode::SPEED:
+        return "Speed";
+    case ColorMode::DOPPLER:
+        return "Doppler";
+    case ColorMode::DENSITY:
+        return "Density";
+    }
+    assert(false);
+    return {};
+}
+
+bool Config::Graphics::parse_color_mode() {
+    const auto color_mode_str_lower = to_lower(color_mode_str);
+    for (const ColorMode mode : {ColorMode::WHITE, ColorMode::GROUPS, ColorMode::SPEED,
+                 ColorMode::DOPPLER, ColorMode::DENSITY}) {
+        if (color_mode_str_lower == to_lower(color_mode_to_string(mode))) {
+            color_mode = mode;
+            color_mode_str = color_mode_to_string(mode);
+            return true;
+        }
+    }
+    return false;
+}
+
+bool Config::Graphics::validate() {
     using namespace Constants::Graphics;
     bool ok = true;
     if (!in_range(resolution.x, WINDOW_WIDTH_RANGE)
@@ -345,6 +411,34 @@ bool Config::Graphics::validate() const {
     if (trails_fade.count() < 0) {
         ok = false;
         Log::error("Config::Graphics::trails_fade_time_s (={}) must be >= 0", trails_fade.count());
+    }
+    if (!parse_color_mode()) {
+        ok = false;
+        Log::error("Config::Graphics::render::color_mode `{}` is not one of `{}`, `{}`, `{}`, "
+                "`{}`, `{}`", color_mode_str, color_mode_to_string(ColorMode::WHITE),
+                color_mode_to_string(ColorMode::GROUPS), color_mode_to_string(ColorMode::SPEED),
+                color_mode_to_string(ColorMode::DOPPLER),
+                color_mode_to_string(ColorMode::DENSITY));
+    }
+    if (!in_range(exposure_ev, EXPOSURE_EV_RANGE)) {
+        ok = false;
+        Log::error("Config::Graphics::render::exposure_ev {} not within allowed range {}",
+                exposure_ev, EXPOSURE_EV_RANGE);
+    }
+    for (auto& [key, style] : group_styles) {
+        if (const auto color = parse_hex_color(style.color_str)) {
+            style.color = *color;
+        }
+        else {
+            ok = false;
+            Log::error("Config::Graphics::render::groups `{}`: color `{}` is not #rrggbb", key,
+                    style.color_str);
+        }
+        if (!in_range(style.brightness, GROUP_BRIGHTNESS_RANGE)) {
+            ok = false;
+            Log::error("Config::Graphics::render::groups `{}`: brightness {} not within allowed "
+                    "range {}", key, style.brightness, GROUP_BRIGHTNESS_RANGE);
+        }
     }
     return ok;
 }
