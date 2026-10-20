@@ -10,6 +10,7 @@ add_subdirectory(${LOCAL_LIB_DIR}/Selector)
 add_subdirectory(${LOCAL_LIB_DIR}/ActionLog)
 add_subdirectory(${LOCAL_LIB_DIR}/NamedBodies)
 add_subdirectory(${LOCAL_LIB_DIR}/Orbit)
+add_subdirectory(${LOCAL_LIB_DIR}/Render)
 
 # Add library
 add_library(${PROJECT_NAME} ${CMAKE_CURRENT_LIST_DIR}/src/Graphics.cpp)

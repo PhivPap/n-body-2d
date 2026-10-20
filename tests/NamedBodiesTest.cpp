@@ -73,6 +73,38 @@ void test_from_utf8() {
     CHECK(decoded("\xF4\x90\x80\x80") == U"\uFFFD");             // beyond U+10FFFF
 }
 
+void test_group_ids() {
+    // Saturn, its rings, Maxwell's moonlets (numbered in sequence) and S-stars (catalogue numbers,
+    // with gaps), in order of first appearance
+    std::vector<std::string> ids = {"Saturn", "ring-0", "S1"};
+    std::vector<double> masses = {5.7e26, 1.0, 2e31};
+    add_numbered(ids, masses, "moonlet-", 0, 36, 1e18);
+    add_numbered(ids, masses, "ring-", 1, 99, 1.0);
+    for (const uint32_t k : {2, 4, 6, 8, 12, 13, 14, 17, 18}) {
+        ids.push_back("S" + std::to_string(k));
+        masses.push_back(2e31);
+    }
+    ids.push_back("Sgr A*");
+    masses.push_back(8e36);
+    const Bodies bodies = make_bodies(ids, masses);
+    const IdGroups groups = group_ids(bodies, 64, 8);
+    using Names = std::vector<std::string_view>;
+    CHECK(groups.names == Names({"Saturn", "ring", "S", "moonlet", "Sgr A*"}));
+    CHECK(groups.sizes == std::vector<uint32_t>({1, 100, 10, 36, 1}));
+    CHECK(groups.population == std::vector<uint8_t>({0, 1, 0, 1, 0}));
+    CHECK(groups.of_body.size() == bodies.n);
+    CHECK(groups.of_body[0] == 0 && groups.of_body[1] == 1 && groups.of_body[2] == 2);
+    CHECK(groups.of_body[3] == 3 && groups.of_body[38] == 3 && groups.of_body[39] == 1);
+    CHECK(groups.of_body[138] == 2 && groups.of_body[147] == 4);
+    CHECK(groups.names[1].data() == bodies.id(1).data());  // views into the ids
+    // The limits, inclusive: the rings are 100 bodies numbered in sequence, the moonlets 36
+    CHECK(group_ids(bodies, 100, 100).population == std::vector<uint8_t>(5, 0));
+    CHECK(group_ids(bodies, 99, 36).population == std::vector<uint8_t>({0, 1, 0, 0, 0}));
+    CHECK(group_ids(bodies, 100, 35).population == std::vector<uint8_t>({0, 1, 0, 1, 0}));
+    const IdGroups none = group_ids(make_bodies({}, {}), 64, 8);
+    CHECK(none.names.empty() && none.sizes.empty() && none.of_body.empty());
+}
+
 void test_find_named_bodies() {
     using V = std::vector<uint32_t>;
     const auto count_named = [](const std::vector<std::string>& ids) {
@@ -304,6 +336,7 @@ int main() {
     test_id_group();
     test_id_number();
     test_from_utf8();
+    test_group_ids();
     test_find_named_bodies();
     test_marker_diameter();
     test_pick_marker();
