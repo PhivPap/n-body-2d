@@ -25,6 +25,7 @@
         "show_stats_panel": true,
         "show_action_log_panel": true,
         "show_inspector_panel": true,
+        "show_legend_panel": true,
         "panel_update_hz": 1,
         "selection": {
             "show": true,
@@ -36,7 +37,13 @@
             "show_labels": true,
             "scale_by_mass": true
         },
-        "trails_fade_time_s": 3
+        "trails_fade_time_s": 3,
+        "render": {
+            "color_mode": "Groups",
+            "exposure_ev": 0.0,
+            "bloom": true,
+            "groups": {}
+        }
     },
     "Scenario": {
         "name": "solar-system",

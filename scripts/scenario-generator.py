@@ -57,6 +57,7 @@ import fnmatch
 import json
 import math
 import os
+import re
 import subprocess
 import sys
 import tempfile
@@ -117,6 +118,10 @@ PERIAPSIS_STEP_FRACTION = 0.03  # max step as a fraction of sqrt(r_p^3 / GM) of 
 
 RESOLUTION = (1600, 900)
 VIEW_FILL = 0.92  # fraction of the window the requested view occupies
+
+COLOR_MODES = ("White", "Groups", "Speed", "Doppler", "Density")  # Graphics.render.color_mode
+EXPOSURE_EV_RANGE = (-10.0, 10.0)
+GROUP_BRIGHTNESS_RANGE = (0.0, 16.0)  # 0 draws a group as hidden
 
 
 def estimate_ips(algorithm, n, theta):
@@ -725,6 +730,16 @@ class Scenario:
     softening_tolerance: float = 0.05  # max softening / periapsis of the bound pairs
     check: object = None  # extra --verify check: (initial, final) -> [(passed, message), ...]
     virial_prefix: str = ""  # ids of the subsystem whose virial ratio is reported
+    color_mode: str = "Groups"  # the starting colour mode, one of COLOR_MODES
+    styles: dict = field(default_factory=dict)  # body id or id group -> style()
+
+
+def style(color, brightness=1.0):
+    """How the simulator draws a group of bodies (Graphics.render.groups): an sRGB "#rrggbb"
+    colour and a brightness (0 draws the group as hidden)."""
+    assert re.fullmatch(r"#[0-9a-fA-F]{6}", color), f"colour {color!r} is not #rrggbb"
+    assert GROUP_BRIGHTNESS_RANGE[0] <= brightness <= GROUP_BRIGHTNESS_RANGE[1], brightness
+    return {"color": color, "brightness": brightness}
 
 
 SCENARIOS = {}
@@ -1610,6 +1625,7 @@ def plan(sc):
 
 def make_config(name, sc, p, csv_path):
     n = len(sc.bodies)
+    assert sc.color_mode in COLOR_MODES, sc.color_mode
     return {
         "IO": {
             # Relative to the config file, which is written next to the CSV
@@ -1640,11 +1656,14 @@ def make_config(name, sc, p, csv_path):
             "show_stats_panel": True,
             "show_action_log_panel": True,
             "show_inspector_panel": True,
+            "show_legend_panel": True,
             "panel_update_hz": 1,
             "selection": {"show": True, "show_center_of_mass": True, "follow": False,
                     "show_orbit": True},
             "named_bodies": {"show_labels": True, "scale_by_mass": True},
             "trails_fade_time_s": sc.trails,
+            "render": {"color_mode": sc.color_mode, "exposure_ev": 0.0, "bloom": True,
+                    "groups": sc.styles},
         },
         # Not read by the simulator (unknown keys are ignored): documentation and --verify input
         "Scenario": {

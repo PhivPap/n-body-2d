@@ -47,6 +47,9 @@ constexpr sf::Color GRID_COLOR(255, 255, 255, 64);
 constexpr sf::Color SELECT_COLOR(255, 0, 0, 255);
 constexpr uint8_t FPS_CALC_BUFFER_LEN = 60;
 constexpr Range<float> PANEL_UPDATE_HZ_RANGE = {0.1, 30};
+// Exposure compensation of the bodies' light, and group brightness (0: drawn as hidden)
+constexpr Range<double> EXPOSURE_EV_RANGE = {-10.0, 10.0};
+constexpr Range<float> GROUP_BRIGHTNESS_RANGE = {0.f, 16.f};
 constexpr uint16_t CONFIG_PANEL_WIDTH = 340;
 constexpr uint16_t STATS_PANEL_WIDTH = 340;
 constexpr uint16_t COMMANDS_PANEL_WIDTH = 370;
@@ -121,5 +124,7 @@ static_assert(ORBIT_DASH_PX > 0 && ORBIT_GAP_PX > 0);
 static_assert(ORBIT_TOLERANCE_PX > 0 && ORBIT_CLIP_MARGIN_PX >= 0);
 static_assert(ORBIT_INITIAL_SEGMENTS >= 4);
 static_assert(ORBIT_OPEN_DISTANCE_FACTOR > 1 && ORBIT_OPEN_PERIAPSIS_FACTOR > 1);
+static_assert(EXPOSURE_EV_RANGE.first < 0 && EXPOSURE_EV_RANGE.second > 0);
+static_assert(GROUP_BRIGHTNESS_RANGE.first == 0 && GROUP_BRIGHTNESS_RANGE.second > 0);
 }  // namespace Graphics
 }  // namespace Constants

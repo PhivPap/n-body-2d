@@ -8,6 +8,7 @@
 
 using json = nlohmann::json;
 using SimType = Config::Simulation::SimType;
+using ColorMode = Config::Graphics::ColorMode;
 
 
 namespace {
@@ -40,11 +41,21 @@ json valid_config() {
             "show_stats_panel": true,
             "show_action_log_panel": true,
             "show_inspector_panel": true,
+            "show_legend_panel": true,
             "panel_update_hz": 1,
             "selection": {"show": true, "show_center_of_mass": true, "follow": false,
                     "show_orbit": true},
             "named_bodies": {"show_labels": true, "scale_by_mass": false},
-            "trails_fade_time_s": 3
+            "trails_fade_time_s": 3,
+            "render": {
+                "color_mode": "Groups",
+                "exposure_ev": 0.5,
+                "bloom": true,
+                "groups": {
+                    "G1-d": {"color": "#c4d6ff", "brightness": 1.0},
+                    "star-0": {"color": "#7D6AA8", "brightness": 0.25}
+                }
+            }
         }
     })");
 }
@@ -86,6 +97,18 @@ void test_valid(const fs::path& dir) {
     CHECK(cfg.graphics.named_bodies_show_labels);
     CHECK(!cfg.graphics.named_bodies_scale_by_mass);
     CHECK(cfg.graphics.trails_fade.count() == 3.0);
+    CHECK(cfg.graphics.show_legend_panel);
+    CHECK(cfg.graphics.color_mode == ColorMode::GROUPS && cfg.graphics.color_mode_str == "Groups");
+    CHECK(cfg.graphics.exposure_ev == 0.5);
+    CHECK(cfg.graphics.bloom);
+    const auto& styles = cfg.graphics.group_styles;
+    CHECK(styles.size() == 2);
+    CHECK(styles.at("G1-d").color == sf::Color(0xc4, 0xd6, 0xff));
+    CHECK(styles.at("G1-d").brightness == 1.f);
+    CHECK(styles.at("star-0").color == sf::Color(0x7d, 0x6a, 0xa8));
+    CHECK(styles.at("star-0").brightness == 0.25f);
+    CHECK(parse(dir, with("/Graphics/render/groups", json::object()))
+                    .graphics.group_styles.empty());
 
     json j = without("/Simulation/softening_length_m");
     j["Simulation"]["softening_factor"] = 0.01;
@@ -119,6 +142,18 @@ void test_algorithm_case(const fs::path& dir) {
 #endif
 }
 
+void test_color_mode_case(const fs::path& dir) {
+    const Config cfg = parse(dir, with("/Graphics/render/color_mode", "dOPPLER"));
+    CHECK(cfg.graphics.color_mode == ColorMode::DOPPLER);
+    CHECK(cfg.graphics.color_mode_str == "Doppler");
+    CHECK(parse(dir, with("/Graphics/render/color_mode", "white")).graphics.color_mode
+            == ColorMode::WHITE);
+    CHECK(parse(dir, with("/Graphics/render/color_mode", "SPEED")).graphics.color_mode
+            == ColorMode::SPEED);
+    CHECK(parse(dir, with("/Graphics/render/color_mode", "Density")).graphics.color_mode
+            == ColorMode::DENSITY);
+}
+
 void test_invalid(const fs::path& dir) {
     fmt::println("Invalid configs, the errors below are expected:");
     CHECK_THROWS(parse(dir, without("/IO/echo_config")));
@@ -135,6 +170,20 @@ void test_invalid(const fs::path& dir) {
     CHECK_THROWS(parse(dir, with("/Simulation/softening_length_m", -1.0)));
     CHECK_THROWS(parse(dir, with("/Simulation/timestep", 0.0)));
     CHECK_THROWS(parse(dir, with("/Simulation/timestep", 1e20)));
+    CHECK_THROWS(parse(dir, without("/Graphics/render")));
+    CHECK_THROWS(parse(dir, without("/Graphics/show_legend_panel")));
+    CHECK_THROWS(parse(dir, without("/Graphics/render/groups")));
+    CHECK_THROWS(parse(dir, without("/Graphics/render/bloom")));
+    CHECK_THROWS(parse(dir, with("/Graphics/render/groups", json::array())));
+    CHECK_THROWS(parse(dir, without("/Graphics/render/groups/G1-d/brightness")));
+    CHECK_THROWS(parse(dir, with("/Graphics/render/color_mode", "Rainbow")));
+    for (const char* color : {"#12345", "red", "#gg0000", "12345678", "#1234567", "#-12345"}) {
+        CHECK_THROWS(parse(dir, with("/Graphics/render/groups/G1-d/color", color)));
+    }
+    CHECK_THROWS(parse(dir, with("/Graphics/render/groups/G1-d/brightness", -0.1)));
+    CHECK_THROWS(parse(dir, with("/Graphics/render/groups/G1-d/brightness", 16.1)));
+    CHECK_THROWS(parse(dir, with("/Graphics/render/exposure_ev", 10.5)));
+    CHECK_THROWS(parse(dir, with("/Graphics/render/exposure_ev", -10.5)));
 }
 }  // namespace
 
@@ -149,6 +198,7 @@ int main() {
     test_valid(dir.path);
     test_paths(dir.path);
     test_algorithm_case(dir.path);
+    test_color_mode_case(dir.path);
     test_invalid(dir.path);
     return Check::result();
 }
