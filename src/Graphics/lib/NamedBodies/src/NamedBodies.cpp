@@ -53,6 +53,26 @@ bool overlap(const sf::FloatRect& a, const sf::FloatRect& b) {
     return a.position.x < b.position.x + b.size.x && b.position.x < a.position.x + a.size.x
            && a.position.y < b.position.y + b.size.y && b.position.y < a.position.y + a.size.y;
 }
+
+// The bodies of groups that aren't populations, most massive first, at most `max_count`
+std::vector<uint32_t> find_named_bodies(const Bodies& bodies, const IdGroups& groups,
+        uint32_t max_count) {
+    std::vector<uint32_t> named;
+    for (uint64_t i = 0; i < bodies.n; i++) {
+        if (!groups.population[groups.of_body[i]]) {
+            named.push_back(static_cast<uint32_t>(i));
+        }
+    }
+    std::sort(named.begin(), named.end(), [&bodies](uint32_t a, uint32_t b) {
+        return bodies.mass(a) != bodies.mass(b) ? bodies.mass(a) > bodies.mass(b) : a < b;
+    });
+    if (named.size() > max_count) {
+        Log::info("{} bodies qualify as named; labelling the {} heaviest", named.size(),
+                max_count);
+        named.resize(max_count);
+    }
+    return named;
+}
 }  // namespace
 
 
@@ -74,53 +94,57 @@ std::optional<uint64_t> id_number(std::string_view id) {
     return number;
 }
 
-std::vector<uint32_t> find_named_bodies(const Bodies& bodies, uint32_t max_group_size,
-        uint32_t max_sequence_size, uint32_t max_count) {
-    // Members and numbers are only kept while a group is small enough to be named
-    struct Group {
-        uint32_t size = 0;
-        bool numbered = true;  // every member has a number
-        std::vector<uint32_t> members;
-        std::vector<uint64_t> numbers;
-    };
-    // Keyed by views into the bodies' ids
-    std::unordered_map<std::string_view, Group> groups;
+IdGroups group_ids(const Bodies& bodies, uint32_t max_group_size, uint32_t max_sequence_size) {
+    const StopWatch sw;
+    IdGroups groups;
+    groups.of_body.resize(bodies.n);
+    // Whether every member is numbered, and the members' numbers while the group is small enough
+    // to be named
+    std::vector<uint8_t> numbered;
+    std::vector<std::vector<uint64_t>> numbers;
+    std::unordered_map<std::string_view, uint32_t> index_of;  // keyed by views into the ids
     for (uint64_t i = 0; i < bodies.n; i++) {
-        Group& group = groups[id_group(bodies.id(i))];
-        if (++group.size > max_group_size) {
-            if (!group.members.empty()) {
-                group.members = {};
-                group.numbers = {};
+        const auto [it, inserted] = index_of.try_emplace(id_group(bodies.id(i)),
+                static_cast<uint32_t>(groups.names.size()));
+        const uint32_t group = it->second;
+        if (inserted) {
+            groups.names.push_back(it->first);
+            groups.sizes.push_back(0);
+            numbered.push_back(1);
+            numbers.emplace_back();
+        }
+        groups.of_body[i] = group;
+        if (++groups.sizes[group] > max_group_size) {
+            if (!numbers[group].empty()) {
+                numbers[group] = {};
             }
             continue;
         }
-        group.members.push_back(static_cast<uint32_t>(i));
         const std::optional<uint64_t> number = id_number(bodies.id(i));
-        group.numbered = group.numbered && number;
+        numbered[group] = numbered[group] && number;
         if (number) {
-            group.numbers.push_back(*number);
+            numbers[group].push_back(*number);
         }
     }
-    std::vector<uint32_t> named;
-    for (auto& [name, group] : groups) {
-        std::sort(group.numbers.begin(), group.numbers.end());
-        bool in_sequence = group.numbered;
-        for (size_t k = 1; k < group.numbers.size() && in_sequence; k++) {
-            in_sequence = group.numbers[k] == group.numbers[k - 1] + 1;
+    groups.population.resize(groups.names.size());
+    for (size_t group = 0; group < groups.names.size(); group++) {
+        std::sort(numbers[group].begin(), numbers[group].end());
+        bool in_sequence = numbered[group];
+        for (size_t k = 1; k < numbers[group].size() && in_sequence; k++) {
+            in_sequence = numbers[group][k] == numbers[group][k - 1] + 1;
         }
-        if (group.size <= max_group_size && !(in_sequence && group.size > max_sequence_size)) {
-            named.insert(named.end(), group.members.begin(), group.members.end());
-        }
+        const uint32_t size = groups.sizes[group];
+        groups.population[group] =
+                size > max_group_size || (in_sequence && size > max_sequence_size);
     }
-    std::sort(named.begin(), named.end(), [&bodies](uint32_t a, uint32_t b) {
-        return bodies.mass(a) != bodies.mass(b) ? bodies.mass(a) > bodies.mass(b) : a < b;
-    });
-    if (named.size() > max_count) {
-        Log::info("{} bodies qualify as named; labelling the {} heaviest", named.size(),
-                max_count);
-        named.resize(max_count);
-    }
-    return named;
+    Log::debug("Id groups: {} of {} bodies: [{}]", groups.names.size(), bodies.n, sw);
+    return groups;
+}
+
+std::vector<uint32_t> find_named_bodies(const Bodies& bodies, uint32_t max_group_size,
+        uint32_t max_sequence_size, uint32_t max_count) {
+    return find_named_bodies(bodies, group_ids(bodies, max_group_size, max_sequence_size),
+            max_count);
 }
 
 float marker_diameter(double mass, double max_mass, float base_px, bool scale_by_mass) {
@@ -185,12 +209,11 @@ std::vector<LabelPlacement> place_labels(std::span<const LabelBox> boxes,
 }
 
 
-NamedBodies::NamedBodies(const Bodies& bodies)
+NamedBodies::NamedBodies(const Bodies& bodies, const IdGroups& groups)
         : bodies(bodies), selected_label(make_label("")), more_label(make_label(" +")) {
     using namespace Constants::Graphics;
     const StopWatch sw;
-    named = find_named_bodies(bodies, NAMED_GROUP_MAX_SIZE, NAMED_SEQUENCE_MAX_SIZE,
-            NAMED_BODIES_MAX);
+    named = find_named_bodies(bodies, groups, NAMED_BODIES_MAX);
     rank_of.reserve(named.size());
     labels.reserve(named.size());
     label_bounds.reserve(named.size());

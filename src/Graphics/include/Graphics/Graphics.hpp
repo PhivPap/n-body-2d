@@ -100,7 +100,9 @@ private:
     sf::Sprite trails_sprite{trails_texture1.getTexture()};
     ViewPort vp;
     Selector selector;
-    NamedBodies named_bodies{bodies};
+    IdGroups id_groups = group_ids(bodies, Constants::Graphics::NAMED_GROUP_MAX_SIZE,
+            Constants::Graphics::NAMED_SEQUENCE_MAX_SIZE);
+    NamedBodies named_bodies{bodies, id_groups};
     std::vector<int32_t> primaries;  // per named body, see Orbit::find_primaries
     RLCaller primaries_update_rate_limiter{Constants::Graphics::PRIMARIES_UPDATE_TIMER};
     std::optional<Orbit::BodyOrbit> selection_orbit{};

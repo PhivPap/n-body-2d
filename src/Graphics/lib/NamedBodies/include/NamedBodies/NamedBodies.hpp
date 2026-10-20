@@ -19,6 +19,17 @@ std::string_view id_group(std::string_view id);
 // fit in 64 bits
 std::optional<uint64_t> id_number(std::string_view id);
 
+// The bodies grouped by id_group(), in order of first appearance: each body's group, and each
+// group's name, size and whether it is a population (its bodies aren't named, see
+// find_named_bodies())
+struct IdGroups {
+    std::vector<std::string_view> names;  // views into the bodies' ids
+    std::vector<uint32_t> sizes;
+    std::vector<uint8_t> population;      // 1: a population
+    std::vector<uint32_t> of_body;        // group index per body
+};
+IdGroups group_ids(const Bodies& bodies, uint32_t max_group_size, uint32_t max_sequence_size);
+
 // The named bodies, most massive first (ties: lower index first), at most `max_count` of them.
 // A body is named unless its id numbers it in a population: its group (id_group()) has more than
 // `max_group_size` members, or more than `max_sequence_size` numbered in sequence (every member
@@ -65,7 +76,8 @@ std::vector<LabelPlacement> place_labels(std::span<const LabelBox> boxes,
 // their labels
 class NamedBodies {
 public:
-    explicit NamedBodies(const Bodies& bodies);
+    // `groups`: group_ids() with NAMED_GROUP_MAX_SIZE and NAMED_SEQUENCE_MAX_SIZE
+    NamedBodies(const Bodies& bodies, const IdGroups& groups);
     const std::vector<uint32_t>& indices() const;  // most massive first
     std::optional<uint32_t> rank(uint32_t index) const;  // a named body's position in indices()
     // A named body's marker diameter in pixels

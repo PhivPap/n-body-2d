@@ -17,6 +17,12 @@ target_link_libraries(test-orbit PRIVATE lib-graphics-orbit lib-graphics-named-b
 add_test(NAME kepler
         COMMAND test-orbit ${CMAKE_SOURCE_DIR}/scenarios/solar-system.csv)
 
+# test-render: colours, render groups and the tone curve's math
+add_executable(test-render ${CMAKE_CURRENT_LIST_DIR}/RenderTest.cpp)
+target_link_libraries(test-render PRIVATE lib-graphics-render lib-graphics-named-bodies
+        lib-constants lib-logger)
+add_test(NAME render COMMAND test-render)
+
 add_executable(test-named-bodies ${CMAKE_CURRENT_LIST_DIR}/NamedBodiesTest.cpp)
 target_link_libraries(test-named-bodies PRIVATE lib-graphics-named-bodies
         lib-graphics-selector lib-graphics-text lib-body lib-constants lib-logger)
