@@ -252,16 +252,18 @@ std::optional<uint32_t> NamedBodies::pick(sf::Vector2f cursor,
 
 void NamedBodies::draw_markers(sf::RenderTarget& target, const sf::Shader& marker_shader,
         const sf::VertexArray& body_vertices, float base_px, bool scale_by_mass,
-        const std::vector<uint8_t>& selection_mask, bool selection_show) {
+        std::span<const sf::Color> colors, const std::vector<uint8_t>& selection_mask,
+        bool selection_show) {
     using namespace Constants::Graphics;
     const sf::Vector2f window_size = target.getView().getSize();
     markers.clear();
-    for (const uint32_t index : named) {
+    for (uint32_t rank = 0; rank < named.size(); rank++) {
+        const uint32_t index = named[rank];
         const sf::Vector2f pos = body_vertices[index].position;
         const float diameter = marker_diameter(index, base_px, scale_by_mass);
         if (marker_visible(pos, diameter, window_size)) {
             const sf::Color color =
-                    selection_show && selection_mask[index] ? SELECT_COLOR : NAMED_BODY_COLOR;
+                    selection_show && selection_mask[index] ? SELECT_COLOR : colors[rank];
             // The marker shader reads the diameter from the texture coordinates
             markers.append({pos, color, {diameter, 0.f}});
         }

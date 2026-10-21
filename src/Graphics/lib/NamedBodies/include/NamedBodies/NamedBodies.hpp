@@ -85,10 +85,12 @@ public:
     // The heaviest named body under `cursor`, see pick_marker()
     std::optional<uint32_t> pick(sf::Vector2f cursor, const sf::VertexArray& body_vertices,
             float base_px, bool scale_by_mass) const;
-    // Heaviest first, so that lighter bodies such as moons stay visible on top
+    // Heaviest first, so that lighter bodies such as moons stay visible on top. `colors`: per
+    // rank, except that shown selected bodies are SELECT_COLOR.
     void draw_markers(sf::RenderTarget& target, const sf::Shader& marker_shader,
             const sf::VertexArray& body_vertices, float base_px, bool scale_by_mass,
-            const std::vector<uint8_t>& selection_mask, bool selection_show);
+            std::span<const sf::Color> colors, const std::vector<uint8_t>& selection_mask,
+            bool selection_show);
     // `selected_body`: the selection's only body, labelled first even if it isn't named
     void draw_labels(sf::RenderTarget& target, const sf::VertexArray& body_vertices,
             float base_px, bool scale_by_mass, std::optional<uint32_t> selected_body,

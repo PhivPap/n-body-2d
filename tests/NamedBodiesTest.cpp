@@ -8,6 +8,7 @@
 #include "Constants/Constants.hpp"
 #include "Logger/Logger.hpp"
 #include "NamedBodies/NamedBodies.hpp"
+#include "Render/BodyVertex.hpp"
 #include "Selector/Selector.hpp"
 #include "Text/Text.hpp"
 
@@ -193,7 +194,6 @@ void test_marker_diameter() {
 }
 
 void test_pick_marker() {
-    using Constants::Graphics::BODY_COLOR;
     // The Moon, the Earth, the Sun, two equal stars and a massless probe
     const std::vector<double> mass = {7e22, 6e24, 2e30, 1e30, 1e30, 0.0};
     const std::vector<uint32_t> named = {2, 3, 4, 1, 0, 5};  // most massive first
@@ -201,7 +201,7 @@ void test_pick_marker() {
             {300.f, 300.f}, {306.f, 300.f}, {700.f, 100.f}};
     sf::VertexArray vertices(sf::PrimitiveType::Points);
     for (const sf::Vector2f pos : positions) {
-        vertices.append({pos, BODY_COLOR});
+        vertices.append({pos});
     }
     const auto pick = [&](sf::Vector2f cursor, bool scale_by_mass = true) {
         return pick_marker(cursor, named, mass.data(), vertices, 1.f, scale_by_mass);
@@ -280,7 +280,7 @@ void test_place_labels() {
 }
 
 void test_selector() {
-    using namespace Constants::Graphics;
+    using BodyVertex::highlighted;
     Bodies bodies({"a", "b", "c", "d"}, {1.0, 3.0, 0.0, 0.0},
             {{0.0, 0.0}, {10.0, 0.0}, {20.0, 4.0}, {30.0, 8.0}},
             {{1.0, 0.0}, {0.0, 2.0}, {3.0, 4.0}, {5.0, 6.0}});
@@ -288,8 +288,10 @@ void test_selector() {
             bodies.pos(3)};
     sf::VertexArray vertices(sf::PrimitiveType::Points);
     for (const float x : {10.f, 20.f, 30.f, 40.f}) {
-        vertices.append({{x, 10.f}, BODY_COLOR});
+        vertices.append({{x, 10.f}});
+        BodyVertex::set_group(vertices[vertices.getVertexCount() - 1], x < 25.f ? 0 : 1);
     }
+    const std::vector<uint8_t> all_visible = {1, 1};
     Selector selector(bodies, positions, vertices);
     selector.set_show(true);
 
@@ -300,9 +302,10 @@ void test_selector() {
     CHECK(selector.selected_body() == 1u);
     CHECK(stats.heaviest == 1);
     CHECK(stats.center_of_mass == bodies.pos(1) && stats.weighted_velocity == bodies.vel(1));
-    CHECK(vertices[1].color == SELECT_COLOR && vertices[0].color == BODY_COLOR);
+    CHECK(highlighted(vertices[1]) && !highlighted(vertices[0]));
+    CHECK(BodyVertex::group(vertices[1]) == 0 && BodyVertex::group(vertices[2]) == 1);
 
-    selector.select(sf::FloatRect({0.f, 0.f}, {100.f, 100.f}));
+    selector.select(sf::FloatRect({0.f, 0.f}, {100.f, 100.f}), all_visible);
     stats = selector.compute_stats();
     CHECK(stats.n == 4 && stats.heaviest == 1);
     CHECK(selector.selection_mask() == std::vector<uint8_t>({1, 1, 1, 1}));
@@ -314,19 +317,29 @@ void test_selector() {
     CHECK(stats.n == 1 && stats.total_mass == 0.0 && stats.heaviest == 2);
     CHECK(stats.center_of_mass == bodies.pos(2) && stats.weighted_velocity == bodies.vel(2));
     CHECK(selector.selection_mask() == std::vector<uint8_t>({0, 0, 1, 0}));
-    CHECK(vertices[0].color == BODY_COLOR && vertices[1].color == BODY_COLOR);
-    CHECK(vertices[2].color == SELECT_COLOR && vertices[3].color == BODY_COLOR);
+    CHECK(!highlighted(vertices[0]) && !highlighted(vertices[1]));
+    CHECK(highlighted(vertices[2]) && !highlighted(vertices[3]));
+    CHECK(BodyVertex::group(vertices[2]) == 1);  // the highlight keeps the group
 
     // Several massless bodies: their plain mean
-    selector.select(sf::FloatRect({25.f, 0.f}, {100.f, 100.f}));
+    selector.select(sf::FloatRect({25.f, 0.f}, {100.f, 100.f}), all_visible);
     stats = selector.compute_stats();
     CHECK(stats.n == 2 && stats.heaviest == 2);
     CHECK(stats.center_of_mass == Vector(25.0, 6.0) && stats.weighted_velocity == Vector(4.0, 5.0));
 
-    // Hidden selections keep the body colour
+    // Bodies of hidden groups aren't box-selected
+    selector.select(sf::FloatRect({0.f, 0.f}, {100.f, 100.f}), {1, 0});
+    CHECK(selector.selection_mask() == std::vector<uint8_t>({1, 1, 0, 0}));
+    CHECK(highlighted(vertices[0]) && !highlighted(vertices[2]) && !highlighted(vertices[3]));
+    selector.select(sf::FloatRect({0.f, 0.f}, {100.f, 100.f}), {0, 0});
+    CHECK(!selector.has_selection() && !highlighted(vertices[0]));
+
+    // Hidden selections aren't highlighted, until shown
     selector.set_show(false);
     selector.select_body(0);
-    CHECK(selector.selection_mask()[0] == 1 && vertices[0].color == BODY_COLOR);
+    CHECK(selector.selection_mask()[0] == 1 && !highlighted(vertices[0]));
+    selector.set_show(true);
+    CHECK(highlighted(vertices[0]) && BodyVertex::group(vertices[0]) == 0);
 }
 }  // namespace
 

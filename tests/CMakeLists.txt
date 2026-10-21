@@ -23,9 +23,18 @@ target_link_libraries(test-render PRIVATE lib-graphics-render lib-graphics-named
         lib-constants lib-logger)
 add_test(NAME render COMMAND test-render)
 
+# test-renderer-gl: the renderer's passes, read back from float buffers. Skipped (77) without a
+# display or float render targets.
+add_executable(test-renderer-gl ${CMAKE_CURRENT_LIST_DIR}/RendererGlTest.cpp)
+target_link_libraries(test-renderer-gl PRIVATE lib-graphics-render lib-constants lib-logger
+        sfml-window)
+add_test(NAME renderer-gl COMMAND test-renderer-gl)
+set_tests_properties(renderer-gl PROPERTIES SKIP_RETURN_CODE 77)
+
 add_executable(test-named-bodies ${CMAKE_CURRENT_LIST_DIR}/NamedBodiesTest.cpp)
 target_link_libraries(test-named-bodies PRIVATE lib-graphics-named-bodies
-        lib-graphics-selector lib-graphics-text lib-body lib-constants lib-logger)
+        lib-graphics-selector lib-graphics-render lib-graphics-text lib-body lib-constants
+        lib-logger)
 add_test(NAME named-bodies COMMAND test-named-bodies)
 
 # test-simulation <test> <algorithm> runs one physics test on one algorithm, linked like the
