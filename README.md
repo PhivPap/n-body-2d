@@ -92,6 +92,7 @@ around the planet, press F to follow it and zoom in with the mouse wheel.
 | Left / Right        | Decrease / increase the timestep by 10%                    |
 | Ctrl + Left / Right | Shorter / longer trails                                    |
 | Up / Down           | Bigger / smaller bodies                                    |
+| Ctrl + Up / Down    | More / less stretch: faint bodies brighter / dimmer        |
 | Mouse wheel         | Zoom                                                       |
 | Left-drag           | Pan                                                        |
 | Right-click         | Select the body under the cursor, or clear the selection   |
@@ -127,6 +128,9 @@ covers the grid: only light fainter than the grid's lines lets them show through
   percentile of the brightest pixel in each 8×8 block, trails aside), smoothly over 0.4 s. `[` and `]` make the
   image darker or brighter by half a stop (EV), and `E` locks the current white point, so the
   brightness stops adapting, for example while two galaxies merge.
+- **Stretch** (`Ctrl`+`Up`/`Down`) lifts faint light, twice as much a step up to x256, while the
+  brightest light stays white: single bodies in dense scenes and faint groups become visible,
+  like the dark-matter halos of `galaxy-collision` at x16. It starts at x1 and goes down to x1/4.
 - **Colour modes** (`V` cycles them):
   - *White*: every body alike.
   - *Groups*: each group of bodies in its own colour, from the config (see `render.groups`

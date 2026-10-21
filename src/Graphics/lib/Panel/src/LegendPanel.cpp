@@ -61,6 +61,7 @@ void LegendPanel::set_panel_text() {
     txt += d.locked_white ? fmt::format(" Exposure: Locked at {}/px {:+.1f} EV\n",
                                     white_text(*d.locked_white), d.exposure_ev)
                           : fmt::format(" Exposure: Auto {:+.1f} EV (E [ ])\n", d.exposure_ev);
+    txt += fmt::format(" Stretch: {} (Ctrl Up/Down)\n", d.stretch);
     txt += fmt::format(" Bloom: {} (B)\n", d.bloom ? "ON" : "OFF");
     if (!d.rows.empty()) {
         txt += " 1-9 toggle, Shift solo, 0 all\n";

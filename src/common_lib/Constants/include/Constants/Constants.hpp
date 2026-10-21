@@ -125,6 +125,10 @@ constexpr float EXPOSURE_BINS_PER_OCTAVE = 4.f;
 constexpr float EXPOSURE_LOG2_MIN = -8.f;
 constexpr auto EXPOSURE_ADAPT_TIME = std::chrono::milliseconds(400);
 constexpr double EXPOSURE_EV_STEP = 0.5;
+// The stretch lifts faint light STRETCH_FACTOR times a step (the tone curve's softening divided
+// by it), while the white point stays white: STRETCH_STEPS_RANGE steps from none
+constexpr Range<int> STRETCH_STEPS_RANGE = {-2, 8};
+constexpr float STRETCH_FACTOR = 2.f;
 // Trail segments for bodies that moved SEGMENT_MIN_PX (less is covered by the body itself) to
 // SEGMENT_MAX_PX since the last frame, both ends within SEGMENT_GUARD_PX of the window's origin
 constexpr float SEGMENT_MIN_PX = 1.f;
@@ -200,6 +204,8 @@ static_assert(HIGHLIGHT_DESATURATION > 0 && HIGHLIGHT_DESATURATION <= 1);
 static_assert(AUTO_WHITE_QUANTILE > 0 && AUTO_WHITE_QUANTILE < 1);
 static_assert(EXPOSURE_BLOCK_PX >= 1 && EXPOSURE_HISTOGRAM_BINS >= 2);
 static_assert(EXPOSURE_BINS_PER_OCTAVE > 0 && EXPOSURE_EV_STEP > 0);
+static_assert(STRETCH_STEPS_RANGE.first <= 0 && STRETCH_STEPS_RANGE.second >= 0);
+static_assert(STRETCH_FACTOR > 1);
 static_assert(SEGMENT_MIN_PX > 0 && SEGMENT_MIN_PX < SEGMENT_MAX_PX);
 static_assert(SEGMENT_MAX_PX < SEGMENT_GUARD_PX);
 static_assert(TRAIL_TAKEOVER_MIN > 0 && TRAIL_TAKEOVER_MIN <= 1);

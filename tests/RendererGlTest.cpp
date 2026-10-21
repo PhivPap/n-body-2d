@@ -51,7 +51,7 @@ std::vector<Body> stack(uint32_t x, uint32_t y, uint32_t count, uint8_t group = 
 HdrRenderer::Frame frame(ColorMode mode = ColorMode::GROUPS) {
     return {.color_mode = mode, .body_diameter_px = 1, .trails_fade_s = 0.0, .paused = false,
             .frame_time_s = 0.01, .velocity_scale = 1.f, .exposure_ev = 0.0,
-            .locked_white = std::nullopt, .bloom = false};
+            .locked_white = std::nullopt, .stretch = 1.f, .bloom = false};
 }
 
 RenderGroup group(sf::Color color, float brightness = 1.f, bool visible = true) {
@@ -495,6 +495,14 @@ void test_tonemap(HdrRenderer& renderer, sf::RenderTexture& window) {
     window.display();
     image = window.getTexture().copyToImage();
     CHECK(shown(28, 30).r >= 254);
+    // A stretch of 16: a single body lifted from 44 to over 120, the white point still white
+    HdrRenderer::Frame stretched = locked;
+    stretched.stretch = 16.f;
+    window.clear(sf::Color::Black);
+    renderer.draw(window, vertices(bodies), stretched);
+    window.display();
+    image = window.getTexture().copyToImage();
+    CHECK(shown(20, 30).r > 120 && shown(28, 30).r >= 254);
     // Over the grid's grey: light as bright as it hides it, fainter light doesn't darken it (a
     // single body is shown at 44/255), and unlit pixels leave it
     const sf::Color grey(64, 64, 64);
