@@ -257,17 +257,21 @@ void NamedBodies::draw_markers(sf::RenderTarget& target, const sf::Shader& marke
     using namespace Constants::Graphics;
     const sf::Vector2f window_size = target.getView().getSize();
     markers.clear();
-    for (uint32_t rank = 0; rank < named.size(); rank++) {
-        const uint32_t index = named[rank];
-        const sf::Vector2f pos = body_vertices[index].position;
-        const float diameter = marker_diameter(index, base_px, scale_by_mass);
-        if (marker_visible(pos, diameter, window_size)) {
-            const sf::Color color =
-                    selection_show && selection_mask[index] ? SELECT_COLOR : colors[rank];
-            // The marker shader reads the diameter from the texture coordinates
-            markers.append({pos, color, {diameter, 0.f}});
+    // Later markers cover earlier ones: the lightest first, the selection last
+    const auto append = [&](bool selected) {
+        for (uint32_t rank = static_cast<uint32_t>(named.size()); rank-- > 0;) {
+            const uint32_t index = named[rank];
+            const sf::Vector2f pos = body_vertices[index].position;
+            const float diameter = marker_diameter(index, base_px, scale_by_mass);
+            if ((selection_show && selection_mask[index]) == selected
+                    && marker_visible(pos, diameter, window_size)) {
+                // The marker shader reads the diameter from the texture coordinates
+                markers.append({pos, selected ? SELECT_COLOR : colors[rank], {diameter, 0.f}});
+            }
         }
-    }
+    };
+    append(false);
+    append(true);
     target.draw(markers, sf::RenderStates(&marker_shader));
 }
 
