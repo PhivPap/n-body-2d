@@ -122,6 +122,40 @@ VIEW_FILL = 0.92  # fraction of the window the requested view occupies
 COLOR_MODES = ("White", "Groups", "Speed", "Doppler", "Density")  # Graphics.render.color_mode
 EXPOSURE_EV_RANGE = (-10.0, 10.0)
 GROUP_BRIGHTNESS_RANGE = (0.0, 16.0)  # 0 draws a group as hidden
+# Bodies are named unless their id group (id_group()) is a population: more than
+# NAMED_GROUP_MAX_SIZE members, or more than NAMED_SEQUENCE_MAX_SIZE numbered in sequence. The
+# legend's rows are the populations, largest first; past LEGEND_GROUPS_MAX they are "Other".
+NAMED_GROUP_MAX_SIZE = 64
+NAMED_SEQUENCE_MAX_SIZE = 8
+LEGEND_GROUPS_MAX = 8
+
+
+def id_group(i):
+    """The id without a trailing number and one '-' or '_' before it: "ring-12" -> "ring"."""
+    stem = i.rstrip("0123456789")
+    return stem[:-1] if len(stem) < len(i) and stem[-1:] in ("-", "_") else stem
+
+
+def legend_key(bodies, group):
+    """The number key that shows or hides the id group `group` in the simulator's legend."""
+    members = {}
+    for i in bodies.ids.tolist():
+        members.setdefault(id_group(i), []).append(i)
+
+    def population(ids):
+        if len(ids) > NAMED_GROUP_MAX_SIZE:
+            return True
+        digits = [i[len(i.rstrip("0123456789")):] for i in ids]
+        numbers = sorted(int(d) for d in digits if d)
+        in_sequence = len(numbers) == len(ids) and all(
+                b == a + 1 for a, b in zip(numbers, numbers[1:]))
+        return in_sequence and len(ids) > NAMED_SEQUENCE_MAX_SIZE
+
+    rows = sorted((g for g, ids in members.items() if population(ids)),
+            key=lambda g: (-len(members[g]), g))
+    if group not in rows[:LEGEND_GROUPS_MAX]:
+        raise ValueError(f"{group} has no legend row of its own")
+    return rows.index(group) + 1
 
 
 def estimate_ips(algorithm, n, theta):
@@ -800,7 +834,8 @@ def normalized_three_body(pos, vel, period, r_min, half_size, description, show_
             show_period=T, show_seconds=show_seconds,
             dt_max=PERIAPSIS_STEP_FRACTION * periapsis_time_scale(2 * G * M_SUN, r_min * AU),
             trails=show_seconds, tips=list(tips), check_time=periods_checked * T,
-            check=periodic_check)
+            check=periodic_check, styles={"star-0": style("#ff9a6a"), "star-1": style("#7fb2ff"),
+                    "star-2": style("#ffe08a")})
 
 
 @scenario("three-body-figure-eight", "three-body",
@@ -899,7 +934,7 @@ def maxwell_ring(rng, unstable):
             show_period=P, show_seconds=6,
             dt_max=PERIAPSIS_STEP_FRACTION * periapsis_time_scale(2 * G * m, eps),
             softening=eps, pairs=pairs, trails=1.5, check_time=(30 if unstable else 10) * P,
-            check=ring_check,
+            check=ring_check, styles={"moonlet": style("#e8dcc0"), "Saturn": style("#ead39a")},
             tips=["The instability needs a few orbits to grow." if unstable else
                     "Compare with maxwell-ring-unstable."])
 
@@ -927,7 +962,8 @@ def trappist_1(rng, scale):
             "locked in a chain of near-resonances (8:5, 5:3, 3:2, 3:2, 4:3, 3:2).",
             view_circle(1.15 * a_h), show_period=planets[-1][1] * DAY, show_seconds=12,
             pairs=pairs, trails=12, check_time=2000 * planets[-1][1] * DAY,
-            tips=["The whole system would fit well inside Mercury's orbit."])
+            tips=["The whole system would fit well inside Mercury's orbit."],
+            styles={"TRAPPIST-1": style("#ff9a6a")})  # the red dwarf
 
 
 def trappist_longitudes(rng):
@@ -1016,6 +1052,13 @@ def solar_system_orbiters(rng, moons=True, minor=True):
     return sats
 
 
+# The planets' and the Sun's colours (their moons are white)
+PLANET_STYLES = {name: style(color) for name, color in (("Sun", "#ffd27f"), ("Mercury", "#b8b8b8"),
+        ("Venus", "#f0dca8"), ("Earth", "#7fb2ff"), ("Mars", "#ff8a5c"), ("Jupiter", "#e0b88a"),
+        ("Saturn", "#ead39a"), ("Uranus", "#a8e8ee"), ("Neptune", "#7f9dff"),
+        ("Pluto", "#d8c3a5"))}
+
+
 @scenario("solar-system", "systems",
         "Sun, planets with 26 major moons, dwarf planets and Halley's comet at J2000")
 def solar_system(rng, scale):
@@ -1032,7 +1075,7 @@ def solar_system(rng, scale):
             G * M_SUN, a_jup), tips=["Right-drag around a planet to select it with its moons, "
             "press F to follow it and C to centre it, then zoom in with the mouse wheel.",
             "Slow time down (Left arrow) to watch the moons; the speed-up limit "
-            "(timestep_max_s) is set by Phobos."])
+            "(timestep_max_s) is set by Phobos."], styles=PLANET_STYLES)
 
 
 @scenario("sgr-a-star", "systems",
@@ -1069,7 +1112,8 @@ def sgr_a_star(rng, scale):
             "km/s at periapsis; S175 and S14 dive within ~50 AU. Newtonian (no relativistic "
             "precession).", view_circle(2.6 * s2), show_period=orbital_period(G * m_bh, s2),
             show_seconds=12, pairs=pairs, trails=10, check_time=4 * orbital_period(G * m_bh, s2),
-            tips=["Zoom out to see the outer S-stars (periods up to ~3500 years)."])
+            tips=["Zoom out to see the outer S-stars (periods up to ~3500 years)."],
+            styles={"S": style("#a8c4ff")})  # young blue stars
 
 
 @scenario("kepler-16", "systems",
@@ -1104,7 +1148,9 @@ def kepler_16(rng, scale):
             "chaos and cleared within a few dozen binary orbits.", view_circle(1.75 * AU),
             show_period=p_bin, show_seconds=2.5, softening=0.005 * AU,
             pairs=pairs, trails=1.0, theta=0.6, check_time=40 * p_bin,
-            tips=["The two stars and the planet are the bodies that never leave the centre."])
+            tips=["The two stars and the planet are the bodies that never leave the centre."],
+            styles={"debris": style("#c8b89a"), "Kepler-16A": style("#ffd9a0"),
+                    "Kepler-16B": style("#ff9f6a")})
 
 
 # ------------------------------------------------------------------------------------------------
@@ -1193,7 +1239,9 @@ def saturn_rings(rng, scale):
                     a_tolerance=0.01, required=0.999),
             tips=["Zoom into the outer A ring for Pan and Daphnis in their gaps, and the F ring "
                     "with Prometheus and Pandora.",
-                    "Janus and Epimetheus share an orbit and swap places every ~4 years."])
+                    "Janus and Epimetheus share an orbit and swap places every ~4 years."],
+            styles={"ring": style("#e8dcc0"), "Saturn": style("#ead39a"),
+                    "Titan": style("#e8a85c")})
 
 
 @scenario("binary-black-hole", "disks",
@@ -1217,7 +1265,9 @@ def binary_black_hole(rng, scale):
             "into spiral streams and a lopsided cavity opens, as in simulations of "
             "circumbinary accretion.", view_circle(7.4 * a), show_period=P, show_seconds=3,
             softening=eps, dt_max=0.2 * math.sqrt(eps ** 3 / (G * m1)), pairs=pairs, trails=0.5,
-            theta=0.6, check_time=15 * P, softening_tolerance=0.15)  # binary precesses a bit
+            theta=0.6, check_time=15 * P, softening_tolerance=0.15,  # binary precesses a bit
+            tips=["Press V twice for the Doppler colours: the disk turns red on the side moving "
+                    "up the screen, blue on the other."], styles={"gas": style("#ffb070")})
 
 
 @scenario("solar-system-belts", "disks",
@@ -1292,7 +1342,9 @@ def solar_system_belts(rng, scale):
             check_time=T_j, check=bound_fraction_check("main-belt asteroids",
                     ids_with_prefix("mainbelt-"), "Sun", required=0.98),
             tips=["The Trojan swarms ride 60 degrees ahead of and behind Jupiter.",
-                    "Zoom out (mouse wheel) for the Kuiper belt at 30-50 AU."])
+                    "Zoom out (mouse wheel) for the Kuiper belt at 30-50 AU."],
+            styles=PLANET_STYLES | {"mainbelt": style("#c9b79c"), "hilda": style("#ffb36b"),
+                    "trojan": style("#7fe0b0"), "kuiper": style("#8fb8ff")})
 
 
 @scenario("stellar-flyby", "disks", "A passing star tears through two debris disks (90k bodies)")
@@ -1319,7 +1371,9 @@ def stellar_flyby(rng, scale):
             "years) pulls out tidal tails and a bridge, and the stars steal each other's "
             "debris, as in models of stellar flybys in birth clusters.", view_circle(330 * AU),
             show_period=1600 * YEAR, show_seconds=60, softening=eps, pairs=pairs, trails=0.4,
-            theta=0.6, check_time=1600 * YEAR)
+            theta=0.6, check_time=1600 * YEAR,
+            styles={"disk-A": style("#8ab4ff"), "disk-B": style("#ffb36b"),
+                    "Star-A": style("#fff0d0"), "Star-B": style("#ffd0a0")})
 
 
 @scenario("protoplanetary-disk", "disks",
@@ -1340,7 +1394,8 @@ def protoplanetary_disk(rng, scale):
             view_circle(105 * AU), show_period=orbital_period(G * 1.12 * M_SUN, 40 * AU),
             show_seconds=30, softening=eps,
             dt_max=orbital_period(G * star, 5 * AU) / STEPS_PER_ORBIT, trails=0.0, theta=0.6,
-            self_gravitating=True, check_time=orbital_period(G * 1.12 * M_SUN, 40 * AU))
+            self_gravitating=True, check_time=orbital_period(G * 1.12 * M_SUN, 40 * AU),
+            styles={"disk": style("#ffb878"), "Star": style("#ffe0a0")})
 
 
 # ------------------------------------------------------------------------------------------------
@@ -1354,8 +1409,8 @@ def galaxy_dt_max(fld, eps):
 def spiral_model(mass=1.0, size=1.0, Q=1.2, halo_weight=3.0):
     """Sub-maximal disk (about half of the mass inside 2.2 disk scale lengths) with a compact
     bulge and a cored dark halo (planar, see MestelDisk). Halo particles are `halo_weight` times
-    heavier, so most of the particles (and pixels: every body is drawn alike, so the halo shows
-    up as a haze) go to the disk; heavier halo particles heat the disk faster, though."""
+    heavier, so most of the particles (and of the light: the halo shows up as a haze) go to the
+    disk; heavier halo particles heat the disk faster, though."""
     return GalaxyModel(disk=ExponentialDisk(4e10 * mass * M_SUN, 3 * size * KPC, 15 * size * KPC),
             bulge=PlummerDisk(1e10 * mass * M_SUN, 0.8 * size * KPC, 6 * size * KPC),
             halo=Tapered(MestelDisk(1.4e11 * mass * M_SUN, 3 * size * KPC, 40 * size * KPC),
@@ -1363,12 +1418,19 @@ def spiral_model(mass=1.0, size=1.0, Q=1.2, halo_weight=3.0):
             halo_particle_weight=halo_weight)
 
 
+def galaxy_styles(prefix=""):
+    """Blue-white disks, golden bulges and a faint violet dark halo."""
+    return {f"{prefix}d": style("#c4d6ff"), f"{prefix}b": style("#ffd08a"),
+            f"{prefix}h": style("#7d6aa8", 0.25)}
+
+
 def galaxy_scenario(bodies, fld, eps, description, view, show_seconds, tips, check_rot=2.0,
-        show_radius=8 * KPC, theta=0.3, trails=0.0, virial_prefix=""):
+        show_radius=8 * KPC, theta=0.3, trails=0.0, virial_prefix="", styles=None):
     T = 2 * math.pi * show_radius / float(fld.v_circ(show_radius))
     return Scenario(bodies, description, view, show_period=T, show_seconds=show_seconds,
             softening=eps, dt_max=galaxy_dt_max(fld, eps), trails=trails, theta=theta, tips=tips,
-            self_gravitating=True, check_time=check_rot * T, virial_prefix=virial_prefix)
+            self_gravitating=True, check_time=check_rot * T, virial_prefix=virial_prefix,
+            styles=galaxy_styles() if styles is None else styles)
 
 
 @scenario("galaxy-spiral", "galactic", "A disk galaxy that grows its own spiral arms (300k bodies)")
@@ -1380,7 +1442,10 @@ def galaxy_spiral(rng, scale):
             "amplification of the particle noise grows two- and three-armed spirals within a "
             "rotation; after ~2 rotations a bar forms in the centre, as in many real spirals.",
             view_circle(17 * KPC), 20, ["Each rotation at 8 kpc takes "
-            "~250 million years."])
+            "~250 million years.", "Press V twice for the Doppler colours: the rotating disk "
+            "turns red on the side moving up the screen, blue on the other.",
+            f"The faint violet haze is the dark-matter halo: press {legend_key(bodies, 'h')} to "
+            "hide it (F6 shows the legend)."])
 
 
 @scenario("galaxy-barred", "galactic",
@@ -1396,7 +1461,8 @@ def galaxy_barred(rng, scale):
             "bulge, light halo, Q = 1.5). Such disks are bar-unstable (Ostriker & Peebles 1973): "
             "a central bar with trailing spiral arms forms within ~2 rotations.",
             view_circle(17 * KPC), 20, ["The bar forms in the inner ~6 kpc after a few hundred "
-            "million years."], check_rot=1.0)
+            "million years.", f"The faint violet haze is the dark-matter halo: press "
+            f"{legend_key(bodies, 'h')} to hide it (F6 shows the legend)."], check_rot=1.0)
 
 
 @scenario("galaxy-whirlpool", "galactic",
@@ -1413,8 +1479,9 @@ def galaxy_whirlpool(rng, scale):
             "kpc perigalacticon after 250 million years. The tidal kick raises the two-armed "
             "grand-design spiral and the bridge that make M51, the Whirlpool, famous (Toomre & "
             "Toomre 1972).", view_circle(45 * KPC), 20, ["Closest approach happens about 250 "
-            "million years in.", "The haze around the galaxy is its dark-matter halo: every body "
-            "is drawn alike."], check_rot=3.0, virial_prefix="M51a-")
+            "million years in.", f"The faint violet haze is the galaxy's dark-matter halo: press "
+            f"{legend_key(bodies, 'M51a-h')} to hide it (F6 shows the legend)."], check_rot=3.0,
+            virial_prefix="M51a-", styles=galaxy_styles("M51a-") | {"M51b-b": style("#ffb070")})
 
 
 @scenario("galaxy-collision", "galactic",
@@ -1432,8 +1499,10 @@ def galaxy_collision(rng, scale):
             "long tidal tails and bridges, fall back together and merge within ~1.5 billion "
             "years, like the Antennae galaxies (Toomre & Toomre 1972).", view_circle(50 * KPC),
             30, ["The galaxies meet ~300 million years in; zoom out to follow the tails.",
-            "The haze around each galaxy is its dark-matter halo: every body is drawn alike."],
-            check_rot=2.0, virial_prefix="G1-")
+            f"The faint violet haze is each galaxy's dark-matter halo: press "
+            f"{legend_key(bodies, 'G1-h')} and {legend_key(bodies, 'G2-h')} to hide it (F6 shows "
+            "the legend)."], check_rot=2.0, virial_prefix="G1-",
+            styles=galaxy_styles("G1-") | galaxy_styles("G2-"))
 
 
 @scenario("tidal-stream", "galactic",
@@ -1462,7 +1531,8 @@ def tidal_stream(rng, scale):
             view_circle(58 * KPC), show_period=P, show_seconds=20, softening=eps,
             dt_max=min(galaxy_dt_max(fld, eps), t_peri), trails=0.0,
             self_gravitating=True, check_time=2 * P, virial_prefix="dwarf-",
-            tips=["Each orbit takes ~1.1 billion years; streams grow at every pericentre."])
+            tips=["Each orbit takes ~1.1 billion years; streams grow at every pericentre."],
+            styles={"dwarf": style("#bcd3ff")})
 
 
 @scenario("tidal-disruption", "galactic",
@@ -1491,7 +1561,9 @@ def tidal_disruption(rng, scale):
                     PERIAPSIS_STEP_FRACTION * periapsis_time_scale(G * m_bh, q - 2 * R_SUN)),
             trails=0.3, self_gravitating=True, check_time=30 * t_dyn + t_fallback,
             virial_prefix="star-",
-            tips=["The star reaches the black hole after a few hours of simulated time."])
+            tips=["The star reaches the black hole after a few hours of simulated time.",
+                    "Press V for the Speed colours: the escaping half of the debris is the "
+                    "fastest."], styles={"star": style("#ffcf9f")})
 
 
 @scenario("cosmic-web", "galactic",
@@ -1555,7 +1627,8 @@ def cosmic_web(rng, scale):
             view_circle(2.2 * r0), show_period=t_max, show_seconds=150, softening=eps,
             dt_max=clump / 30, trails=0.0, self_gravitating=True,
             check_time=0.5 * t_max,
-            tips=["Zoom out as the universe expands (it grows to 3x its starting size)."])
+            tips=["Zoom out as the universe expands (it grows to 3x its starting size)."],
+            color_mode="Density")
 
 
 # ------------------------------------------------------------------------------------------------
