@@ -131,10 +131,10 @@ void Controller::handle_events(sf::RenderWindow& window) {
                 key_pressed->control ? graphics.trails_length_increase() : timestep_increase();
                 break;
             case sf::Keyboard::Scan::Up:
-                graphics.body_size_increase();
+                key_pressed->control ? graphics.stretch_increase() : graphics.body_size_increase();
                 break;
             case sf::Keyboard::Scan::Down:
-                graphics.body_size_decrease();
+                key_pressed->control ? graphics.stretch_decrease() : graphics.body_size_decrease();
                 break;
             case sf::Keyboard::Scan::F1:
                 graphics.toggle_commands_panel();

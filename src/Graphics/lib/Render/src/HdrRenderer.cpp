@@ -606,7 +606,6 @@ HdrRenderer::HdrRenderer(sf::Vector2u size) {
     for (sf::Shader* shader : {&segment_shader, &velocity_segment_shader}) {
         shader->setUniform("deposits", deposits.getTexture());
     }
-    trail_shader.setUniform("beta", TONE_SOFTENING);
     histogram_shader.setUniform("blocks", blocks.getTexture());
     white_shader.setUniform("histogram", histogram.getTexture());
     white_shader.setUniform("quantile", AUTO_WHITE_QUANTILE);
@@ -615,7 +614,6 @@ HdrRenderer::HdrRenderer(sf::Vector2u size) {
     tonemap_shader.setUniform("highlights", deposits.getTexture());
     tonemap_shader.setUniform("select_color",
             sf::Glsl::Vec3(SELECT_COLOR.r / 255.f, SELECT_COLOR.g / 255.f, SELECT_COLOR.b / 255.f));
-    tonemap_shader.setUniform("beta", TONE_SOFTENING);
     tonemap_shader.setUniform("desaturation", HIGHLIGHT_DESATURATION);
     std::vector<sf::Glsl::Vec3> density_stops;
     for (const sf::Color color : DENSITY_STOPS) {
@@ -675,6 +673,9 @@ void HdrRenderer::draw(sf::RenderTarget& window, const sf::VertexArray& bodies,
     using ColorMode = Config::Graphics::ColorMode;
     using namespace Constants::Graphics;
     const float ev_scale = static_cast<float>(std::exp2(frame.exposure_ev));
+    for (sf::Shader* shader : {&trail_shader, &tonemap_shader}) {
+        shader->setUniform("beta", TONE_SOFTENING / frame.stretch);
+    }
 
     const bool velocities =
             frame.color_mode == ColorMode::SPEED || frame.color_mode == ColorMode::DOPPLER;

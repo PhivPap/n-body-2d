@@ -65,6 +65,8 @@ public:
     void exposure_increase();
     void exposure_decrease();
     void toggle_bloom();
+    void stretch_increase();
+    void stretch_decrease();
     // Legend rows, 0 for key 1; others do nothing
     void toggle_group(uint32_t row);
     void solo_group(uint32_t row);
@@ -106,6 +108,7 @@ private:
     double exposure_ev = graphics_cfg.exposure_ev;
     std::optional<float> locked_white{};  // bodies/px, while the exposure is locked
     bool bloom = graphics_cfg.bloom;
+    int stretch_steps = 0;  // faint light lifted STRETCH_FACTOR times a step, not in the config
     std::vector<sf::Vector2<double>> body_positions_cache;
     // Velocities read right after the positions, for the bodies whose orbits are worked out this
     // frame: see snapshot_velocities()

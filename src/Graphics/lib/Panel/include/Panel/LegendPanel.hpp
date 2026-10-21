@@ -8,8 +8,8 @@
 
 
 // How bodies are coloured: the colour mode, the legend's groups (keys 1-9), the velocity and
-// density modes' gradient, the exposure and bloom. Never NaN, which would never compare equal and
-// re-render the panel every frame.
+// density modes' gradient, the exposure, stretch and bloom. Never NaN, which would never compare
+// equal and re-render the panel every frame.
 struct LegendDisplayedData {
     struct Row {
         std::string name;  // the group's, as UTF-8
@@ -26,6 +26,7 @@ struct LegendDisplayedData {
     std::string scale;                  // the gradient's, e.g. "0 – 230 km/s"
     double exposure_ev = 0.0;
     std::optional<float> locked_white;  // bodies/px, while the exposure is locked
+    std::string stretch;                // e.g. "x4"
     bool bloom = false;
 
     bool operator==(const LegendDisplayedData&) const = default;

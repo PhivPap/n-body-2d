@@ -39,6 +39,13 @@ std::string speed_text(double m_s) {
            + (km ? " km/s" : " m/s");
 }
 
+// A stretch of `steps` STRETCH_FACTOR steps: "x4", "x1/4"
+std::string stretch_text(int steps) {
+    const auto factor = static_cast<int>(
+            std::lround(std::pow(Constants::Graphics::STRETCH_FACTOR, std::abs(steps))));
+    return steps >= 0 ? fmt::format("x{}", factor) : fmt::format("x1/{}", factor);
+}
+
 // The heaviest of the bodies offered to it, the nearest of equal masses
 struct HeaviestBody {
     std::optional<uint32_t> index;
@@ -421,7 +428,10 @@ void Graphics::draw_bodies() {
             {.color_mode = color_mode, .body_diameter_px = body_diameter_pixels,
                     .trails_fade_s = trails_fade.count(), .paused = paused,
                     .frame_time_s = frame_time.count(), .velocity_scale = velocity_scale,
-                    .exposure_ev = exposure_ev, .locked_white = locked_white, .bloom = bloom});
+                    .exposure_ev = exposure_ev, .locked_white = locked_white,
+                    .stretch = std::pow(Constants::Graphics::STRETCH_FACTOR,
+                            static_cast<float>(stretch_steps)),
+                    .bloom = bloom});
 }
 
 // Named markers wear their bodies' colours at full brightness: their group's, the ramp's at their
@@ -636,6 +646,7 @@ void Graphics::update_legend_panel() {
                                                              : "";
     write_handle->exposure_ev = exposure_ev;
     write_handle->locked_white = locked_white;
+    write_handle->stretch = stretch_text(stretch_steps);
     write_handle->bloom = bloom;
 }
 
@@ -986,6 +997,18 @@ void Graphics::toggle_bloom() {
     bloom = !bloom;
     update_legend_panel();
     action_log.log(fmt::format("Bloom: {}", bloom ? "Enabled" : "Disabled"));
+}
+
+void Graphics::stretch_increase() {
+    stretch_steps = std::min(stretch_steps + 1, Constants::Graphics::STRETCH_STEPS_RANGE.second);
+    update_legend_panel();
+    action_log.log(fmt::format("Stretch: {}", stretch_text(stretch_steps)));
+}
+
+void Graphics::stretch_decrease() {
+    stretch_steps = std::max(stretch_steps - 1, Constants::Graphics::STRETCH_STEPS_RANGE.first);
+    update_legend_panel();
+    action_log.log(fmt::format("Stretch: {}", stretch_text(stretch_steps)));
 }
 
 void Graphics::toggle_group(uint32_t row) {

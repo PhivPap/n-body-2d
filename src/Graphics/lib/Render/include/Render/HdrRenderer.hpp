@@ -47,6 +47,7 @@ public:
         float velocity_scale;               // m/s, Speed and Doppler
         double exposure_ev;
         std::optional<float> locked_white;  // bodies/px while the exposure is locked
+        float stretch;                      // faint light lifted: the curve's softening over it
         bool bloom;
     };
 
