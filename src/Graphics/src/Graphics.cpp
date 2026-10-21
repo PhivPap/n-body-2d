@@ -7,29 +7,11 @@
 #include "Constants/Constants.hpp"
 #include "Logger/Logger.hpp"
 #include "Logger/Time.hpp"
+#include "Render/BodyVertex.hpp"
+#include "Render/Colors.hpp"
 #include "Text/Text.hpp"
 
 
-constexpr std::string_view body_vertex_shader = R"glsl(
-#version 130
-uniform float pointDiameter;
-void main() {
-    gl_Position = gl_ModelViewProjectionMatrix * gl_Vertex;
-    gl_PointSize = pointDiameter;
-    gl_FrontColor = gl_Color;  // Pass color if using
-}
-)glsl";
-constexpr std::string_view body_fragment_shader = R"glsl(
-#version 130
-uniform float pointDiameter;
-void main() {
-    if (pointDiameter > 1.0) {
-        vec2 coord = gl_PointCoord - vec2(0.5, 0.5);
-        if (length(coord) > 0.5) discard;  // Circle clip (discard outer pixels)
-    }
-    gl_FragColor = gl_Color;  // Use vertex color or set fixed
-}
-)glsl";
 // Named bodies' markers: points as wide as their texture coordinate's x, drawn as circles
 constexpr std::string_view marker_vertex_shader = R"glsl(
 #version 130
@@ -44,14 +26,6 @@ constexpr std::string_view marker_fragment_shader = R"glsl(
 void main() {
     if (length(gl_PointCoord - vec2(0.5, 0.5)) > 0.5) discard;  // circle
     gl_FragColor = gl_Color;
-}
-)glsl";
-constexpr std::string_view fade_fragment_shader = R"glsl(
-#version 130
-uniform sampler2D texture;
-uniform float decay;
-void main() {
-    gl_FragColor = texture2D(texture, gl_TexCoord[0].xy) - decay;  // Fade rgb too (premultiplied)
 }
 )glsl";
 
@@ -71,12 +45,14 @@ struct HeaviestBody {
     }
 };
 
-// Offers `heaviest` the bodies begin..end whose vertices are within `radius` of `point`
+// Offers `heaviest` the bodies begin..end whose vertices are within `radius` of `point`, of the
+// render groups drawn (`group_visible`)
 void find_bodies_near(HeaviestBody& heaviest, sf::Vector2f point, float radius,
-        const sf::VertexArray& vertices, const double* mass, uint64_t begin, uint64_t end) {
+        const sf::VertexArray& vertices, const double* mass,
+        const std::vector<uint8_t>& group_visible, uint64_t begin, uint64_t end) {
     for (uint64_t i = begin; i < end; i++) {
         const float distance_squared = (vertices[i].position - point).lengthSquared();
-        if (distance_squared < radius * radius) {
+        if (distance_squared < radius * radius && group_visible[BodyVertex::group(vertices[i])]) {
             heaviest.offer(static_cast<uint32_t>(i), mass[i], distance_squared);
         }
     }
@@ -94,20 +70,33 @@ void find_bodies_near(HeaviestBody& heaviest, sf::Vector2f point, float radius,
     window.setFramerateLimit(graphics_cfg.fps);
     window.setVerticalSyncEnabled(graphics_cfg.vsync_enabled);
 
+    // A default vertex is white, which decodes as render group 255
     for (uint64_t i = 0; i < body_vertex_array.getVertexCount(); i++) {
-        body_vertex_array[i].color = Constants::Graphics::BODY_COLOR;
+        BodyVertex::set_group(body_vertex_array[i], render_groups.of_body()[i]);
     }
     selector.set_show(selection_show);
+    renderer.set_groups(render_groups.groups());
+    window.resetGLStates();  // the renderer's raw GL could fool SFML's state cache
+    if (const auto& unmatched = render_groups.unmatched_styles(); !unmatched.empty()) {
+        std::string keys;
+        for (const std::string& key : unmatched) {
+            keys += fmt::format("{}`{}`", keys.empty() ? "" : ", ", key);
+        }
+        Log::warning("Config::Graphics::render::groups: no body has the id or id group {}", keys);
+    }
+    if (color_mode == Config::Graphics::ColorMode::SPEED
+            || color_mode == Config::Graphics::ColorMode::DOPPLER
+            || color_mode == Config::Graphics::ColorMode::DENSITY) {
+        Log::warning("Colour mode {} isn't drawn yet: drawing Groups", graphics_cfg.color_mode_str);
+        color_mode = Config::Graphics::ColorMode::GROUPS;
+    }
+    update_marker_colors();
 
     glEnable(GL_PROGRAM_POINT_SIZE);
     glEnable(GL_POINT_SPRITE);  // gl_PointCoord is undefined without it (compatibility profile)
-    if (!body_shader.loadFromMemory(body_vertex_shader, body_fragment_shader)
-            || !fade_shader.loadFromMemory(fade_fragment_shader, sf::Shader::Type::Fragment)
-            || !marker_shader.loadFromMemory(marker_vertex_shader, marker_fragment_shader)) {
+    if (!marker_shader.loadFromMemory(marker_vertex_shader, marker_fragment_shader)) {
         throw std::runtime_error("Failed to load shaders");
     }
-    body_shader.setUniform("pointDiameter", static_cast<float>(body_diameter_pixels));
-    fade_shader.setUniform("texture", sf::Shader::CurrentTexture);
     tooltip_box.setFillColor(Constants::Graphics::TOOLTIP_BACKGROUND_COLOR);
     constexpr float apsis_radius = Constants::Graphics::APSIS_MARKER_RADIUS_PX;
     apsis_marker.setOrigin({apsis_radius, apsis_radius});
@@ -162,7 +151,6 @@ void find_bodies_near(HeaviestBody& heaviest, sf::Vector2f point, float radius,
 
     // No primaries until an orbit needs them (body_orbit())
     primaries.assign(named_bodies.indices().size(), -1);
-    reset_trails(true);
 }
 
 sf::RenderWindow& Graphics::get_window() {
@@ -275,7 +263,7 @@ std::optional<uint32_t> Graphics::transform_bodies() {
         }
         if (near) {
             find_bodies_near(heaviest, *hover_cursor, radius, body_vertex_array, bodies.mass_data(),
-                    begin, end);
+                    render_groups.visibility(), begin, end);
         }
     }
     return heaviest.index;
@@ -346,24 +334,29 @@ void Graphics::draw_grid() {
     }
 }
 
+// The bodies as light, added onto the grid. Trails freeze while paused.
 void Graphics::draw_bodies() {
-    sf::Sprite prev(trails_texture1.getTexture());
-    trails_texture2.clear(sf::Color::Transparent);
-    if (!paused) {
-        sf::RenderStates fade_states(sf::BlendNone);
-        fade_states.shader = &fade_shader;
-        set_fade_shader_decay();
-        trails_texture2.draw(prev, fade_states);
+    const auto frame_time = std::min(frame_sw.duration<std::chrono::duration<double>>(),
+            std::chrono::duration<double>(Constants::Graphics::FRAME_TIME_MAX));
+    frame_sw.reset();
+    renderer.draw(window, body_vertex_array,
+            {.color_mode = color_mode, .body_diameter_px = body_diameter_pixels,
+                    .trails_fade_s = trails_fade.count(), .paused = paused,
+                    .frame_time_s = frame_time.count(), .velocity_scale = velocity_scale,
+                    .exposure_ev = exposure_ev, .locked_white = locked_white, .bloom = bloom});
+}
+
+// Named markers wear their bodies' colours at full brightness: their group's in Groups mode,
+// else white
+void Graphics::update_marker_colors() {
+    const std::vector<uint32_t>& named = named_bodies.indices();
+    marker_colors.assign(named.size(), Constants::Graphics::NAMED_BODY_COLOR);
+    if (color_mode == Config::Graphics::ColorMode::GROUPS) {
+        for (size_t rank = 0; rank < named.size(); rank++) {
+            const RenderGroup& group = render_groups.groups()[render_groups.of_body()[named[rank]]];
+            marker_colors[rank] = Colors::display_hue(Colors::to_linear(group.color));
+        }
     }
-
-    trails_texture2.draw(body_vertex_array, sf::RenderStates(&body_shader));
-    trails_texture2.display();
-
-    std::swap(trails_texture1, trails_texture2);
-    trails_sprite.setTexture(trails_texture1.getTexture(), true);
-    // Bodies were alpha blended onto a transparent texture, so it holds premultiplied alpha
-    window.draw(trails_sprite,
-            sf::BlendMode(sf::BlendMode::Factor::One, sf::BlendMode::Factor::OneMinusSrcAlpha));
 }
 
 // Appends an osculating orbit around its attractor's barycentre to `lines`, dashed, unless it is
@@ -440,7 +433,7 @@ void Graphics::draw_selection_orbit() {
 void Graphics::draw_named_bodies() {
     const float base_px = body_diameter_pixels;
     named_bodies.draw_markers(window, marker_shader, body_vertex_array, base_px,
-            scale_named_by_mass, selector.selection_mask(), selection_show);
+            scale_named_by_mass, marker_colors, selector.selection_mask(), selection_show);
     if (show_labels) {
         named_bodies.draw_labels(window, body_vertex_array, base_px, scale_named_by_mass,
                 selector.selected_body(), selector.selection_mask(), selection_show);
@@ -618,33 +611,15 @@ void Graphics::draw_ui() {
     draw_tooltip();
 }
 
+// Trails start anew after the view jumps. A resize re-creates the renderer's buffers, with raw GL.
 void Graphics::reset_trails(bool resize) {
-    last_trail_fade_sw.reset();
-    remainder_fractional_fade_chunks = 0.f;
-    if (resize && (!trails_texture1.resize(window.getSize()) || 
-            !trails_texture2.resize(window.getSize()))) {
-        throw std::runtime_error("Failed to resize trail textures");
+    if (resize) {
+        renderer.resize(window.getSize());
+        window.resetGLStates();
     }
-    trails_texture1.clear(sf::Color::Transparent);
-    trails_texture2.clear(sf::Color::Transparent);
-}
-
-void Graphics::set_fade_shader_decay() {
-    if (trails_fade.count() <= 0) {
-        fade_shader.setUniform("decay", 1.f);
-        return;
+    else {
+        renderer.reset_trails();
     }
-
-    const auto elapsed = last_trail_fade_sw.duration<std::chrono::duration<double>>();
-    last_trail_fade_sw.reset();
-
-    constexpr float fade_chunk_size = 1.f / 255.f;
-    const float fade_fraction = elapsed / trails_fade;
-    const float fractional_fade_chunks = fade_fraction / fade_chunk_size + remainder_fractional_fade_chunks;
-    const float whole_fade_chunks = std::floor(fractional_fade_chunks);
-    remainder_fractional_fade_chunks = fractional_fade_chunks - whole_fade_chunks;
-
-    fade_shader.setUniform("decay", whole_fade_chunks * fade_chunk_size);
 }
 
 void Graphics::resize_view(sf::Vector2f new_size) {
@@ -717,7 +692,7 @@ void Graphics::release_select(sf::Vector2i position) {
         // vertices, searched once
         HeaviestBody heaviest;
         find_bodies_near(heaviest, sf::Vector2f(press), hover_radius(), body_vertex_array,
-                bodies.mass_data(), 0, bodies.n);
+                bodies.mass_data(), render_groups.visibility(), 0, bodies.n);
         clicked = pick_body(sf::Vector2f(press), heaviest.index);
     }
     if (clicked) {
@@ -727,7 +702,7 @@ void Graphics::release_select(sf::Vector2i position) {
     else {
         // A click on empty space selects nothing, like an empty box
         const sf::Rect<float> box(sf::Vector2f(press), sf::Vector2f(position - press));
-        selector.select(click ? sf::Rect<float>{} : box);
+        selector.select(click ? sf::Rect<float>{} : box, render_groups.visibility());
         if (const auto num_selected = selector.num_selected(); num_selected > 0) {
             action_log.log(fmt::format("Selected {} bodies", num_selected));
         }
@@ -751,7 +726,6 @@ void Graphics::body_size_increase() {
         action_log.log(fmt::format("Body size: {} pixels", new_body_diameter_pixels));
     }
     body_diameter_pixels = new_body_diameter_pixels;
-    body_shader.setUniform("pointDiameter", static_cast<float>(body_diameter_pixels));
 }
 
 void Graphics::body_size_decrease() {
@@ -764,7 +738,6 @@ void Graphics::body_size_decrease() {
         action_log.log(fmt::format("Body size: {} pixels", new_body_diameter_pixels));
     }
     body_diameter_pixels = new_body_diameter_pixels;
-    body_shader.setUniform("pointDiameter", static_cast<float>(body_diameter_pixels));
 }
 
 void Graphics::trails_length_increase() {

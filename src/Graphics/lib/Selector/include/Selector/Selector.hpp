@@ -20,7 +20,8 @@ public:
     Selector() = delete;
     Selector(const Bodies& bodies, const std::vector<sf::Vector2<double>>& body_positions_cache, 
             sf::VertexArray& body_vertex_array);
-    void select(const sf::Rect<float>& region);
+    // The bodies in `region` whose render group (BodyVertex) is visible: `group_visible` by group
+    void select(const sf::Rect<float>& region, const std::vector<uint8_t>& group_visible);
     void select_body(uint32_t index);  // replaces the selection with one body
     void set_show(bool show);
     bool has_selection() const;
@@ -35,5 +36,5 @@ private:
     sf::VertexArray& body_vertex_array;
     std::vector<uint32_t> selected_body_indices;
     std::vector<uint8_t> mask;
-    bool show = true;  // selected bodies get SELECT_COLOR
+    bool show = true;  // selected bodies are highlighted (BodyVertex::HIGHLIGHT)
 };

@@ -39,7 +39,6 @@ constexpr Range<uint16_t> FPS_RANGE = {1, 512};
 constexpr Range<double> PIXEL_RES_RANGE = {1e-12, 8.8e50};
 constexpr double ZOOM_FACTOR = 1.08;
 constexpr double GRID_SPACING_FACTOR = 4;
-constexpr sf::Color BODY_COLOR(255, 255, 255, 120);
 constexpr auto TRAILS_FADE_CHANGE_STEP = std::chrono::milliseconds(100);
 constexpr uint8_t INIT_BODY_PIXEL_DIAMETER = 1;
 constexpr Range<uint8_t> BODY_DIAMETER_PIXELS_RANGE = {1, 50};

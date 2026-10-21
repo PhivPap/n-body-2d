@@ -18,6 +18,8 @@
 #include "Panel/PanelManager.hpp"
 #include "Panel/StatsPanel.hpp"
 #include "RLCaller/RLCaller.hpp"
+#include "Render/HdrRenderer.hpp"
+#include "Render/RenderGroups.hpp"
 #include "Selector/Selector.hpp"
 #include "StopWatch/StopWatch.hpp"
 #include "ViewPort/ViewPort.hpp"
@@ -89,6 +91,10 @@ private:
     bool show_named_orbits = false;  // not in the config
     bool scale_named_by_mass = graphics_cfg.named_bodies_scale_by_mass;
     std::chrono::duration<double> trails_fade = graphics_cfg.trails_fade;
+    Config::Graphics::ColorMode color_mode = graphics_cfg.color_mode;
+    double exposure_ev = graphics_cfg.exposure_ev;
+    std::optional<float> locked_white{};  // bodies/px, while the exposure is locked
+    bool bloom = graphics_cfg.bloom;
     std::vector<sf::Vector2<double>> body_positions_cache;
     // Velocities read right after the positions, for the bodies whose orbits are worked out this
     // frame: see snapshot_velocities()
@@ -96,13 +102,16 @@ private:
     StopWatch sw;
     sf::VertexArray body_vertex_array;
     sf::RenderWindow window;
-    sf::RenderTexture trails_texture1, trails_texture2;
-    sf::Sprite trails_sprite{trails_texture1.getTexture()};
+    HdrRenderer renderer{window.getSize()};
+    StopWatch frame_sw;  // since the last frame, for the trail fade and the exposure
+    float velocity_scale = 1.f;  // m/s, of the Speed and Doppler colours
     ViewPort vp;
     Selector selector;
     IdGroups id_groups = group_ids(bodies, Constants::Graphics::NAMED_GROUP_MAX_SIZE,
             Constants::Graphics::NAMED_SEQUENCE_MAX_SIZE);
     NamedBodies named_bodies{bodies, id_groups};
+    RenderGroups render_groups{bodies, id_groups, graphics_cfg.group_styles};
+    std::vector<sf::Color> marker_colors;  // per named body, see update_marker_colors()
     std::vector<int32_t> primaries;  // per named body, see Orbit::find_primaries
     RLCaller primaries_update_rate_limiter{Constants::Graphics::PRIMARIES_UPDATE_TIMER};
     std::optional<Orbit::BodyOrbit> selection_orbit{};
@@ -126,8 +135,6 @@ private:
     sf::VertexArray named_orbit_lines{sf::PrimitiveType::Lines};
     sf::CircleShape apsis_marker{Constants::Graphics::APSIS_MARKER_RADIUS_PX};
     sf::Text apsis_label;
-    sf::Shader body_shader{};
-    sf::Shader fade_shader{};
     sf::Shader marker_shader{};
     PanelManager panel_manager{};
     ConfigPanel config_panel{Constants::Graphics::CONFIG_PANEL_WIDTH};
@@ -140,8 +147,6 @@ private:
     Stats stats{};
     RLCaller stats_update_rate_limiter{Constants::Graphics::STATS_UPDATE_TIMER};
     uint8_t body_diameter_pixels = Constants::Graphics::INIT_BODY_PIXEL_DIAMETER;
-    StopWatch last_trail_fade_sw;
-    float remainder_fractional_fade_chunks = 0.f;
 
     void pan_if_view_grabbed();
     void update_select_drag();
@@ -158,6 +163,7 @@ private:
     void update_hover(std::optional<uint32_t> heaviest_near_cursor);
     void draw_grid();
     void draw_bodies();
+    void update_marker_colors();
     bool append_orbit(const Orbit::BodyOrbit& orbit, const ScreenTransform& transform,
             sf::Color color, sf::VertexArray& lines);
     void draw_named_orbits();
@@ -172,5 +178,4 @@ private:
     void update_stats();
     void draw_ui();
     void reset_trails(bool resize = false);
-    void set_fade_shader_decay();
 };

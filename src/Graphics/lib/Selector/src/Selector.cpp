@@ -1,7 +1,7 @@
 #include "Selector/Selector.hpp"
 
-#include "Constants/Constants.hpp"
 #include "Orbit/Orbit.hpp"
+#include "Render/BodyVertex.hpp"
 
 
 Selector::Selector(const Bodies& bodies, 
@@ -13,19 +13,17 @@ Selector::Selector(const Bodies& bodies,
     selected_body_indices.reserve(bodies.n);
 }
 
-void Selector::select(const sf::Rect<float>& region) {
+void Selector::select(const sf::Rect<float>& region, const std::vector<uint8_t>& group_visible) {
     selected_body_indices.clear();
     for (uint64_t i = 0; i < bodies.n; i++) {
-        if (region.contains(body_vertex_array[i].position)) {
+        sf::Vertex& vertex = body_vertex_array[i];
+        const bool selected =
+                region.contains(vertex.position) && group_visible[BodyVertex::group(vertex)];
+        if (selected) {
             selected_body_indices.push_back(i);
-            mask[i] = 1;
-            body_vertex_array[i].color =
-                    show ? Constants::Graphics::SELECT_COLOR : Constants::Graphics::BODY_COLOR;
         }
-        else {
-            mask[i] = 0;
-            body_vertex_array[i].color = Constants::Graphics::BODY_COLOR;
-        }
+        mask[i] = selected;
+        BodyVertex::set_highlight(vertex, show && selected);
     }
 }
 
@@ -34,19 +32,17 @@ void Selector::select_body(uint32_t index) {
     assert(index < bodies.n);
     for (const uint32_t previous : selected_body_indices) {
         mask[previous] = 0;
-        body_vertex_array[previous].color = Constants::Graphics::BODY_COLOR;
+        BodyVertex::set_highlight(body_vertex_array[previous], false);
     }
     selected_body_indices.assign(1, index);
     mask[index] = 1;
-    body_vertex_array[index].color =
-            show ? Constants::Graphics::SELECT_COLOR : Constants::Graphics::BODY_COLOR;
+    BodyVertex::set_highlight(body_vertex_array[index], show);
 }
 
 void Selector::set_show(bool show) {
     this->show = show;
     for (const uint32_t index : selected_body_indices) {
-        body_vertex_array[index].color =
-                show ? Constants::Graphics::SELECT_COLOR : Constants::Graphics::BODY_COLOR;
+        BodyVertex::set_highlight(body_vertex_array[index], show);
     }
 }
 
