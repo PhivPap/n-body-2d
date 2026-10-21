@@ -11,6 +11,7 @@
 #include "Render/BodyVertex.hpp"
 #include "Render/Colors.hpp"
 #include "Render/FloatTarget.hpp"
+#include "Render/ToneMath.hpp"
 #include "fmt/format.h"
 
 
@@ -314,6 +315,32 @@ void append_trail_segments(const sf::VertexArray& bodies,
             segments.append(vertex);
         }
     }
+}
+
+
+std::optional<float> velocity_quantile(const sf::VertexArray& bodies,
+        const std::vector<uint8_t>& group_visible, sf::Vector2f window_size, bool line_of_sight,
+        std::vector<float>& samples) {
+    using namespace Constants::Graphics;
+    const uint64_t n = bodies.getVertexCount();
+    const uint64_t count = std::min<uint64_t>(n, VELOCITY_SCALE_SAMPLES);
+    samples.clear();
+    for (uint64_t k = 0; k < count; k++) {
+        const sf::Vertex& vertex = bodies[k * n / count];
+        const sf::Vector2f pos = vertex.position;
+        if (group_visible[BodyVertex::group(vertex)] && pos.x >= 0.f && pos.y >= 0.f
+                && pos.x < window_size.x && pos.y < window_size.y) {
+            const float v =
+                    line_of_sight ? std::abs(vertex.texCoords.y) : vertex.texCoords.length();
+            if (std::isfinite(v)) {
+                samples.push_back(v);
+            }
+        }
+    }
+    if (samples.size() < VELOCITY_SCALE_MIN_SAMPLES) {
+        return std::nullopt;
+    }
+    return ToneMath::quantile(samples, VELOCITY_SCALE_QUANTILE);
 }
 
 

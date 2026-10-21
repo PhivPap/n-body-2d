@@ -284,6 +284,39 @@ void test_trail_segments() {
     CHECK(kept);
 }
 
+// The velocity scale's quantile, of drawn bodies on screen only
+void test_velocity_quantile() {
+    const sf::Vector2f window(100.f, 50.f);
+    const std::vector<uint8_t> visible = {1, 0};
+    sf::VertexArray bodies(sf::PrimitiveType::Points);
+    std::vector<float> samples;
+    for (int k = 1; k <= 100; k++) {
+        sf::Vertex vertex({10.f, 10.f}, sf::Color(), {3.f * k, -4.f * k});  // speed 5 k
+        BodyVertex::set_group(vertex, 0);
+        bodies.append(vertex);
+    }
+    CHECK(velocity_quantile(bodies, visible, window, false, samples) == 5.f * 95.f);
+    CHECK(velocity_quantile(bodies, visible, window, true, samples) == 4.f * 95.f);
+    // Hidden or off-screen fast bodies don't count
+    for (const sf::Vector2f pos : {sf::Vector2f(10.f, 10.f), {-1.f, 10.f}, {10.f, 50.f},
+                 {100.f, 10.f}}) {
+        for (int k = 0; k < 100; k++) {
+            sf::Vertex vertex(pos, sf::Color(), {1e6f, 1e6f});
+            BodyVertex::set_group(vertex, pos == sf::Vector2f(10.f, 10.f) ? 1 : 0);
+            bodies.append(vertex);
+        }
+    }
+    const float n = static_cast<float>(bodies.getVertexCount());
+    CHECK(velocity_quantile(bodies, visible, window, false, samples) == 5.f * 95.f);
+    CHECK(n == 500.f && samples.size() == 100);
+    // Too few on screen: none
+    sf::VertexArray few(sf::PrimitiveType::Points);
+    for (int k = 0; k < 15; k++) {
+        few.append(bodies[k]);
+    }
+    CHECK(!velocity_quantile(few, visible, window, false, samples));
+}
+
 void test_tone_curve() {
     using ToneMath::level;
     const float white = 37.f, beta = 2.f;
@@ -381,6 +414,7 @@ int main() {
     test_group_capacity();
     test_visibility();
     test_trail_segments();
+    test_velocity_quantile();
     test_tone_curve();
     test_fade();
     test_white_from_histogram();

@@ -241,6 +241,58 @@ void test_segments(HdrRenderer& renderer, sf::RenderTexture& window) {
     CHECK(std::abs(diagonal - 31.f) < 1e-5f);
 }
 
+// Speed and Doppler colours match the CPU ramps; the density colormap spans inferno
+void test_color_modes(HdrRenderer& renderer, sf::RenderTexture& window) {
+    using namespace Constants::Graphics;
+    renderer.set_groups(std::vector{group(sf::Color::White, 2.f)});
+    HdrRenderer::Frame velocity = frame(ColorMode::SPEED);
+    velocity.velocity_scale = 1000.f;
+    std::vector<Body> bodies;
+    const std::vector<float> ts = {0.f, 0.2f, 0.5f, 0.8f, 1.f, 1.7f};
+    for (size_t k = 0; k < ts.size(); k++) {
+        // Speed t * scale, in any direction; and a Doppler velocity that gives t
+        const float angle = 0.7f * k;
+        bodies.push_back({.pos = {10.5f + 4 * k, 100.5f},
+                .velocity = 1000.f * ts[k] * sf::Vector2f(std::cos(angle), std::sin(angle))});
+        bodies.push_back({.pos = {10.5f + 4 * k, 110.5f},
+                .velocity = {123.f, 2000.f * (0.5f - ts[k])}});
+    }
+    renderer.draw(window, vertices(bodies), velocity);
+    bool speed = true;
+    for (size_t k = 0; k < ts.size(); k++) {
+        const sf::Vector3f ramp = Colors::unit_luminance(Colors::ramp_linear(SPEED_STOPS, ts[k]));
+        speed &= near(pixel(renderer, 10 + 4 * k, 100), 2.f * ramp, 1e-4f);
+    }
+    CHECK(speed);
+    velocity.color_mode = ColorMode::DOPPLER;
+    renderer.draw(window, vertices(bodies), velocity);
+    bool doppler = true;
+    for (size_t k = 0; k < ts.size(); k++) {
+        const sf::Vector3f ramp = Colors::unit_luminance(Colors::ramp_linear(DOPPLER_STOPS, ts[k]));
+        doppler &= near(pixel(renderer, 10 + 4 * k, 110), 2.f * ramp, 1e-4f);
+    }
+    CHECK(doppler);
+    // Up the screen (v.y < 0) recedes: red
+    const sf::Vector3f receding = pixel(renderer, 10 + 4 * 4, 110);
+    CHECK(receding.x > 3.f * receding.z);
+
+    // Density: inferno from just above black to white, every body alike
+    HdrRenderer::Frame density = frame(ColorMode::DENSITY);
+    density.locked_white = 16.f;
+    std::vector<Body> stacked = stack(60, 30, 16);
+    stacked.push_back({.pos = {50.5f + 0.995f, 30.5f}});  // a 0.005 weight on pixel (50, 30)
+    window.clear(sf::Color::Black);
+    renderer.draw(window, vertices(stacked), density);
+    window.display();
+    const sf::Image image = window.getTexture().copyToImage();
+    const auto close = [](sf::Color a, sf::Color b) {
+        return std::abs(a.r - b.r) <= 1 && std::abs(a.g - b.g) <= 1 && std::abs(a.b - b.b) <= 1;
+    };
+    CHECK(close(image.getPixel({50, 30}), DENSITY_STOPS[0]));
+    CHECK(close(image.getPixel({60, 30}), DENSITY_STOPS[std::size(DENSITY_STOPS) - 1]));
+    CHECK(image.getPixel({70, 30}) == sf::Color::Black);
+}
+
 // Block maxima of `counts` bodies, one block each
 std::vector<Body> blocks_of(const std::vector<uint32_t>& counts) {
     const uint32_t per_row = SIZE.x / Constants::Graphics::EXPOSURE_BLOCK_PX;
@@ -361,6 +413,7 @@ int main() {
     test_deposits(*renderer, window);
     test_trails(*renderer, window);
     test_segments(*renderer, window);
+    test_color_modes(*renderer, window);
     test_exposure(*renderer, window);
     test_tonemap(*renderer, window);
     return Check::result();

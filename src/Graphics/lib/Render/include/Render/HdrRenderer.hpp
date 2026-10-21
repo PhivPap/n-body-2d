@@ -20,6 +20,14 @@ void append_trail_segments(const sf::VertexArray& bodies,
         const std::array<uint8_t, 256>& group_visible, std::vector<sf::Vector2f>& previous,
         sf::VertexArray& segments);
 
+// The VELOCITY_SCALE_QUANTILE of the speeds (with `line_of_sight`, of |v_y|) in the texture
+// coordinates of up to VELOCITY_SCALE_SAMPLES bodies spread evenly over the indices, of those
+// drawn (`group_visible`, by group) inside the window; nullopt with fewer than
+// VELOCITY_SCALE_MIN_SAMPLES. `samples`: scratch space.
+std::optional<float> velocity_quantile(const sf::VertexArray& bodies,
+        const std::vector<uint8_t>& group_visible, sf::Vector2f window_size, bool line_of_sight,
+        std::vector<float>& samples);
+
 // The bodies as light, all on the GPU: added up in float buffers (a body is a 2x2 tent splat, or
 // a disc when drawn bigger), kept as phosphor trails, measured for the auto exposure and tone
 // mapped onto the window. The exposure is only read back when it is locked. While trails run,

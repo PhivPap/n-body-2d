@@ -104,7 +104,14 @@ private:
     sf::RenderWindow window;
     HdrRenderer renderer{window.getSize()};
     StopWatch frame_sw;  // since the last frame, for the trail fade and the exposure
-    float velocity_scale = 1.f;  // m/s, of the Speed and Doppler colours
+    // Speed and Doppler: velocities relative to the followed selection's, else to the
+    // barycentre's, coloured up to velocity_scale (m/s), measured on screen
+    sf::Vector2<double> barycentre_velocity;
+    float velocity_scale = 1.f;
+    bool velocity_scale_known = false;
+    RLCaller velocity_scale_rate_limiter{Constants::Graphics::VELOCITY_SCALE_UPDATE_TIMER};
+    StopWatch velocity_scale_sw;  // since its last measurement
+    std::vector<float> velocity_samples;
     ViewPort vp;
     Selector selector;
     IdGroups id_groups = group_ids(bodies, Constants::Graphics::NAMED_GROUP_MAX_SIZE,
@@ -162,6 +169,9 @@ private:
             std::optional<uint32_t> heaviest_near) const;
     void update_hover(std::optional<uint32_t> heaviest_near_cursor);
     void draw_grid();
+    sf::Vector2<double> reference_velocity() const;
+    void write_velocities();
+    void update_velocity_scale();
     void draw_bodies();
     void update_marker_colors();
     bool append_orbit(const Orbit::BodyOrbit& orbit, const ScreenTransform& transform,
