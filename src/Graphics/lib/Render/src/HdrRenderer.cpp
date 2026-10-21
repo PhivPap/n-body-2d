@@ -2,11 +2,13 @@
 
 #include <GL/gl.h>
 #include <algorithm>
+#include <cassert>
 #include <cmath>
 #include <stdexcept>
 #include <string>
 
 #include "Constants/Constants.hpp"
+#include "Render/BodyVertex.hpp"
 #include "Render/Colors.hpp"
 #include "Render/FloatTarget.hpp"
 #include "fmt/format.h"
@@ -291,6 +293,30 @@ sf::RenderStates replacing(const sf::Shader& shader) {
 }  // namespace
 
 
+void append_trail_segments(const sf::VertexArray& bodies,
+        const std::array<uint8_t, 256>& group_visible, std::vector<sf::Vector2f>& previous,
+        sf::VertexArray& segments) {
+    using namespace Constants::Graphics;
+    assert(previous.size() == bodies.getVertexCount());
+    // NaN and infinities fail too
+    const auto guarded = [](sf::Vector2f pos) {
+        return std::abs(pos.x) <= SEGMENT_GUARD_PX && std::abs(pos.y) <= SEGMENT_GUARD_PX;
+    };
+    for (size_t i = 0; i < previous.size(); i++) {
+        const sf::Vertex& vertex = bodies[i];
+        const sf::Vector2f from = previous[i];
+        previous[i] = vertex.position;
+        const float length_squared = (vertex.position - from).lengthSquared();
+        if (group_visible[BodyVertex::group(vertex)] && guarded(from) && guarded(vertex.position)
+                && length_squared >= SEGMENT_MIN_PX * SEGMENT_MIN_PX
+                && length_squared <= SEGMENT_MAX_PX * SEGMENT_MAX_PX) {
+            segments.append({from, vertex.color, vertex.texCoords});
+            segments.append(vertex);
+        }
+    }
+}
+
+
 HdrRenderer::HdrRenderer(sf::Vector2u size) {
     using namespace Constants::Graphics;
     glEnable(GL_PROGRAM_POINT_SIZE);
@@ -373,6 +399,9 @@ void HdrRenderer::set_groups(std::span<const RenderGroup> groups) {
     const std::vector<sf::Glsl::Vec4> table = style_table(groups);
     deposit_shader.setUniformArray("group_style", table.data(), table.size());
     velocity_deposit_shader.setUniformArray("group_style", table.data(), table.size());
+    for (size_t k = 0; k < group_drawn.size(); k++) {
+        group_drawn[k] = k < groups.size() && groups[k].visible && groups[k].brightness > 0.f;
+    }
 }
 
 void HdrRenderer::draw(sf::RenderTarget& window, const sf::VertexArray& bodies,
@@ -399,6 +428,12 @@ void HdrRenderer::draw(sf::RenderTarget& window, const sf::VertexArray& bodies,
     sf::RenderStates deposit_states(additive);
     deposit_states.shader = &shader;
     deposits.clear(sf::Color::Transparent);
+    update_segments(bodies, frame);
+    if (segments.getVertexCount() > 0) {
+        shader.setUniform("kernel", 0);
+        deposits.draw(segments, deposit_states);
+        shader.setUniform("kernel", tent ? 1 : 2);
+    }
     deposits.draw(bodies, deposit_states);
     deposits.display();
 
@@ -420,6 +455,28 @@ void HdrRenderer::draw(sf::RenderTarget& window, const sf::VertexArray& bodies,
     sf::RenderStates tonemap_states(additive);
     tonemap_states.shader = &tonemap_shader;
     window.draw(sf::Sprite(image->getTexture()), tonemap_states);
+}
+
+// While trails run, the segments from where the bodies were last frame: none on the first frame
+// of trails, or after they were reset (the view jumped), or while paused
+void HdrRenderer::update_segments(const sf::VertexArray& bodies, const Frame& frame) {
+    segments.clear();
+    if (frame.trails_fade_s <= 0.0 || trails_cleared) {
+        previous_valid = false;
+    }
+    if (frame.trails_fade_s <= 0.0 || frame.paused) {
+        return;
+    }
+    if (previous_valid && previous.size() == bodies.getVertexCount()) {
+        append_trail_segments(bodies, group_drawn, previous, segments);
+    }
+    else {
+        previous.resize(bodies.getVertexCount());
+        for (size_t i = 0; i < previous.size(); i++) {
+            previous[i] = bodies[i].position;
+        }
+    }
+    previous_valid = true;
 }
 
 // trail = max(faded previous trail, deposits), per channel. They start anew when turned on.

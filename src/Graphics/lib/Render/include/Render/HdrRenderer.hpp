@@ -11,9 +11,20 @@
 #include "SFML/Graphics.hpp"
 
 
+// Trail segments for the bodies of drawn groups (`group_visible`, by group index) that moved
+// SEGMENT_MIN_PX to SEGMENT_MAX_PX since their `previous` positions, both ends within
+// SEGMENT_GUARD_PX of the window's origin: lines appended to `segments`, both ends with the body's
+// colour and texture coordinates. `previous` then holds every body's position, hidden ones
+// included, so a group shown again draws no line across where it went meanwhile.
+void append_trail_segments(const sf::VertexArray& bodies,
+        const std::array<uint8_t, 256>& group_visible, std::vector<sf::Vector2f>& previous,
+        sf::VertexArray& segments);
+
 // The bodies as light, all on the GPU: added up in float buffers (a body is a 2x2 tent splat, or
 // a disc when drawn bigger), kept as phosphor trails, measured for the auto exposure and tone
-// mapped onto the window. The exposure is only read back when it is locked.
+// mapped onto the window. The exposure is only read back when it is locked. While trails run,
+// bodies that moved a pixel or more also draw a line from where they were, which GL draws
+// unreliably under 1.5 px: the dots stay.
 class HdrRenderer {
 public:
     // How a frame is drawn
@@ -21,7 +32,7 @@ public:
         Config::Graphics::ColorMode color_mode;
         uint8_t body_diameter_px;
         double trails_fade_s;               // 0: no trails
-        bool paused;                        // trails freeze
+        bool paused;                        // trails freeze, no segments
         double frame_time_s;                // wall time since the previous frame, capped
         float velocity_scale;               // m/s, Speed and Doppler
         double exposure_ev;
@@ -33,7 +44,7 @@ public:
     explicit HdrRenderer(sf::Vector2u size);
     // Also clears the trails and snaps the exposure; ignores a zero size (minimized)
     void resize(sf::Vector2u size);
-    void reset_trails();
+    void reset_trails();  // and the next frame draws no trail segments
     void set_groups(std::span<const RenderGroup> groups);  // the deposit shader's style table
     // `bodies`: points at window positions, encoded as BodyVertex describes, drawn as light added
     // onto `window`
@@ -56,6 +67,10 @@ private:
     bool trails_cleared = true;                 // the trails start anew
     bool snap_exposure = true;                  // the white point jumps to the measured one
     uint32_t frame_count = 0;                   // moves the dither
+    std::array<uint8_t, 256> group_drawn{};     // per group index (any 8-bit one)
+    std::vector<sf::Vector2f> previous;         // the bodies' positions last frame
+    bool previous_valid = false;                // in this view, while trails run
+    sf::VertexArray segments{sf::PrimitiveType::Lines};
     sf::VertexArray block_points{sf::PrimitiveType::Points};  // one per block, for the histogram
     sf::Shader deposit_shader;
     sf::Shader velocity_deposit_shader;  // Speed and Doppler
@@ -65,6 +80,7 @@ private:
     sf::Shader white_shader;
     sf::Shader tonemap_shader;
 
+    void update_segments(const sf::VertexArray& bodies, const Frame& frame);
     void draw_trails(const Frame& frame, float ev_scale);
     void measure_exposure(const Frame& frame);
 };
