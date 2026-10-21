@@ -32,9 +32,8 @@ std::optional<float> velocity_quantile(const sf::VertexArray& bodies,
 // The bodies as light, all on the GPU: added up in float buffers (a body is a 2x2 tent splat, or
 // a disc when drawn bigger), kept as phosphor trails, measured for the auto exposure and tone
 // mapped onto the window, with a glow (bloom) around the brightest light. The exposure is only
-// read back when it is locked. While trails run,
-// bodies that moved a pixel or more also draw a line from where they were, which GL draws
-// unreliably under 1.5 px: the dots stay.
+// read back when it is locked. While trails run, bodies that moved a pixel or more also draw a
+// line from where they were, which GL draws unreliably under 1.5 px: the dots stay.
 class HdrRenderer {
 public:
     // How a frame is drawn
