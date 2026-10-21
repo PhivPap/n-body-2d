@@ -28,8 +28,9 @@ struct TrailPixel {
 float trail_level(const TrailPixel& pixel, float fade_time, float white, float beta);
 // The pixel after a frame of `frame_time` (0 paused) that gave it `light`, `selection_coverage`
 // of it covered by the selection: the light takes the pixel if it is shown at least as bright, or
-// if it holds TRAIL_TAKEOVER_MIN of a body's light (luminance) and that body would be; else the
-// pixel ages, and is black once its level reaches 0
+// if it holds TRAIL_TAKEOVER_MIN of a body's light (luminance) of another colour (hue off by more
+// than TRAIL_HUE_TOLERANCE) and that body would be, laid over another colour as far as it covers
+// the pixel (a body's light covers it); else the pixel ages, and is black once its level reaches 0
 TrailPixel trail_step(const TrailPixel& pixel, sf::Vector3f light, float selection_coverage,
         float frame_time, float fade_time, float white, float beta);
 // The auto white point from a histogram of block maxima in log2 bins, bin i starting at

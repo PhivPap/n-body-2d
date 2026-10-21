@@ -125,9 +125,9 @@ bright light, so a galaxy's dense core shows its structure next to its faint tid
 covers the grid: only light fainter than the grid's lines lets them show through.
 
 - **Exposure** is automatic: the white point follows the brightest pixels on screen (the 99.9th
-  percentile of the brightest pixel in each 8×8 block, trails aside), smoothly over 0.4 s. `[` and `]` make the
-  image darker or brighter by half a stop (EV), and `E` locks the current white point, so the
-  brightness stops adapting, for example while two galaxies merge.
+  percentile of the brightest pixel in each 8×8 block, trails aside), smoothly over 0.4 s. `[`
+  and `]` make the image darker or brighter by half a stop (EV), and `E` locks the current white
+  point, so the brightness stops adapting, for example while two galaxies merge.
 - **Stretch** (`Ctrl`+`Up`/`Down`) lifts faint light, twice as much a step up to x256, while the
   brightest light stays white: single bodies in dense scenes and faint groups become visible,
   like the dark-matter halos of `galaxy-collision` at x16. It starts at x1 and goes down to x1/4.
@@ -151,8 +151,9 @@ covers the grid: only light fainter than the grid's lines lets them show through
   `galaxy-collision`, `3` and `4` hide the faint violet haze of the dark-matter halos.
 - **Trails** are a phosphor: each pixel keeps the brightest light it saw lately, and every trail
   fades evenly from its body to nothing in `trails_fade_time_s`, however bright it is. A trail is
-  as wide as its body and continuous at any speed, and where a newer trail runs over an older
-  one, the newer is on top. Selected bodies' trails keep the selection colour until they fade.
+  as wide as its body and continuous at any speed, and where a body's trail runs over another
+  body's, the newer one is on top. Selected bodies' trails keep the selection colour until they
+  fade.
   Trails freeze while the simulation is paused, and start anew when the view jumps (zoom, pan,
   resize, `C`).
 - **Bloom** (`B`) adds a soft glow around light brighter than about half the white point, such

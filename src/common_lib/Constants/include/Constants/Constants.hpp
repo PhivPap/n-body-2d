@@ -135,9 +135,12 @@ constexpr float SEGMENT_MIN_PX = 1.f;
 constexpr float SEGMENT_MAX_PX = 4096.f;
 constexpr float SEGMENT_GUARD_PX = 1e5f;
 // A trail pixel given at least TRAIL_TAKEOVER_MIN of a body's light (half covered by a body of
-// brightness 1) takes it if that body is shown at least as bright: a trail laid over another
-// replaces it, also where it partly covers pixels
+// brightness 1) of another colour (a channel of its hue at full brightness off by more than
+// TRAIL_HUE_TOLERANCE) takes it if that body is shown at least as bright: a trail laid over
+// another's replaces it, also where it partly covers pixels, while a trail overlapping itself, as
+// in bends, keeps its brightest light
 constexpr float TRAIL_TAKEOVER_MIN = 0.5f;
+constexpr float TRAIL_HUE_TOLERANCE = 0.05f;
 constexpr auto FRAME_TIME_MAX = std::chrono::milliseconds(250);
 // Speed and Doppler colours span the VELOCITY_SCALE_QUANTILE of up to VELOCITY_SCALE_SAMPLES
 // visible bodies on screen, refreshed every VELOCITY_SCALE_UPDATE_TIMER, followed over
@@ -208,7 +211,7 @@ static_assert(STRETCH_STEPS_RANGE.first <= 0 && STRETCH_STEPS_RANGE.second >= 0)
 static_assert(STRETCH_FACTOR > 1);
 static_assert(SEGMENT_MIN_PX > 0 && SEGMENT_MIN_PX < SEGMENT_MAX_PX);
 static_assert(SEGMENT_MAX_PX < SEGMENT_GUARD_PX);
-static_assert(TRAIL_TAKEOVER_MIN > 0 && TRAIL_TAKEOVER_MIN <= 1);
+static_assert(TRAIL_TAKEOVER_MIN > 0 && TRAIL_TAKEOVER_MIN <= 1 && TRAIL_HUE_TOLERANCE > 0);
 static_assert(VELOCITY_SCALE_QUANTILE > 0 && VELOCITY_SCALE_QUANTILE < 1);
 static_assert(VELOCITY_SCALE_MIN_SAMPLES >= 1);
 static_assert(VELOCITY_SCALE_MIN_SAMPLES <= VELOCITY_SCALE_SAMPLES);
