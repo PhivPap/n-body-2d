@@ -205,7 +205,8 @@ void main() {
 }
 )glsl";
 // The image onto the window: an asinh stretch to the white point, the pixel's hue at full
-// brightness turning white near it, or in Density mode the luminance through the colormap
+// brightness turning white near it, or in Density mode the luminance through the colormap. It
+// covers the grid as much as it is bright: entirely from the grid's own brightness up.
 constexpr std::string_view tonemap_fragment_shader = R"glsl(
 uniform sampler2D image;
 uniform sampler2D exposure;
@@ -219,6 +220,7 @@ uniform bool bloom;
 uniform sampler2D bloom_image;              // half resolution, smooth
 uniform float bloom_strength;
 uniform float frame;                        // frame counter, moves the dither
+uniform float grid_level;                   // the grid's display level
 const vec3 LUMA = vec3(0.2126, 0.7152, 0.0722);
 
 vec3 encode(vec3 c) {  // linear to sRGB
@@ -256,7 +258,7 @@ void main() {
         vec2 p = gl_FragCoord.xy + 5.588238 * frame;
         color += (noise(p) + noise(p + vec2(47.0, 17.0)) - 1.0) / 255.0;
     }
-    gl_FragColor = vec4(color, 1.0);
+    gl_FragColor = vec4(color, clamp(max(color.r, max(color.g, color.b)) / grid_level, 0.0, 1.0));
 }
 )glsl";
 
@@ -358,6 +360,10 @@ std::vector<sf::Glsl::Vec3> linear_stops(std::span<const sf::Color> stops) {
 
 // Light adds up. Not sf::BlendAdd, which multiplies by the source's alpha: deposits have none.
 const sf::BlendMode additive(sf::BlendMode::Factor::One, sf::BlendMode::Factor::One);
+// The tone-mapped image over the window, as much as its alpha covers it, keeping the window's alpha
+const sf::BlendMode over(sf::BlendMode::Factor::One, sf::BlendMode::Factor::OneMinusSrcAlpha,
+        sf::BlendMode::Equation::Add, sf::BlendMode::Factor::Zero, sf::BlendMode::Factor::One,
+        sf::BlendMode::Equation::Add);
 
 // `shader` drawn without blending
 sf::RenderStates replacing(const sf::Shader& shader) {
@@ -481,6 +487,10 @@ HdrRenderer::HdrRenderer(sf::Vector2u size) {
     tonemap_shader.setUniformArray("density_stops", density_stops.data(), density_stops.size());
     tonemap_shader.setUniform("bloom_image", bloom_levels[0].getTexture());
     tonemap_shader.setUniform("bloom_strength", BLOOM_STRENGTH);
+    // The grid's display level: its lines' grey over the black background
+    const float grid_level =
+            GRID_COLOR.a / 255.f * std::max({GRID_COLOR.r, GRID_COLOR.g, GRID_COLOR.b}) / 255.f;
+    tonemap_shader.setUniform("grid_level", grid_level);
     bloom_prefilter_shader.setUniform("threshold", BLOOM_THRESHOLD);
     bloom_prefilter_shader.setUniform("knee", BLOOM_KNEE);
 }
@@ -573,7 +583,7 @@ void HdrRenderer::draw(sf::RenderTarget& window, const sf::VertexArray& bodies,
     tonemap_shader.setUniform("ev_scale", ev_scale);
     tonemap_shader.setUniform("density", frame.color_mode == ColorMode::DENSITY);
     tonemap_shader.setUniform("frame", static_cast<float>(frame_count++ % 1024));
-    sf::RenderStates tonemap_states(additive);
+    sf::RenderStates tonemap_states(over);
     tonemap_states.shader = &tonemap_shader;
     window.draw(sf::Sprite(image->getTexture()), tonemap_states);
 }

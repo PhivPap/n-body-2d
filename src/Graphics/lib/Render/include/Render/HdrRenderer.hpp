@@ -55,8 +55,8 @@ public:
     void resize(sf::Vector2u size);
     void reset_trails();  // and the next frame draws no trail segments
     void set_groups(std::span<const RenderGroup> groups);  // the deposit shader's style table
-    // `bodies`: points at window positions, encoded as BodyVertex describes, drawn as light added
-    // onto `window`
+    // `bodies`: points at window positions, encoded as BodyVertex describes, drawn as light over
+    // `window` (the grid), which it covers as much as it is bright
     void draw(sf::RenderTarget& window, const sf::VertexArray& bodies, const Frame& frame);
     // Read back, which stalls: the auto white point (bodies/px), and a rectangle of the HDR image
     // the last frame showed (the trails, or without them the deposits), as read_pixels() gives it

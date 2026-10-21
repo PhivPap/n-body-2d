@@ -399,7 +399,7 @@ void Graphics::update_velocity_scale() {
     }
 }
 
-// The bodies as light, added onto the grid. Trails freeze while paused.
+// The bodies as light, over the grid. Trails freeze while paused.
 void Graphics::draw_bodies() {
     using ColorMode = Config::Graphics::ColorMode;
     if (color_mode == ColorMode::SPEED || color_mode == ColorMode::DOPPLER) {

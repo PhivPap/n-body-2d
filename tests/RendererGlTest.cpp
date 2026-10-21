@@ -435,6 +435,15 @@ void test_tonemap(HdrRenderer& renderer, sf::RenderTexture& window) {
     window.display();
     image = window.getTexture().copyToImage();
     CHECK(shown(28, 30).r >= 254);
+    // Over the grid's grey: light as bright as it hides it, fainter light doesn't darken it (a
+    // single body is shown at 44/255), and unlit pixels leave it
+    const sf::Color grey(64, 64, 64);
+    window.clear(grey);
+    renderer.draw(window, vertices(bodies), locked);
+    window.display();
+    image = window.getTexture().copyToImage();
+    CHECK(shown(5, 5) == grey && std::abs(shown(20, 30).r - 64) <= 1);
+    CHECK(shown(28, 30).r >= 254 && shown(40, 30).r > 100 && shown(40, 30).g <= 1);
 }
 }  // namespace
 
