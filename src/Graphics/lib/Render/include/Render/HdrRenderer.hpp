@@ -7,6 +7,7 @@
 #include <vector>
 
 #include "Config/Config.hpp"
+#include "Constants/Constants.hpp"
 #include "Render/RenderGroups.hpp"
 #include "SFML/Graphics.hpp"
 
@@ -30,7 +31,8 @@ std::optional<float> velocity_quantile(const sf::VertexArray& bodies,
 
 // The bodies as light, all on the GPU: added up in float buffers (a body is a 2x2 tent splat, or
 // a disc when drawn bigger), kept as phosphor trails, measured for the auto exposure and tone
-// mapped onto the window. The exposure is only read back when it is locked. While trails run,
+// mapped onto the window, with a glow (bloom) around the brightest light. The exposure is only
+// read back when it is locked. While trails run,
 // bodies that moved a pixel or more also draw a line from where they were, which GL draws
 // unreliably under 1.5 px: the dots stay.
 class HdrRenderer {
@@ -61,6 +63,9 @@ public:
     // the last frame showed (the trails, or without them the deposits), as read_pixels() gives it
     float read_white_point();
     std::vector<float> read_image(sf::IntRect rect);
+    // The last frame's bloom at half resolution, read back likewise: what the tone curve adds,
+    // times BLOOM_STRENGTH
+    std::vector<float> read_bloom(sf::IntRect rect);
 
 private:
     sf::RenderTexture deposits;                 // this frame's light
@@ -68,6 +73,9 @@ private:
     sf::RenderTexture blocks;                   // the image's maximum luminance per block
     sf::RenderTexture histogram;                // of the blocks' maxima, in log2 bins
     std::array<sf::RenderTexture, 2> exposure;  // 1x1, ping-pong: the auto white point
+    // Bloom: the light above the threshold, at 1/2 to 1/2^BLOOM_LEVELS of the size, then each
+    // level with the blurred smaller ones added
+    std::array<sf::RenderTexture, Constants::Graphics::BLOOM_LEVELS> bloom_levels;
     uint32_t trail_index = 0;                   // the trail buffer last drawn
     uint32_t exposure_index = 0;
     sf::RenderTexture* image = &deposits;       // what the last frame showed
@@ -87,8 +95,12 @@ private:
     sf::Shader histogram_shader;
     sf::Shader white_shader;
     sf::Shader tonemap_shader;
+    sf::Shader bloom_prefilter_shader;
+    sf::Shader bloom_down_shader;
+    sf::Shader bloom_up_shader;
 
     void update_segments(const sf::VertexArray& bodies, const Frame& frame);
     void draw_trails(const Frame& frame, float ev_scale);
     void measure_exposure(const Frame& frame);
+    void draw_bloom(float locked_white, float ev_scale);
 };
