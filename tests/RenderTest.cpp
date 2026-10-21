@@ -354,12 +354,20 @@ void test_trails() {
     }
     const TrailPixel lit{color, 2.f, false};
     CHECK(trail_step(lit, {}, 0.f, 0.f, fade, white, beta) == lit);  // paused
-    // A body's light at 0.9 of its level, then: over half of a body takes it, under half doesn't
+    // A body's light at 0.9 of its level, then: over half of a body of another colour takes it,
+    // under half doesn't, and neither does the same colour (a trail overlapping itself in a bend)
     const TrailPixel old{color, 0.f, false};
-    const TrailPixel taken{0.6f * color, 0.f, false};
+    const sf::Vector3f blue = Colors::unit_luminance({0.2f, 0.4f, 1.f});
+    // ...over the old light as it shows now, as far as it leaves it uncovered
+    const float now = beta * std::sinh(0.9f * ToneMath::level(1.f, white, beta)
+                                       * std::asinh(white / beta));
+    const TrailPixel taken = trail_step(old, 0.6f * blue, 0.f, 1.f, fade, white, beta);
     const TrailPixel kept{color, 1.f, false};
-    CHECK(trail_step(old, 0.6f * color, 0.f, 1.f, fade, white, beta) == taken);
-    CHECK(trail_step(old, 0.4f * color, 0.f, 1.f, fade, white, beta) == kept);
+    const sf::Vector3f off = taken.light - (0.6f * blue + 0.4f * now * color);
+    CHECK(taken.age == 0.f && !taken.selected
+            && std::max({std::abs(off.x), std::abs(off.y), std::abs(off.z)}) < 1e-5f);
+    CHECK(trail_step(old, 0.4f * blue, 0.f, 1.f, fade, white, beta) == kept);
+    CHECK(trail_step(old, 0.6f * color, 0.f, 1.f, fade, white, beta) == kept);
     // The selection, a quarter of a pixel of it: full brightness, until brighter light comes
     const sf::Vector3f select = 0.25f * color;
     const TrailPixel selected = trail_step(old, select, 0.25f, 1.f, fade, white, beta);

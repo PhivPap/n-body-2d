@@ -211,6 +211,21 @@ void test_trails(HdrRenderer& renderer, sf::RenderTexture& window) {
     trails.frame_time_s = 0.4;
     renderer.draw(window, vertices({}), trails);
     CHECK(trail(renderer, 18) == ToneMath::TrailPixel{});
+    // Over half of a body of another colour takes a pixel its body outshines, the same colour
+    // doesn't: a trail overlapping itself keeps its brightest light
+    const sf::Color blue(0x40, 0x80, 0xff);
+    renderer.set_groups(std::vector{group(sf::Color(0xff, 0xa0, 0x40)), group(blue)});
+    trails.frame_time_s = 0.01;
+    renderer.reset_trails();
+    renderer.draw(window, vertices({{.pos = {40.5f, 10.5f}}, {.pos = {44.5f, 10.5f}}}), trails);
+    const ToneMath::TrailPixel kept = trail(renderer, 44);
+    renderer.draw(window, vertices({{.pos = {40.8f, 10.5f}, .group = 1}, {.pos = {44.8f, 10.5f}}}),
+            trails);
+    // Laid over the orange as far as it leaves it uncovered: a body's light all in all
+    const ToneMath::TrailPixel taken = trail(renderer, 40);
+    CHECK(taken.age == 0.f && taken.light.z > taken.light.x
+            && std::abs(Colors::luminance(taken.light) - 1.f) < 0.01f);
+    CHECK(trail(renderer, 44).light == kept.light && trail(renderer, 44).age > 0.f);
     // A reset clears everything
     renderer.draw(window, vertices(stack(30, 10, 40)), trails);
     renderer.reset_trails();

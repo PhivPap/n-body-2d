@@ -103,21 +103,23 @@ void main() {
     gl_FragColor = vec4(deposit, selected) * w;  // alpha: how much of the pixel the selection covers
 }
 )glsl";
-// A trail segment, the line from where a body was last frame, as a quad around it as wide as the
-// body's light reaches: the fragment shader gives it the body's profile across the line, so the
-// segment is the body swept along it. A disc's segment carries the light found at both of its
-// ends, the lower, where that is more than its own: bodies moving together (a planet and its moons)
-// leave their light added up, as they show it, while a body entering or leaving a crowd brings
-// none of the crowd's light out of it.
+// A trail segment, the line from where a body was last frame, as a rectangle along it as wide as
+// the body's light reaches: the fragment shader gives it the body's profile across the line, so
+// the segment is the body swept along it. Its round ends are the body's own splats, this frame's
+// and last frame's (in the trails), so the rectangle stops at the line's ends: fragments are most
+// of what trails cost. A disc's segment also carries the light that travels with it, as a
+// planet's moons: the light at its head beyond the brightest just outside it (not a crowd's), at
+// most what its tail held last frame (not a cluster it just entered). Planets and their moons
+// then leave even trails, not beads where their light added up each frame.
 constexpr std::string_view segment_geometry_shader = R"glsl(
 layout(lines) in;
 layout(triangle_strip, max_vertices = 4) out;
 uniform vec2 target_size;      // pixels
 uniform float reach;           // how far from its centre the body's light reaches, pixels
-uniform bool carries;          // discs: the segment carries the light around the body
+uniform bool carries;          // discs: the segment carries the light travelling with the body
 uniform float disc_radius;     // pixels
-uniform sampler2D deposits;    // this frame's light, at the head
-uniform sampler2D old_trails;  // last frame's, at the tail
+uniform sampler2D deposits;    // this frame's light
+uniform sampler2D old_trails;  // last frame's trails
 in vec3 deposit[];
 in float selected[];
 flat out vec3 segment_deposit;
@@ -125,28 +127,34 @@ flat out float segment_selected;
 flat out vec4 ends;            // the line's, in gl_FragCoord's pixels
 const vec3 LUMA = vec3(0.2126, 0.7152, 0.0722);
 
-// How many times its own luminance `own` a disc at p finds in `light` at its nearest pixel, 0
-// outside the window
-float found(sampler2D light, vec2 p, float own) {
-    ivec2 pixel = ivec2(floor(p));
-    if (any(lessThan(pixel, ivec2(0))) || any(greaterThanEqual(pixel, ivec2(target_size)))) {
-        return 0.0;
-    }
-    float w = clamp(disc_radius + 0.5 - length(p - vec2(pixel) - 0.5), 0.0, 1.0);
-    return dot(texelFetch(light, pixel, 0).rgb, LUMA) / (own * w);
+// The luminance of `light` at p's pixel, clamped into the window
+float luminance_at(sampler2D light, vec2 p) {
+    ivec2 pixel = clamp(ivec2(floor(p)), ivec2(0), ivec2(target_size) - 1);
+    return dot(texelFetch(light, pixel, 0).rgb, LUMA);
+}
+
+// A disc's own luminance at p's pixel: its peak `own` times its coverage of that pixel
+float own_at(vec2 p, float own) {
+    return own * clamp(disc_radius + 0.5 - length(p - floor(p) - 0.5), 0.0, 1.0);
 }
 
 void main() {
     vec2 a = (gl_in[0].gl_Position.xy / gl_in[0].gl_Position.w * 0.5 + 0.5) * target_size;
     vec2 b = (gl_in[1].gl_Position.xy / gl_in[1].gl_Position.w * 0.5 + 0.5) * target_size;
     float own = dot(deposit[1], LUMA);
-    float carried = carries && own > 0.0
-            ? max(1.0, min(found(deposits, b, own), found(old_trails, a, own)))
-            : 1.0;
-    vec2 along = (b != a ? normalize(b - a) : vec2(1.0, 0.0)) * reach;
-    vec2 across = vec2(-along.y, along.x);
-    vec2 corners[4] = vec2[4](a - along - across, a - along + across, b + along - across,
-            b + along + across);
+    float carried = 1.0;
+    if (carries && own > 0.0) {
+        float r = reach + 1.0;  // past its own light
+        float around = max(max(luminance_at(deposits, b + vec2(r, 0.0)),
+                                   luminance_at(deposits, b - vec2(r, 0.0))),
+                max(luminance_at(deposits, b + vec2(0.0, r)),
+                        luminance_at(deposits, b - vec2(0.0, r))));
+        carried = max(1.0, min((luminance_at(deposits, b) - around) / own_at(b, own),
+                                   luminance_at(old_trails, a) / own_at(a, own)));
+    }
+    vec2 along = b != a ? normalize(b - a) : vec2(1.0, 0.0);
+    vec2 across = vec2(-along.y, along.x) * reach;
+    vec2 corners[4] = vec2[4](a - across, a + across, b - across, b + across);
     for (int k = 0; k < 4; k++) {
         gl_Position = vec4(corners[k] / target_size * 2.0 - 1.0, 0.0, 1.0);
         segment_deposit = deposit[1] * carried;
@@ -181,8 +189,10 @@ void main() {
 // last and that light's age (alpha, seconds), or -1 - age where it showed the selection. It is
 // shown at 1 - age / fade time of that light's display level (the selection's: 1), so that every
 // trail fades out in the fade time. This frame's light takes the pixel if it is shown at least as
-// bright, or if it holds TRAIL_TAKEOVER_MIN of a body's light and that body is shown at least as
-// bright: a trail laid over an older one replaces it where it half covers pixels.
+// bright, or if it holds TRAIL_TAKEOVER_MIN of a body's light of another colour and that body is
+// shown at least as bright: a trail laid over another's replaces it where it half covers pixels,
+// laid over it as far as it covers them (a body's light covers a pixel), while a trail overlapping
+// itself keeps its brightest light.
 constexpr std::string_view trail_fragment_shader = R"glsl(
 uniform sampler2D trails;
 uniform sampler2D deposits;   // this frame's light
@@ -210,11 +220,19 @@ void main() {
             : 0.0;
     float I = dot(light.rgb, LUMA);
     bool selected = light.a * SELECT_COVERAGE_GAIN >= 1.0;
-    float level = selected ? 1.0
-                           : min(asinh((I >= TRAIL_TAKEOVER_MIN ? max(I, 1.0) : I) / beta) / A,
-                                   1.0);
+    float level = selected ? 1.0 : min(asinh(I / beta) / A, 1.0);
+    vec3 hue = light.rgb / max(max(light.r, max(light.g, light.b)), 1e-30);
+    vec3 old_hue = old.rgb / max(max(old.r, max(old.g, old.b)), 1e-30);
+    bool other = any(greaterThan(abs(hue - old_hue), vec3(TRAIL_HUE_TOLERANCE)));
+    if (other && I >= TRAIL_TAKEOVER_MIN) {
+        level = max(level, min(asinh(max(I, 1.0) / beta) / A, 1.0));
+    }
     if (I > 0.0 && level >= old_level) {
-        gl_FragColor = vec4(light.rgb, selected ? -1.0 : 0.0);
+        // Another colour's light as it shows now, under what this light leaves uncovered
+        vec3 under = other && !old_selected && old_level > 0.0
+                ? old.rgb * (beta * sinh(old_level * A) / dot(old.rgb, LUMA) * max(0.0, 1.0 - I))
+                : vec3(0.0);
+        gl_FragColor = vec4(light.rgb + under, selected ? -1.0 : 0.0);
     }
     else {
         gl_FragColor = old_level > 0.0 ? vec4(old.rgb, old_selected ? -1.0 - age : age) : vec4(0.0);
@@ -461,10 +479,12 @@ std::string shader_source(std::string_view body, std::string_view defines = "") 
                        "#define LOG2_MIN {:.6f}\n"
                        "#define BINS_PER_OCTAVE {:.6f}\n"
                        "#define SELECT_COVERAGE_GAIN {:.6f}\n"
-                       "#define TRAIL_TAKEOVER_MIN {:.6f}\n",
+                       "#define TRAIL_TAKEOVER_MIN {:.6f}\n"
+                       "#define TRAIL_HUE_TOLERANCE {:.6f}\n",
                    defines, MAX_RENDER_GROUPS, MAX_RAMP_STOPS, std::size(DENSITY_STOPS),
                    EXPOSURE_BLOCK_PX, EXPOSURE_HISTOGRAM_BINS, EXPOSURE_LOG2_MIN,
-                   EXPOSURE_BINS_PER_OCTAVE, SELECT_COVERAGE_GAIN, TRAIL_TAKEOVER_MIN)
+                   EXPOSURE_BINS_PER_OCTAVE, SELECT_COVERAGE_GAIN, TRAIL_TAKEOVER_MIN,
+                   TRAIL_HUE_TOLERANCE)
            + std::string(body);
 }
 

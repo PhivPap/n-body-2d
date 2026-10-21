@@ -30,10 +30,25 @@ TrailPixel trail_step(const TrailPixel& pixel, sf::Vector3f light, float selecti
     const float old_level = trail_level(aged, fade_time, white, beta);
     const float intensity = Colors::luminance(light);
     const bool selected = selection_coverage * SELECT_COVERAGE_GAIN >= 1.f;
-    const float body = intensity >= TRAIL_TAKEOVER_MIN ? std::max(intensity, 1.f) : intensity;
-    const float new_level = selected ? 1.f : std::min(level(body, white, beta), 1.f);
+    float new_level = selected ? 1.f : std::min(level(intensity, white, beta), 1.f);
+    const auto hue = [](sf::Vector3f c) {
+        return c / std::max({c.x, c.y, c.z, 1e-30f});
+    };
+    const sf::Vector3f off = hue(light) - hue(aged.light);
+    const bool other =
+            std::max({std::abs(off.x), std::abs(off.y), std::abs(off.z)}) > TRAIL_HUE_TOLERANCE;
+    if (other && intensity >= TRAIL_TAKEOVER_MIN) {
+        new_level =
+                std::max(new_level, std::min(level(std::max(intensity, 1.f), white, beta), 1.f));
+    }
     if (intensity > 0.f && new_level >= old_level) {
-        return {light, 0.f, selected};
+        sf::Vector3f under;  // another colour's light as it shows now, where this one leaves it
+        if (other && !aged.selected && old_level > 0.f) {
+            const float a = std::asinh(std::max(white, 1e-6f) / beta);
+            under = aged.light * (beta * std::sinh(old_level * a) / Colors::luminance(aged.light)
+                                         * std::max(0.f, 1.f - intensity));
+        }
+        return {light + under, 0.f, selected};
     }
     return old_level > 0.f ? aged : TrailPixel{};
 }
