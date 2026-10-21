@@ -4,6 +4,7 @@
 #include <cassert>
 #include <cmath>
 
+#include "Constants/Constants.hpp"
 #include "Render/Colors.hpp"
 
 
@@ -12,15 +13,29 @@ float level(float intensity, float white, float beta) {
     return std::asinh(intensity / beta) / std::asinh(std::max(white, 1e-6f) / beta);
 }
 
-sf::Vector3f faded(sf::Vector3f color, float white, float beta, float fade) {
-    const float intensity = Colors::luminance(color);
-    if (!(intensity > 0.f && fade > 0.f)) {
-        return color;
+float trail_level(const TrailPixel& pixel, float fade_time, float white, float beta) {
+    if (!(pixel.age < fade_time)) {
+        return 0.f;
     }
-    const float a = std::asinh(std::max(white, 1e-6f) / beta);
-    const float new_level = std::asinh(intensity / beta) / a - fade;
-    return new_level > 0.f ? color * (beta * std::sinh(new_level * a) / intensity)
-                           : sf::Vector3f();
+    const float shown =
+            pixel.selected ? 1.f : std::min(level(Colors::luminance(pixel.light), white, beta), 1.f);
+    return shown * (1.f - pixel.age / fade_time);
+}
+
+TrailPixel trail_step(const TrailPixel& pixel, sf::Vector3f light, float selection_coverage,
+        float frame_time, float fade_time, float white, float beta) {
+    using namespace Constants::Graphics;
+    TrailPixel aged = pixel;
+    aged.age += frame_time;
+    const float old_level = trail_level(aged, fade_time, white, beta);
+    const float intensity = Colors::luminance(light);
+    const bool selected = selection_coverage * SELECT_COVERAGE_GAIN >= 1.f;
+    const float body = intensity >= TRAIL_TAKEOVER_MIN ? std::max(intensity, 1.f) : intensity;
+    const float new_level = selected ? 1.f : std::min(level(body, white, beta), 1.f);
+    if (intensity > 0.f && new_level >= old_level) {
+        return {light, 0.f, selected};
+    }
+    return old_level > 0.f ? aged : TrailPixel{};
 }
 
 std::optional<float> white_from_histogram(std::span<const float> histogram, float quantile,
