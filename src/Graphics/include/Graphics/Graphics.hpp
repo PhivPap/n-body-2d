@@ -14,6 +14,7 @@
 #include "Panel/CommandsPanel.hpp"
 #include "Panel/ConfigPanel.hpp"
 #include "Panel/InspectorPanel.hpp"
+#include "Panel/LegendPanel.hpp"
 #include "Panel/Panel.hpp"
 #include "Panel/PanelManager.hpp"
 #include "Panel/StatsPanel.hpp"
@@ -59,12 +60,22 @@ public:
     void toggle_named_orbits();
     void toggle_labels();
     void toggle_mass_scaled_markers();
+    void cycle_color_mode();
+    void toggle_exposure_lock();
+    void exposure_increase();
+    void exposure_decrease();
+    void toggle_bloom();
+    // Legend rows, 0 for key 1; others do nothing
+    void toggle_group(uint32_t row);
+    void solo_group(uint32_t row);
+    void show_all_groups();
     void center_on_selection_center_of_mass();
     void toggle_config_panel();
     void toggle_stats_panel();
     void toggle_commands_panel();
     void toggle_action_log_panel();
     void toggle_inspector_panel();
+    void toggle_legend_panel();
     void set_cursor_in_window(bool in_window);
     void notify_paused();
     void notify_resumed();
@@ -149,6 +160,7 @@ private:
     CommandsPanel commands_panel{Constants::Graphics::COMMANDS_PANEL_WIDTH};
     InspectorPanel inspector_panel{Constants::Graphics::INSPECTOR_PANEL_WIDTH};
     ActionLogPanel action_log_panel{Constants::Graphics::COMMANDS_PANEL_WIDTH};
+    LegendPanel legend_panel{Constants::Graphics::LEGEND_PANEL_WIDTH};
     ActionLog action_log{};
     BufferedMeanCalculator<float, 60> fps_calculator{};
     Stats stats{};
@@ -182,6 +194,8 @@ private:
     void update_selection_tracking();
     void update_selection_orbit();
     void update_inspector_panel();
+    void update_legend_panel();
+    void update_groups();
     void draw_selection_overlay();
     void draw_hover_ring();
     void draw_tooltip();

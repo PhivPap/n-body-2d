@@ -31,6 +31,14 @@ void main() {
 )glsl";
 
 namespace {
+// A speed with three significant digits: "230 km/s", "4.5 m/s"
+std::string speed_text(double m_s) {
+    const bool km = m_s >= 1000.0;
+    const double speed = km ? m_s / 1000.0 : m_s;
+    return (speed < 1000.0 ? fmt::format("{:.3g}", speed) : fmt::format("{:.0f}", speed))
+           + (km ? " km/s" : " m/s");
+}
+
 // The heaviest of the bodies offered to it, the nearest of equal masses
 struct HeaviestBody {
     std::optional<uint32_t> index;
@@ -117,11 +125,13 @@ void find_bodies_near(HeaviestBody& heaviest, sf::Vector2f point, float radius,
     panel_manager.register_panel(&commands_panel, PanelManager::Position::TOP_RIGHT);
     panel_manager.register_panel(&inspector_panel, PanelManager::Position::TOP_RIGHT);
     panel_manager.register_panel(&action_log_panel, PanelManager::Position::BOTTOM_RIGHT);
+    panel_manager.register_panel(&legend_panel, PanelManager::Position::BOTTOM_LEFT);
     config_panel.set_visible(graphics_cfg.show_config_panel);
     stats_panel.set_visible(graphics_cfg.show_stats_panel);
     commands_panel.set_visible(graphics_cfg.show_commands_panel);
     inspector_panel.set_visible(graphics_cfg.show_inspector_panel);
     action_log_panel.set_visible(graphics_cfg.show_action_log_panel);
+    legend_panel.set_visible(graphics_cfg.show_legend_panel);
 
     {
         auto write_handle = config_panel.write_handle();
@@ -158,6 +168,7 @@ void find_bodies_near(HeaviestBody& heaviest, sf::Vector2f point, float radius,
         write_handle->simulation_rate = std::numeric_limits<double>::quiet_NaN();
     }
     update_inspector_panel();
+    update_legend_panel();
 
     // No primaries until an orbit needs them (body_orbit())
     primaries.assign(named_bodies.indices().size(), -1);
@@ -377,11 +388,15 @@ void Graphics::update_velocity_scale() {
     const double target = std::max<double>(*measured, VELOCITY_SCALE_MIN);
     const double elapsed_s = velocity_scale_sw.duration<std::chrono::duration<double>>().count();
     velocity_scale_sw.reset();
-    velocity_scale = static_cast<float>(velocity_scale_known
-                    ? ToneMath::smoothed(velocity_scale, target, elapsed_s,
-                              std::chrono::duration<double>(VELOCITY_SCALE_ADAPT_TIME).count())
-                    : target);
-    velocity_scale_known = true;
+    if (velocity_scale_known) {
+        velocity_scale = static_cast<float>(ToneMath::smoothed(velocity_scale, target, elapsed_s,
+                std::chrono::duration<double>(VELOCITY_SCALE_ADAPT_TIME).count()));
+    }
+    else {  // a new mode: its scale at once, also in the legend
+        velocity_scale = static_cast<float>(target);
+        velocity_scale_known = true;
+        update_legend_panel();
+    }
 }
 
 // The bodies as light, added onto the grid. Trails freeze while paused.
@@ -389,7 +404,14 @@ void Graphics::draw_bodies() {
     using ColorMode = Config::Graphics::ColorMode;
     if (color_mode == ColorMode::SPEED || color_mode == ColorMode::DOPPLER) {
         write_velocities();
-        velocity_scale_rate_limiter.try_call(std::bind(&Graphics::update_velocity_scale, this));
+        // At once in a new mode, so that it doesn't start with another mode's scale
+        if (velocity_scale_known) {
+            velocity_scale_rate_limiter.try_call(
+                    std::bind(&Graphics::update_velocity_scale, this));
+        }
+        else {
+            update_velocity_scale();
+        }
         update_marker_colors();
     }
     const auto frame_time = std::min(frame_sw.duration<std::chrono::duration<double>>(),
@@ -578,6 +600,49 @@ void Graphics::update_inspector_panel() {
             .clockwise = el.angular_momentum > 0.0,
             .retrograde = selection_orbit->retrograde,
             .satellite_count = selection_orbit->satellite_count};
+}
+
+// The colour mode, the legend's rows and the gradient's scale, the exposure and bloom
+void Graphics::update_legend_panel() {
+    using namespace Constants::Graphics;
+    using ColorMode = Config::Graphics::ColorMode;
+    auto write_handle = legend_panel.write_handle();
+    write_handle->mode = Config::Graphics::color_mode_to_string(color_mode);
+    write_handle->rows.clear();
+    for (const uint32_t g : render_groups.legend()) {
+        const RenderGroup& group = render_groups.groups()[g];
+        write_handle->rows.push_back({.name = group.name, .count = group.count,
+                .swatch = Colors::display_hue(Colors::to_linear(group.color)),
+                .hidden = !group.visible});
+    }
+    // The bodies' colours at full brightness, as the ramps give them
+    constexpr int GRADIENT_SAMPLES = 32;
+    write_handle->gradient.clear();
+    if (color_mode != ColorMode::WHITE && color_mode != ColorMode::GROUPS) {
+        const std::span<const sf::Color> ramp = color_mode == ColorMode::SPEED
+                                                        ? std::span<const sf::Color>(SPEED_STOPS)
+                                                        : std::span<const sf::Color>(DOPPLER_STOPS);
+        for (int k = 0; k < GRADIENT_SAMPLES; k++) {
+            const float t = static_cast<float>(k) / (GRADIENT_SAMPLES - 1);
+            write_handle->gradient.push_back(color_mode == ColorMode::DENSITY
+                            ? Colors::ramp_display(DENSITY_STOPS, t)
+                            : Colors::display_hue(Colors::ramp_linear(ramp, t)));
+        }
+    }
+    write_handle->scale = color_mode == ColorMode::SPEED ? "0 – " + speed_text(velocity_scale)
+                          : color_mode == ColorMode::DOPPLER
+                                  ? "±" + speed_text(velocity_scale) + " (red recedes)"
+                          : color_mode == ColorMode::DENSITY ? "low – high"
+                                                             : "";
+    write_handle->exposure_ev = exposure_ev;
+    write_handle->locked_white = locked_white;
+    write_handle->bloom = bloom;
+}
+
+// After the legend's visibility changed: the shader's table, and the panel
+void Graphics::update_groups() {
+    renderer.set_groups(render_groups.groups());
+    update_legend_panel();
 }
 
 void Graphics::draw_selection_overlay() {
@@ -877,6 +942,75 @@ void Graphics::toggle_mass_scaled_markers() {
             scale_named_by_mass ? "Enabled" : "Disabled"));
 }
 
+void Graphics::cycle_color_mode() {
+    using ColorMode = Config::Graphics::ColorMode;
+    constexpr int modes = static_cast<int>(ColorMode::DENSITY) + 1;
+    color_mode = static_cast<ColorMode>((static_cast<int>(color_mode) + 1) % modes);
+    velocity_scale_known = false;  // Speed and Doppler measure it differently
+    update_marker_colors();
+    update_legend_panel();
+    action_log.log(fmt::format("Colours: {}", Config::Graphics::color_mode_to_string(color_mode)));
+}
+
+// Locks the white point the auto exposure has reached, read back from the GPU once
+void Graphics::toggle_exposure_lock() {
+    if (locked_white) {
+        locked_white = std::nullopt;
+        action_log.log("Exposure: auto");
+    }
+    else {
+        locked_white = renderer.read_white_point();
+        window.resetGLStates();
+        action_log.log(fmt::format("Exposure: locked at {:.3g}/px", *locked_white));
+    }
+    update_legend_panel();
+}
+
+void Graphics::exposure_increase() {
+    using Constants::Graphics::EXPOSURE_EV_RANGE;
+    exposure_ev = std::min(exposure_ev + Constants::Graphics::EXPOSURE_EV_STEP,
+            EXPOSURE_EV_RANGE.second);
+    update_legend_panel();
+    action_log.log(fmt::format("Exposure: {:+.1f} EV", exposure_ev));
+}
+
+void Graphics::exposure_decrease() {
+    using Constants::Graphics::EXPOSURE_EV_RANGE;
+    exposure_ev = std::max(exposure_ev - Constants::Graphics::EXPOSURE_EV_STEP,
+            EXPOSURE_EV_RANGE.first);
+    update_legend_panel();
+    action_log.log(fmt::format("Exposure: {:+.1f} EV", exposure_ev));
+}
+
+void Graphics::toggle_bloom() {
+    bloom = !bloom;
+    update_legend_panel();
+    action_log.log(fmt::format("Bloom: {}", bloom ? "Enabled" : "Disabled"));
+}
+
+void Graphics::toggle_group(uint32_t row) {
+    if (render_groups.toggle(row)) {
+        update_groups();
+        const RenderGroup& group = render_groups.groups()[render_groups.legend()[row]];
+        action_log.log(fmt::format("Group {}: {}", group.name, group.visible ? "shown" : "hidden"));
+    }
+}
+
+void Graphics::solo_group(uint32_t row) {
+    if (render_groups.solo(row)) {
+        update_groups();
+        action_log.log(fmt::format("Showing only {}",
+                render_groups.groups()[render_groups.legend()[row]].name));
+    }
+}
+
+void Graphics::show_all_groups() {
+    if (render_groups.show_all()) {
+        update_groups();
+        action_log.log("Showing all groups");
+    }
+}
+
 void Graphics::center_on_selection_center_of_mass() {
     if (cached_selection_stats) {
         vp.center_on_coords(cached_selection_stats->center_of_mass);
@@ -903,6 +1037,10 @@ void Graphics::toggle_action_log_panel() {
 
 void Graphics::toggle_inspector_panel() {
     inspector_panel.set_visible(!inspector_panel.is_visible());
+}
+
+void Graphics::toggle_legend_panel() {
+    legend_panel.set_visible(!legend_panel.is_visible());
 }
 
 void Graphics::set_cursor_in_window(bool in_window) {
@@ -944,6 +1082,7 @@ void Graphics::update_simulation_stats(const SimulationStats& sim_stats) {
         write_handle->simulation_rate = sim_stats.ips * sim_stats.timestep_s;
     }
     update_inspector_panel();
+    update_legend_panel();  // the velocity scale
 }
 
 void Graphics::draw_frame() {
