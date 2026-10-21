@@ -33,7 +33,8 @@ uniform vec3 doppler_stops[MAX_RAMP_STOPS];   // linear
 uniform int doppler_stop_count;
 uniform float velocity_scale;                 // m/s, > 0
 #endif
-out vec3 deposit;  // HDR, so not gl_FrontColor, which is clamped to [0, 1]
+out vec3 deposit;    // HDR, so not gl_FrontColor, which is clamped to [0, 1]
+out float selected;  // 1 for a highlighted body, which the tonemap shows in the selection colour
 const vec3 LUMA = vec3(0.2126, 0.7152, 0.0722);
 
 #ifdef VELOCITY
@@ -54,6 +55,7 @@ void main() {
         gl_Position = vec4(2.0, 2.0, 2.0, 1.0);
         gl_PointSize = 1.0;
         deposit = vec3(0.0);
+        selected = 0.0;
         return;
     }
     vec3 c = vec3(1.0);  // White and Density: every body alike (white has unit luminance)
@@ -73,7 +75,8 @@ void main() {
         }
 #endif
     }
-    if ((flags & 1) != 0 && color_mode != 4) {
+    selected = float(flags & 1);
+    if (selected > 0.0 && color_mode != 4) {
         c = select_color;
     }
     deposit = c * brightness;
@@ -86,6 +89,7 @@ uniform int kernel;         // 0: flat (trail segments), 1: tent (1 px bodies), 
 uniform float point_size;   // the points' size in pixels: 2 for the tent, the disc's diameter + 2
 uniform float disc_radius;  // kernel 2: the body's radius in pixels
 in vec3 deposit;
+in float selected;
 
 void main() {
     float w = 1.0;
@@ -96,7 +100,7 @@ void main() {
     else if (kernel == 2) {  // anti-aliased disc
         w = clamp(disc_radius + 0.5 - length(gl_PointCoord - 0.5) * point_size, 0.0, 1.0);
     }
-    gl_FragColor = vec4(deposit * w, 0.0);
+    gl_FragColor = vec4(deposit, selected) * w;  // alpha: how much of the pixel the selection covers
 }
 )glsl";
 // The phosphor, drawn as a sprite of the previous trails: each pixel keeps the brightest of its
@@ -205,10 +209,13 @@ void main() {
 }
 )glsl";
 // The image onto the window: an asinh stretch to the white point, the pixel's hue at full
-// brightness turning white near it, or in Density mode the luminance through the colormap. It
-// covers the grid as much as it is bright: entirely from the grid's own brightness up.
+// brightness turning white near it, or in Density mode the luminance through the colormap, and
+// the selected bodies in the selection colour at full brightness. It covers the grid as much as
+// it is bright: entirely from the grid's own brightness up.
 constexpr std::string_view tonemap_fragment_shader = R"glsl(
 uniform sampler2D image;
+uniform sampler2D highlights;               // this frame's light: alpha, the selection's coverage
+uniform vec3 select_color;                  // display
 uniform sampler2D exposure;
 uniform float locked_white;
 uniform float ev_scale;
@@ -258,6 +265,8 @@ void main() {
         vec2 p = gl_FragCoord.xy + 5.588238 * frame;
         color += (noise(p) + noise(p + vec2(47.0, 17.0)) - 1.0) / 255.0;
     }
+    color = mix(color, select_color,
+            min(texture2D(highlights, uv).a * SELECT_COVERAGE_GAIN, 1.0));
     gl_FragColor = vec4(color, clamp(max(color.r, max(color.g, color.b)) / grid_level, 0.0, 1.0));
 }
 )glsl";
@@ -342,10 +351,11 @@ std::string shader_source(std::string_view body, std::string_view defines = "") 
                        "#define BLOCK {}\n"
                        "#define BINS {}\n"
                        "#define LOG2_MIN {:.6f}\n"
-                       "#define BINS_PER_OCTAVE {:.6f}\n",
+                       "#define BINS_PER_OCTAVE {:.6f}\n"
+                       "#define SELECT_COVERAGE_GAIN {:.6f}\n",
                    defines, MAX_RENDER_GROUPS, MAX_RAMP_STOPS, std::size(DENSITY_STOPS),
                    EXPOSURE_BLOCK_PX, EXPOSURE_HISTOGRAM_BINS, EXPOSURE_LOG2_MIN,
-                   EXPOSURE_BINS_PER_OCTAVE)
+                   EXPOSURE_BINS_PER_OCTAVE, SELECT_COVERAGE_GAIN)
            + std::string(body);
 }
 
@@ -478,6 +488,9 @@ HdrRenderer::HdrRenderer(sf::Vector2u size) {
     white_shader.setUniform("quantile", AUTO_WHITE_QUANTILE);
     white_shader.setUniform("min_white", AUTO_WHITE_MIN);
     tonemap_shader.setUniform("image", sf::Shader::CurrentTexture);
+    tonemap_shader.setUniform("highlights", deposits.getTexture());
+    tonemap_shader.setUniform("select_color",
+            sf::Glsl::Vec3(SELECT_COLOR.r / 255.f, SELECT_COLOR.g / 255.f, SELECT_COLOR.b / 255.f));
     tonemap_shader.setUniform("beta", TONE_SOFTENING);
     tonemap_shader.setUniform("desaturation", HIGHLIGHT_DESATURATION);
     std::vector<sf::Glsl::Vec3> density_stops;
