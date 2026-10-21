@@ -293,6 +293,63 @@ void test_color_modes(HdrRenderer& renderer, sf::RenderTexture& window) {
     CHECK(image.getPixel({70, 30}) == sf::Color::Black);
 }
 
+// Bloom: a bright pixel glows around itself, symmetrically and fading with distance, every level
+// of the pyramid adding about the light above the threshold; twice that light glows twice as much;
+// light under the threshold doesn't glow, and bloom leaves no trace once off
+void test_bloom(HdrRenderer& renderer, sf::RenderTexture& window) {
+    using namespace Constants::Graphics;
+    renderer.set_groups(std::vector{group(sf::Color::White)});
+    HdrRenderer::Frame bright_frame = frame(ColorMode::WHITE);
+    bright_frame.locked_white = 2.f;
+    bright_frame.bloom = true;
+    const auto shot = [&](const std::vector<Body>& bodies, const HdrRenderer::Frame& f) {
+        window.clear(sf::Color::Black);
+        renderer.draw(window, vertices(bodies), f);
+        window.display();
+        return window.getTexture().copyToImage();
+    };
+    // 64 bodies at (128, 96): the 4x4 boxes holding them average 2x the white point. At half
+    // size, the glow is centred between pixels 63 and 64, and rows 47 and 48.
+    const sf::IntRect half({0, 0}, {static_cast<int>(SIZE.x / 2), static_cast<int>(SIZE.y / 2)});
+    shot(stack(128, 96, 64), bright_frame);
+    const std::vector<float> glow = renderer.read_bloom(half);
+    const auto at = [&](const std::vector<float>& image, int x, int y) {
+        return image[4 * ((48 + y) * half.size.x + (64 + x))];
+    };
+    bool symmetric = true, falling = true;
+    for (int d = 0; d < 30; d++) {
+        const float right = at(glow, d, 0), left = at(glow, -1 - d, 0);
+        const float down = at(glow, 0, d), up = at(glow, 0, -1 - d);
+        symmetric &= std::abs(right - left) <= 0.02f * right && std::abs(down - up) <= 0.02f * down
+                     && std::abs(right - down) <= 0.02f * right;
+        falling &= at(glow, d + 1, 0) < at(glow, d, 0);
+    }
+    CHECK(symmetric && falling && at(glow, 30, 0) > 0.f);
+    float total = 0.f;  // in half-size pixels, each of 4 pixels
+    for (size_t k = 0; k < glow.size(); k += 4) {
+        total += Colors::luminance({glow[k], glow[k + 1], glow[k + 2]});
+    }
+    CHECK(std::abs(4.f * total / (BLOOM_LEVELS * 64.f) - 1.f) < 0.15f);
+    shot(stack(128, 96, 128), bright_frame);
+    const std::vector<float> brighter = renderer.read_bloom(half);
+    CHECK(std::abs(at(brighter, 5, 3) / at(glow, 5, 3) - 2.f) < 1e-3f);
+    // Light under the threshold: no glow at all
+    const std::vector<Body> dim = stack(100, 50, 2);
+    shot(dim, bright_frame);
+    const std::vector<float> none = renderer.read_bloom(half);
+    CHECK(std::all_of(none.begin(), none.end(), [](float v) { return v == 0.f; }));
+    // Without bloom, the same frame of the dither (1024 frames on) after bloom ran is the same
+    HdrRenderer::Frame plain = bright_frame;
+    plain.bloom = false;
+    const sf::Image before = shot(dim, plain);
+    for (int k = 0; k < 1023; k++) {
+        renderer.draw(window, vertices(stack(128, 96, 64)), bright_frame);
+    }
+    const sf::Image after = shot(dim, plain);
+    CHECK(std::equal(before.getPixelsPtr(), before.getPixelsPtr() + 4 * SIZE.x * SIZE.y,
+            after.getPixelsPtr()));
+}
+
 // Block maxima of `counts` bodies, one block each
 std::vector<Body> blocks_of(const std::vector<uint32_t>& counts) {
     const uint32_t per_row = SIZE.x / Constants::Graphics::EXPOSURE_BLOCK_PX;
@@ -414,6 +471,7 @@ int main() {
     test_trails(*renderer, window);
     test_segments(*renderer, window);
     test_color_modes(*renderer, window);
+    test_bloom(*renderer, window);
     test_exposure(*renderer, window);
     test_tonemap(*renderer, window);
     return Check::result();

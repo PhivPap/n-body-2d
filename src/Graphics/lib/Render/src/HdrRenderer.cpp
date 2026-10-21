@@ -215,6 +215,9 @@ uniform float beta;
 uniform float desaturation;                 // top share of the display range blended to white
 uniform bool density;                       // Density mode
 uniform vec3 density_stops[DENSITY_STOPS];  // display (sRGB-encoded) values
+uniform bool bloom;
+uniform sampler2D bloom_image;              // half resolution, smooth
+uniform float bloom_strength;
 uniform float frame;                        // frame counter, moves the dither
 const vec3 LUMA = vec3(0.2126, 0.7152, 0.0722);
 
@@ -229,6 +232,9 @@ float noise(vec2 p) {  // interleaved gradient noise, in [0, 1)
 void main() {
     vec2 uv = gl_TexCoord[0].xy;
     vec3 c = texture2D(image, uv).rgb;
+    if (bloom) {
+        c += bloom_strength * texture2D(bloom_image, uv).rgb;
+    }
     float white = (locked_white > 0.0 ? locked_white
                                       : texelFetch(exposure, ivec2(0, 0), 0).r) / ev_scale;
     float I = dot(c, LUMA);
@@ -251,6 +257,74 @@ void main() {
         color += (noise(p) + noise(p + vec2(47.0, 17.0)) - 1.0) / 255.0;
     }
     gl_FragColor = vec4(color, 1.0);
+}
+)glsl";
+
+// Bloom, into the first, half-size level: the image's 4x4 box average around each of its pixels,
+// 4 bilinear taps at the centres of its quarters (the image is filtered smoothly for this pass),
+// weighted by a soft threshold relative to the shown white point
+constexpr std::string_view bloom_prefilter_fragment_shader = R"glsl(
+uniform sampler2D image;
+uniform vec2 image_texel;  // in texture coordinates
+uniform sampler2D exposure;
+uniform float locked_white;
+uniform float ev_scale;
+uniform float threshold;  // of the white point
+uniform float knee;       // over which the weight rises to 1
+const vec3 LUMA = vec3(0.2126, 0.7152, 0.0722);
+
+void main() {
+    // Half-size pixel x's first quarter is centred at 2x, between image pixels 2x - 1 and 2x
+    vec2 uv = floor(gl_FragCoord.xy) * 2.0 * image_texel;
+    vec3 c = (texture2D(image, uv).rgb + texture2D(image, uv + vec2(2.0, 0.0) * image_texel).rgb
+                     + texture2D(image, uv + vec2(0.0, 2.0) * image_texel).rgb
+                     + texture2D(image, uv + 2.0 * image_texel).rgb)
+             * 0.25;
+    float white = (locked_white > 0.0 ? locked_white
+                                      : texelFetch(exposure, ivec2(0, 0), 0).r) / ev_scale;
+    float k = clamp((dot(c, LUMA) / max(white, 1e-6) - threshold) / knee, 0.0, 1.0);
+    gl_FragColor = vec4(c * k * k, 0.0);
+}
+)glsl";
+// The next smaller level: Jimenez's 13 taps ("Next Generation Post Processing in Call of Duty:
+// Advanced Warfare", SIGGRAPH 2014), bilinear, which keep a single bright pixel from flickering
+constexpr std::string_view bloom_down_fragment_shader = R"glsl(
+uniform sampler2D source;
+uniform vec2 texel;        // of the source, in texture coordinates
+uniform vec2 target_size;  // pixels
+
+vec3 tap(vec2 uv, float x, float y) {
+    return texture2D(source, uv + vec2(x, y) * texel).rgb;
+}
+
+void main() {
+    vec2 uv = gl_FragCoord.xy / target_size;
+    vec3 c = tap(uv, 0.0, 0.0) * 0.125;
+    c += (tap(uv, -2.0, -2.0) + tap(uv, 2.0, -2.0) + tap(uv, -2.0, 2.0) + tap(uv, 2.0, 2.0))
+         * 0.03125;
+    c += (tap(uv, 0.0, -2.0) + tap(uv, -2.0, 0.0) + tap(uv, 2.0, 0.0) + tap(uv, 0.0, 2.0))
+         * 0.0625;
+    c += (tap(uv, -1.0, -1.0) + tap(uv, 1.0, -1.0) + tap(uv, -1.0, 1.0) + tap(uv, 1.0, 1.0))
+         * 0.125;
+    gl_FragColor = vec4(c, 0.0);
+}
+)glsl";
+// A smaller level blurred by a 3x3 tent, added into the next larger one
+constexpr std::string_view bloom_up_fragment_shader = R"glsl(
+uniform sampler2D source;
+uniform vec2 texel;
+uniform vec2 target_size;
+
+vec3 tap(vec2 uv, float x, float y) {
+    return texture2D(source, uv + vec2(x, y) * texel).rgb;
+}
+
+void main() {
+    vec2 uv = gl_FragCoord.xy / target_size;
+    vec3 c = tap(uv, 0.0, 0.0) * 4.0;
+    c += (tap(uv, 0.0, -1.0) + tap(uv, -1.0, 0.0) + tap(uv, 1.0, 0.0) + tap(uv, 0.0, 1.0)) * 2.0;
+    c += tap(uv, -1.0, -1.0) + tap(uv, 1.0, -1.0) + tap(uv, -1.0, 1.0) + tap(uv, 1.0, 1.0);
+    gl_FragColor = vec4(c / 16.0, 0.0);
 }
 )glsl";
 
@@ -362,6 +436,12 @@ HdrRenderer::HdrRenderer(sf::Vector2u size) {
             || !white_shader.loadFromMemory(shader_source(white_fragment_shader),
                     sf::Shader::Type::Fragment)
             || !tonemap_shader.loadFromMemory(shader_source(tonemap_fragment_shader),
+                    sf::Shader::Type::Fragment)
+            || !bloom_prefilter_shader.loadFromMemory(
+                    shader_source(bloom_prefilter_fragment_shader), sf::Shader::Type::Fragment)
+            || !bloom_down_shader.loadFromMemory(shader_source(bloom_down_fragment_shader),
+                    sf::Shader::Type::Fragment)
+            || !bloom_up_shader.loadFromMemory(shader_source(bloom_up_fragment_shader),
                     sf::Shader::Type::Fragment)) {
         throw std::runtime_error("Failed to load the renderer's shaders");
     }
@@ -399,6 +479,10 @@ HdrRenderer::HdrRenderer(sf::Vector2u size) {
         density_stops.emplace_back(color.r / 255.f, color.g / 255.f, color.b / 255.f);
     }
     tonemap_shader.setUniformArray("density_stops", density_stops.data(), density_stops.size());
+    tonemap_shader.setUniform("bloom_image", bloom_levels[0].getTexture());
+    tonemap_shader.setUniform("bloom_strength", BLOOM_STRENGTH);
+    bloom_prefilter_shader.setUniform("threshold", BLOOM_THRESHOLD);
+    bloom_prefilter_shader.setUniform("knee", BLOOM_KNEE);
 }
 
 void HdrRenderer::resize(sf::Vector2u size) {
@@ -414,6 +498,12 @@ void HdrRenderer::resize(sf::Vector2u size) {
             (size.y + EXPOSURE_BLOCK_PX - 1) / EXPOSURE_BLOCK_PX);
     resize_float_target(blocks, block_count);
     block_points.resize(block_count.x * block_count.y);
+    sf::Vector2u level_size = size;
+    for (sf::RenderTexture& level : bloom_levels) {
+        level_size = {(level_size.x + 1) / 2, (level_size.y + 1) / 2};
+        resize_float_target(level, level_size);
+        level.setSmooth(true);  // sampled bilinearly
+    }
     reset_trails();
     snap_exposure = true;
 }
@@ -474,6 +564,10 @@ void HdrRenderer::draw(sf::RenderTarget& window, const sf::VertexArray& bodies,
     measure_exposure(frame);
 
     const float locked_white = frame.locked_white.value_or(0.f);
+    if (frame.bloom) {
+        draw_bloom(locked_white, ev_scale);
+    }
+    tonemap_shader.setUniform("bloom", frame.bloom);
     tonemap_shader.setUniform("exposure", exposure[exposure_index].getTexture());
     tonemap_shader.setUniform("locked_white", locked_white);
     tonemap_shader.setUniform("ev_scale", ev_scale);
@@ -554,10 +648,51 @@ void HdrRenderer::measure_exposure(const Frame& frame) {
     snap_exposure = false;
 }
 
+// The bloom pyramid: the light above the threshold, downsampled level by level, then each level
+// blurred into the next larger one, so that the first holds them all
+void HdrRenderer::draw_bloom(float locked_white, float ev_scale) {
+    const auto pass = [](sf::RenderTexture& target, const sf::Shader& shader,
+                              const sf::BlendMode& blend) {
+        sf::RenderStates states(blend);
+        states.shader = &shader;
+        target.draw(sf::RectangleShape(sf::Vector2f(target.getSize())), states);
+        target.display();
+    };
+    const auto set_sizes = [](sf::Shader& shader, const sf::RenderTexture& source,
+                                   const sf::RenderTexture& target) {
+        const sf::Vector2f source_size(source.getSize());
+        shader.setUniform("source", source.getTexture());
+        shader.setUniform("texel", sf::Glsl::Vec2(1.f / source_size.x, 1.f / source_size.y));
+        shader.setUniform("target_size", sf::Glsl::Vec2(sf::Vector2f(target.getSize())));
+    };
+    const sf::Vector2f image_size(image->getSize());
+    bloom_prefilter_shader.setUniform("image", image->getTexture());
+    bloom_prefilter_shader.setUniform("image_texel",
+            sf::Glsl::Vec2(1.f / image_size.x, 1.f / image_size.y));
+    bloom_prefilter_shader.setUniform("exposure", exposure[exposure_index].getTexture());
+    bloom_prefilter_shader.setUniform("locked_white", locked_white);
+    bloom_prefilter_shader.setUniform("ev_scale", ev_scale);
+    image->setSmooth(true);  // the other passes sample it 1:1
+    pass(bloom_levels[0], bloom_prefilter_shader, sf::BlendNone);
+    image->setSmooth(false);
+    for (size_t k = 1; k < bloom_levels.size(); k++) {
+        set_sizes(bloom_down_shader, bloom_levels[k - 1], bloom_levels[k]);
+        pass(bloom_levels[k], bloom_down_shader, sf::BlendNone);
+    }
+    for (size_t k = bloom_levels.size() - 1; k > 0; k--) {
+        set_sizes(bloom_up_shader, bloom_levels[k], bloom_levels[k - 1]);
+        pass(bloom_levels[k - 1], bloom_up_shader, additive);
+    }
+}
+
 float HdrRenderer::read_white_point() {
     return read_pixels(exposure[exposure_index], {{0, 0}, {1, 1}}).at(0);
 }
 
 std::vector<float> HdrRenderer::read_image(sf::IntRect rect) {
     return read_pixels(*image, rect);
+}
+
+std::vector<float> HdrRenderer::read_bloom(sf::IntRect rect) {
+    return read_pixels(bloom_levels[0], rect);
 }
