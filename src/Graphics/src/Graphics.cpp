@@ -9,6 +9,7 @@
 #include "Logger/Time.hpp"
 #include "Render/BodyVertex.hpp"
 #include "Render/Colors.hpp"
+#include "Render/ToneMath.hpp"
 #include "Text/Text.hpp"
 
 
@@ -84,11 +85,20 @@ void find_bodies_near(HeaviestBody& heaviest, sf::Vector2f point, float radius,
         }
         Log::warning("Config::Graphics::render::groups: no body has the id or id group {}", keys);
     }
-    if (color_mode == Config::Graphics::ColorMode::SPEED
-            || color_mode == Config::Graphics::ColorMode::DOPPLER
-            || color_mode == Config::Graphics::ColorMode::DENSITY) {
-        Log::warning("Colour mode {} isn't drawn yet: drawing Groups", graphics_cfg.color_mode_str);
-        color_mode = Config::Graphics::ColorMode::GROUPS;
+    // The velocity frame without a followed selection: momentum over mass, or the mean velocity
+    // of massless bodies
+    double total_mass = 0.0;
+    sf::Vector2<double> momentum, velocity_sum;
+    for (uint64_t i = 0; i < bodies.n; i++) {
+        total_mass += bodies.mass(i);
+        momentum += bodies.mass(i) * bodies.vel(i);
+        velocity_sum += bodies.vel(i);
+    }
+    if (total_mass > 0.0) {
+        barycentre_velocity = momentum / total_mass;
+    }
+    else if (bodies.n > 0) {
+        barycentre_velocity = velocity_sum / static_cast<double>(bodies.n);
     }
     update_marker_colors();
 
@@ -334,8 +344,54 @@ void Graphics::draw_grid() {
     }
 }
 
+// What Speed and Doppler colours are relative to: what the view follows
+sf::Vector2<double> Graphics::reference_velocity() const {
+    return follow_selected && cached_selection_stats ? cached_selection_stats->weighted_velocity
+                                                     : barycentre_velocity;
+}
+
+// Speed and Doppler: the bodies' velocities in their vertices, read live like their positions, in
+// a loop of its own so that transform_bodies() stays vectorized
+void Graphics::write_velocities() {
+    if (bodies.n == 0) {
+        return;
+    }
+    const sf::Vector2<double> reference = reference_velocity();
+    const sf::Vector2<double>* velocities = bodies.vel_data();
+    sf::Vertex* vertices = &body_vertex_array[0];
+    for (uint64_t i = 0; i < bodies.n; i++) {
+        vertices[i].texCoords = sf::Vector2f(velocities[i] - reference);
+    }
+}
+
+// The colours' velocity scale, of the drawn bodies on screen, followed in log space. Too few of
+// them keep the old one.
+void Graphics::update_velocity_scale() {
+    using namespace Constants::Graphics;
+    const std::optional<float> measured = velocity_quantile(body_vertex_array,
+            render_groups.visibility(), vp.get_window_res(),
+            color_mode == Config::Graphics::ColorMode::DOPPLER, velocity_samples);
+    if (!measured) {
+        return;
+    }
+    const double target = std::max<double>(*measured, VELOCITY_SCALE_MIN);
+    const double elapsed_s = velocity_scale_sw.duration<std::chrono::duration<double>>().count();
+    velocity_scale_sw.reset();
+    velocity_scale = static_cast<float>(velocity_scale_known
+                    ? ToneMath::smoothed(velocity_scale, target, elapsed_s,
+                              std::chrono::duration<double>(VELOCITY_SCALE_ADAPT_TIME).count())
+                    : target);
+    velocity_scale_known = true;
+}
+
 // The bodies as light, added onto the grid. Trails freeze while paused.
 void Graphics::draw_bodies() {
+    using ColorMode = Config::Graphics::ColorMode;
+    if (color_mode == ColorMode::SPEED || color_mode == ColorMode::DOPPLER) {
+        write_velocities();
+        velocity_scale_rate_limiter.try_call(std::bind(&Graphics::update_velocity_scale, this));
+        update_marker_colors();
+    }
     const auto frame_time = std::min(frame_sw.duration<std::chrono::duration<double>>(),
             std::chrono::duration<double>(Constants::Graphics::FRAME_TIME_MAX));
     frame_sw.reset();
@@ -346,15 +402,28 @@ void Graphics::draw_bodies() {
                     .exposure_ev = exposure_ev, .locked_white = locked_white, .bloom = bloom});
 }
 
-// Named markers wear their bodies' colours at full brightness: their group's in Groups mode,
-// else white
+// Named markers wear their bodies' colours at full brightness: their group's, the ramp's at their
+// velocity (read with their positions), or white
 void Graphics::update_marker_colors() {
+    using namespace Constants::Graphics;
+    using ColorMode = Config::Graphics::ColorMode;
     const std::vector<uint32_t>& named = named_bodies.indices();
-    marker_colors.assign(named.size(), Constants::Graphics::NAMED_BODY_COLOR);
-    if (color_mode == Config::Graphics::ColorMode::GROUPS) {
-        for (size_t rank = 0; rank < named.size(); rank++) {
-            const RenderGroup& group = render_groups.groups()[render_groups.of_body()[named[rank]]];
+    marker_colors.assign(named.size(), NAMED_BODY_COLOR);
+    const sf::Vector2<double> reference = reference_velocity();
+    for (size_t rank = 0; rank < named.size(); rank++) {
+        const uint32_t index = named[rank];
+        const sf::Vector2<double> v = body_velocities_cache[index] - reference;
+        if (color_mode == ColorMode::GROUPS) {
+            const RenderGroup& group = render_groups.groups()[render_groups.of_body()[index]];
             marker_colors[rank] = Colors::display_hue(Colors::to_linear(group.color));
+        }
+        else if (color_mode == ColorMode::SPEED) {
+            const auto t = static_cast<float>(v.length() / velocity_scale);
+            marker_colors[rank] = Colors::display_hue(Colors::ramp_linear(SPEED_STOPS, t));
+        }
+        else if (color_mode == ColorMode::DOPPLER) {
+            const auto t = static_cast<float>(0.5 - 0.5 * v.y / velocity_scale);
+            marker_colors[rank] = Colors::display_hue(Colors::ramp_linear(DOPPLER_STOPS, t));
         }
     }
 }
