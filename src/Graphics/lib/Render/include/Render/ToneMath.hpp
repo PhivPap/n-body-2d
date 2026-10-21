@@ -7,15 +7,31 @@
 #include "SFML/System/Vector3.hpp"
 
 
-// The renderer's tone curve, trail fade and auto exposure as its shaders compute them (see
+// The renderer's tone curve, trails and auto exposure as its shaders compute them (see
 // HdrRenderer.cpp), on the CPU. Light is linear RGB; its luminance counts bodies per pixel.
 namespace ToneMath {
 // The display level of luminance `intensity`: asinh(I / beta) / asinh(white / beta), which is 1
 // at the white point and goes on above it
 float level(float intensity, float white, float beta);
-// A trail pixel after one frame of fading: its display level lowered by `fade`, its hue kept, and
-// black once the level reaches 0. Unchanged without a fade (paused).
-sf::Vector3f faded(sf::Vector3f color, float white, float beta, float fade);
+
+// A trail pixel: the light it was given last, that light's age (seconds), and whether it showed
+// the selection
+struct TrailPixel {
+    sf::Vector3f light;
+    float age = 0.f;
+    bool selected = false;
+
+    bool operator==(const TrailPixel&) const = default;
+};
+// Its display level: its light's, up to 1 (the selection's: 1), times 1 - age / fade_time, and 0
+// from the fade time on
+float trail_level(const TrailPixel& pixel, float fade_time, float white, float beta);
+// The pixel after a frame of `frame_time` (0 paused) that gave it `light`, `selection_coverage`
+// of it covered by the selection: the light takes the pixel if it is shown at least as bright, or
+// if it holds TRAIL_TAKEOVER_MIN of a body's light (luminance) and that body would be; else the
+// pixel ages, and is black once its level reaches 0
+TrailPixel trail_step(const TrailPixel& pixel, sf::Vector3f light, float selection_coverage,
+        float frame_time, float fade_time, float white, float beta);
 // The auto white point from a histogram of block maxima in log2 bins, bin i starting at
 // 2^(log2_min + i / bins_per_octave): the value with (1 - quantile) of the blocks above it,
 // interpolated in its bin in log2, at least `min_white`. Nullopt if the histogram is empty.

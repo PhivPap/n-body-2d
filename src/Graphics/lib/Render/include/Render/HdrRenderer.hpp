@@ -30,10 +30,11 @@ std::optional<float> velocity_quantile(const sf::VertexArray& bodies,
         std::vector<float>& samples);
 
 // The bodies as light, all on the GPU: added up in float buffers (a body is a 2x2 tent splat, or
-// a disc when drawn bigger), kept as phosphor trails, measured for the auto exposure and tone
+// a disc when drawn bigger), measured for the auto exposure, kept as phosphor trails and tone
 // mapped onto the window, with a glow (bloom) around the brightest light. The exposure is only
-// read back when it is locked. While trails run, bodies that moved a pixel or more also draw a
-// line from where they were, which GL draws unreliably under 1.5 px: the dots stay.
+// read back when it is locked. While trails run, bodies that moved a pixel or more also sweep
+// their light along the line from where they were (a geometry shader: OpenGL 3.2), so that their
+// trails are as wide as they are and continuous at any speed.
 class HdrRenderer {
 public:
     // How a frame is drawn
@@ -49,17 +50,18 @@ public:
         bool bloom;
     };
 
-    // Throws std::runtime_error without float render targets
+    // Throws std::runtime_error without float render targets or geometry shaders
     explicit HdrRenderer(sf::Vector2u size);
     // Also clears the trails and snaps the exposure; ignores a zero size (minimized)
     void resize(sf::Vector2u size);
     void reset_trails();  // and the next frame draws no trail segments
-    void set_groups(std::span<const RenderGroup> groups);  // the deposit shader's style table
+    void set_groups(std::span<const RenderGroup> groups);  // the light shaders' style table
     // `bodies`: points at window positions, encoded as BodyVertex describes, drawn as light over
     // `window` (the grid), which it covers as much as it is bright
     void draw(sf::RenderTarget& window, const sf::VertexArray& bodies, const Frame& frame);
     // Read back, which stalls: the auto white point (bodies/px), and a rectangle of the HDR image
-    // the last frame showed (the trails, or without them the deposits), as read_pixels() gives it
+    // the last frame showed, as read_pixels() gives it: the trails (alpha: their age, see the trail
+    // shader), or without them the deposits (alpha: the selection's coverage)
     float read_white_point();
     std::vector<float> read_image(sf::IntRect rect);
     // The last frame's bloom at half resolution, read back likewise: what the tone curve adds,
@@ -68,8 +70,9 @@ public:
 
 private:
     sf::RenderTexture deposits;                 // this frame's light
+    sf::RenderTexture swept;                    // this frame's trail segments, which read it
     std::array<sf::RenderTexture, 2> trails;    // ping-pong: the previous frame's, this frame's
-    sf::RenderTexture blocks;                   // the image's maximum luminance per block
+    sf::RenderTexture blocks;                   // the deposits' maximum luminance per block
     sf::RenderTexture histogram;                // of the blocks' maxima, in log2 bins
     std::array<sf::RenderTexture, 2> exposure;  // 1x1, ping-pong: the auto white point
     // Bloom: the light above the threshold, at 1/2 to 1/2^BLOOM_LEVELS of the size, then each
@@ -87,8 +90,10 @@ private:
     bool previous_valid = false;                // in this view, while trails run
     sf::VertexArray segments{sf::PrimitiveType::Lines};
     sf::VertexArray block_points{sf::PrimitiveType::Points};  // one per block, for the histogram
-    sf::Shader deposit_shader;
+    sf::Shader deposit_shader;           // bodies, as points
     sf::Shader velocity_deposit_shader;  // Speed and Doppler
+    sf::Shader segment_shader;           // trail segments, as lines
+    sf::Shader velocity_segment_shader;
     sf::Shader trail_shader;
     sf::Shader reduce_shader;
     sf::Shader histogram_shader;
@@ -98,6 +103,7 @@ private:
     sf::Shader bloom_down_shader;
     sf::Shader bloom_up_shader;
 
+    std::array<sf::Shader*, 4> light_shaders();  // the four above
     void update_segments(const sf::VertexArray& bodies, const Frame& frame);
     void draw_trails(const Frame& frame, float ev_scale);
     void measure_exposure(const Frame& frame);

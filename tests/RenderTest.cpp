@@ -330,30 +330,46 @@ void test_tone_curve() {
     CHECK(level(2.f * white, white, beta) > 1.f);
 }
 
-void test_fade() {
-    using ToneMath::faded, ToneMath::level;
-    const float white = 50.f, beta = 2.f;
-    const sf::Vector3f color(30.f, 12.f, 5.f);
-    const float start = level(Colors::luminance(color), white, beta);
-    const sf::Vector3f once = faded(color, white, beta, 0.1f);
-    CHECK_NEAR(level(Colors::luminance(once), white, beta), start - 0.1f, 1e-5);
-    CHECK_NEAR(once.x / once.y, color.x / color.y, 1e-5);
-    CHECK_NEAR(once.z / once.y, color.z / color.y, 1e-5);
-    CHECK(faded(color, white, beta, 0.f) == color);
-    // From white, fades summing to 1 reach black
-    const sf::Vector3f at_white = Colors::unit_luminance(color) * white;
-    CHECK(faded(at_white, white, beta, 1.f) == sf::Vector3f());
-    sf::Vector3f steps = at_white;
-    for (int k = 0; k < 4; k++) {
-        steps = faded(steps, white, beta, 0.25f);
+// A trail pixel fades to black in the fade time, whatever its brightness, linearly in display
+// level; light takes it if shown at least as bright, or if it holds half a body that is, so that
+// a newer trail replaces an older one; the selection's light takes it at full brightness
+void test_trails() {
+    using ToneMath::TrailPixel, ToneMath::trail_level, ToneMath::trail_step;
+    const float white = 40.f, beta = 2.f, fade = 10.f;
+    const sf::Vector3f color = Colors::unit_luminance({1.f, 0.5f, 0.2f});
+    for (const float intensity : {40.f, 1.f}) {
+        TrailPixel pixel = trail_step({}, intensity * color, 0.f, 0.01f, fade, white, beta);
+        TrailPixel expected{intensity * color, 0.f, false};
+        CHECK(pixel == expected);
+        const float start = trail_level(pixel, fade, white, beta);
+        for (int k = 0; k < 3; k++) {
+            pixel = trail_step(pixel, {}, 0.f, 1.f, fade, white, beta);
+        }
+        expected.age = 3.f;
+        CHECK(pixel == expected);
+        CHECK_NEAR(trail_level(pixel, fade, white, beta), 0.7f * start, 1e-6);
+        pixel = trail_step(pixel, {}, 0.f, 6.5f, fade, white, beta);
+        CHECK(trail_level(pixel, fade, white, beta) > 0.f);
+        CHECK(trail_step(pixel, {}, 0.f, 0.5f, fade, white, beta) == TrailPixel{});
     }
-    CHECK(Colors::luminance(steps) < 1e-4f);
-    // A pixel at level 0.3 is black after 0.3
-    const float intensity = beta * std::sinh(0.3f * std::asinh(white / beta));
-    const sf::Vector3f dim = Colors::unit_luminance(color) * intensity;
-    CHECK_NEAR(level(Colors::luminance(dim), white, beta), 0.3, 1e-5);
-    CHECK(Colors::luminance(faded(dim, white, beta, 0.3f)) < 1e-4f);
-    CHECK(faded(dim, white, beta, 0.31f) == sf::Vector3f());
+    const TrailPixel lit{color, 2.f, false};
+    CHECK(trail_step(lit, {}, 0.f, 0.f, fade, white, beta) == lit);  // paused
+    // A body's light at 0.9 of its level, then: over half of a body takes it, under half doesn't
+    const TrailPixel old{color, 0.f, false};
+    const TrailPixel taken{0.6f * color, 0.f, false};
+    const TrailPixel kept{color, 1.f, false};
+    CHECK(trail_step(old, 0.6f * color, 0.f, 1.f, fade, white, beta) == taken);
+    CHECK(trail_step(old, 0.4f * color, 0.f, 1.f, fade, white, beta) == kept);
+    // The selection, a quarter of a pixel of it: full brightness, until brighter light comes
+    const sf::Vector3f select = 0.25f * color;
+    const TrailPixel selected = trail_step(old, select, 0.25f, 1.f, fade, white, beta);
+    const TrailPixel expected_selected{select, 0.f, true};
+    CHECK(selected == expected_selected);
+    CHECK_NEAR(trail_level(trail_step(selected, {}, 0.f, 1.f, fade, white, beta), fade, white,
+                       beta),
+            0.9, 1e-6);
+    CHECK(trail_step(selected, 30.f * color, 0.f, 1.f, fade, white, beta).light == 30.f * color);
+    CHECK(trail_step(selected, 20.f * color, 0.f, 1.f, fade, white, beta).selected);
 }
 
 void test_white_from_histogram() {
@@ -416,7 +432,7 @@ int main() {
     test_trail_segments();
     test_velocity_quantile();
     test_tone_curve();
-    test_fade();
+    test_trails();
     test_white_from_histogram();
     test_quantile_and_smoothing();
     return Check::result();

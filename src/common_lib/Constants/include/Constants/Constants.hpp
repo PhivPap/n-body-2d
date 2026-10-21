@@ -125,11 +125,15 @@ constexpr float EXPOSURE_BINS_PER_OCTAVE = 4.f;
 constexpr float EXPOSURE_LOG2_MIN = -8.f;
 constexpr auto EXPOSURE_ADAPT_TIME = std::chrono::milliseconds(400);
 constexpr double EXPOSURE_EV_STEP = 0.5;
-// Trail segments for bodies that moved SEGMENT_MIN_PX to SEGMENT_MAX_PX since the last frame,
-// both ends within SEGMENT_GUARD_PX of the window's origin
+// Trail segments for bodies that moved SEGMENT_MIN_PX (less is covered by the body itself) to
+// SEGMENT_MAX_PX since the last frame, both ends within SEGMENT_GUARD_PX of the window's origin
 constexpr float SEGMENT_MIN_PX = 1.f;
 constexpr float SEGMENT_MAX_PX = 4096.f;
 constexpr float SEGMENT_GUARD_PX = 1e5f;
+// A trail pixel given at least TRAIL_TAKEOVER_MIN of a body's light (half covered by a body of
+// brightness 1) takes it if that body is shown at least as bright: a trail laid over another
+// replaces it, also where it partly covers pixels
+constexpr float TRAIL_TAKEOVER_MIN = 0.5f;
 constexpr auto FRAME_TIME_MAX = std::chrono::milliseconds(250);
 // Speed and Doppler colours span the VELOCITY_SCALE_QUANTILE of up to VELOCITY_SCALE_SAMPLES
 // visible bodies on screen, refreshed every VELOCITY_SCALE_UPDATE_TIMER, followed over
@@ -198,6 +202,7 @@ static_assert(EXPOSURE_BLOCK_PX >= 1 && EXPOSURE_HISTOGRAM_BINS >= 2);
 static_assert(EXPOSURE_BINS_PER_OCTAVE > 0 && EXPOSURE_EV_STEP > 0);
 static_assert(SEGMENT_MIN_PX > 0 && SEGMENT_MIN_PX < SEGMENT_MAX_PX);
 static_assert(SEGMENT_MAX_PX < SEGMENT_GUARD_PX);
+static_assert(TRAIL_TAKEOVER_MIN > 0 && TRAIL_TAKEOVER_MIN <= 1);
 static_assert(VELOCITY_SCALE_QUANTILE > 0 && VELOCITY_SCALE_QUANTILE < 1);
 static_assert(VELOCITY_SCALE_MIN_SAMPLES >= 1);
 static_assert(VELOCITY_SCALE_MIN_SAMPLES <= VELOCITY_SCALE_SAMPLES);

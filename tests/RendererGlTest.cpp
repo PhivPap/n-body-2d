@@ -150,55 +150,68 @@ void test_deposits(HdrRenderer& renderer, sf::RenderTexture& window) {
     CHECK(near(pixel(renderer, 100, 80), {1.f, 1.f, 1.f}, 1e-5f));
 }
 
+// A trail pixel of row 10 as the trail pass keeps it: alpha is the age, -1 - age for the selection
+ToneMath::TrailPixel trail(HdrRenderer& renderer, uint32_t x) {
+    const std::vector<float> rgba = renderer.read_image({{static_cast<int>(x), 10}, {1, 1}});
+    const bool selected = rgba[3] < 0.f;
+    return {{rgba[0], rgba[1], rgba[2]}, selected ? -1.f - rgba[3] : rgba[3], selected};
+}
+
+// The trails age and take new light as ToneMath models them, freeze while paused, are gone at the
+// fade time however bright, and a reset clears them
 void test_trails(HdrRenderer& renderer, sf::RenderTexture& window) {
     const float white = 40.f, beta = Constants::Graphics::TONE_SOFTENING;
     renderer.set_groups(std::vector{group(sf::Color(0xff, 0xa0, 0x40))});
     HdrRenderer::Frame trails = frame();
     trails.trails_fade_s = 2.0;
     trails.locked_white = white;
-    // Pixels of 40 (at white), 20, 5 and 1 bodies, and one that gets new light next frame
+    // Pixels of 40 (at white), 20, 5 and 1 bodies, one that gets new light next frame, and a
+    // selected body
     std::vector<Body> first;
     for (const auto [x, count] :
             {std::pair{10u, 40u}, {12u, 20u}, {14u, 5u}, {16u, 1u}, {18u, 3u}}) {
         const auto bodies = stack(x, 10, count);
         first.insert(first.end(), bodies.begin(), bodies.end());
     }
+    first.push_back({.pos = {20.5f, 10.5f}, .highlight = true});
     renderer.reset_trails();
     renderer.draw(window, vertices(first), trails);
-    std::vector<sf::Vector3f> before;
-    for (uint32_t x = 10; x <= 18; x += 2) {
-        before.push_back(pixel(renderer, x, 10));
+    std::vector<ToneMath::TrailPixel> before;
+    for (uint32_t x = 10; x <= 20; x += 2) {
+        before.push_back(trail(renderer, x));
     }
-    // A fifth of the fade time: levels drop by 0.2, the new light wins where it is brighter
+    CHECK(before[0].age == 0.f && !before[0].selected && before[5].selected);
+    // A fifth of the fade time
     trails.frame_time_s = 0.4;
     renderer.draw(window, vertices(stack(18, 10, 30)), trails);
     bool matches = true;
-    for (uint32_t k = 0; k < 4; k++) {
-        const sf::Vector3f expected = ToneMath::faded(before[k], white, beta, 0.2f);
-        matches &= near(pixel(renderer, 10 + 2 * k, 10), expected, 1e-4f);
+    for (uint32_t k = 0; k < before.size(); k++) {
+        const sf::Vector3f light = k == 4 ? 10.f * before[4].light : sf::Vector3f();
+        const ToneMath::TrailPixel expected =
+                ToneMath::trail_step(before[k], light, 0.f, 0.4f, 2.f, white, beta);
+        const ToneMath::TrailPixel shown = trail(renderer, 10 + 2 * k);
+        matches &= near(shown.light, expected.light, 1e-5f)
+                   && std::abs(shown.age - expected.age) < 1e-6f
+                   && shown.selected == expected.selected;
     }
-    CHECK(matches);
-    CHECK(near(pixel(renderer, 18, 10), 10.f * before[4], 1e-5f));
+    CHECK(matches && trail(renderer, 18).age == 0.f && trail(renderer, 10).age > 0.f);
     // Paused: frozen, exactly
-    std::vector<sf::Vector3f> frozen;
-    for (uint32_t x = 10; x <= 18; x += 2) {
-        frozen.push_back(pixel(renderer, x, 10));
-    }
+    std::vector<float> frozen = renderer.read_image({{10, 10}, {11, 1}});
     trails.paused = true;
     for (int k = 0; k < 3; k++) {
         renderer.draw(window, vertices({}), trails);
     }
-    bool kept = true;
-    for (uint32_t k = 0; k < frozen.size(); k++) {
-        kept &= pixel(renderer, 10 + 2 * k, 10) == frozen[k];
-    }
-    CHECK(kept);
-    // From white, black after the fade time; a reset clears everything
+    CHECK(renderer.read_image({{10, 10}, {11, 1}}) == frozen);
+    // At the fade time, black however bright; the newer light lasts its own fade time
     trails.paused = false;
-    trails.frame_time_s = 2.0;
-    renderer.draw(window, vertices(stack(30, 10, 40)), trails);
+    trails.frame_time_s = 1.6;
     renderer.draw(window, vertices({}), trails);
-    CHECK(pixel(renderer, 30, 10) == sf::Vector3f() && pixel(renderer, 10, 10) == sf::Vector3f());
+    CHECK(trail(renderer, 10) == ToneMath::TrailPixel{} && trail(renderer, 20).light == sf::Vector3f()
+            && trail(renderer, 18).age > 0.f);
+    trails.frame_time_s = 0.4;
+    renderer.draw(window, vertices({}), trails);
+    CHECK(trail(renderer, 18) == ToneMath::TrailPixel{});
+    // A reset clears everything
     renderer.draw(window, vertices(stack(30, 10, 40)), trails);
     renderer.reset_trails();
     trails.frame_time_s = 0.01;
@@ -206,45 +219,79 @@ void test_trails(HdrRenderer& renderer, sf::RenderTexture& window) {
     CHECK(pixel(renderer, 30, 10) == sf::Vector3f());
 }
 
-// A segment deposits weight 1 on each pixel along its line; none on the first frame of trails,
-// after a reset or while paused
+// A trail segment is the body swept from where it was: its profile across the line, as bright as
+// the body all along and at its head (not twice), keeping the brightest light where segments
+// cross; none on the first frame of trails, after a reset or while paused
 void test_segments(HdrRenderer& renderer, sf::RenderTexture& window) {
     renderer.set_groups(std::vector{group(sf::Color::White)});
     HdrRenderer::Frame trails = frame(ColorMode::WHITE);
     trails.trails_fade_s = 1.0;
     trails.frame_time_s = 0.0;  // no fading
     trails.locked_white = 1.f;
-    const auto row_lit = [&renderer](uint32_t x0, uint32_t x1, uint32_t y) {
-        bool lit = true;
+    // Segments' ends go through clip space: their light is exact to about 1e-5
+    const auto row = [&renderer](uint32_t x0, uint32_t x1, uint32_t y, float light) {
+        bool all = true;
         for (uint32_t x = x0; x <= x1; x++) {
-            lit &= pixel(renderer, x, y) == sf::Vector3f(1.f, 1.f, 1.f);
+            const sf::Vector3f p = pixel(renderer, x, y);
+            all &= std::max({std::abs(p.x - light), std::abs(p.y - light), std::abs(p.z - light)})
+                   < 1e-4f;
         }
-        return lit;
+        return all;
+    };
+    const auto moved = [&](std::vector<Body> from, std::vector<Body> to) {
+        renderer.reset_trails();
+        renderer.draw(window, vertices(from), trails);
+        renderer.draw(window, vertices(to), trails);
     };
     renderer.reset_trails();
     renderer.draw(window, vertices({{.pos = {20.5f, 60.5f}}}), trails);
     CHECK(std::abs(luminance_around(renderer, 40, 60, 25) - 1.f) < 1e-5f);  // the dot alone
+    // Through pixel centres: 1 from end to end, its head included, and nothing beside
     renderer.draw(window, vertices({{.pos = {60.5f, 60.5f}}}), trails);
-    CHECK(row_lit(22, 58, 60));
-    CHECK(pixel(renderer, 40, 59) == sf::Vector3f() && pixel(renderer, 40, 61) == sf::Vector3f());
+    CHECK(row(20, 60, 60, 1.f) && row(20, 60, 59, 0.f) && row(20, 60, 61, 0.f));
+    // Between two rows: half the light in each, all along
+    moved({{.pos = {20.5f, 100.f}}}, {{.pos = {60.5f, 100.f}}});
+    CHECK(row(20, 60, 99, 0.5f) && row(20, 60, 100, 0.5f) && row(20, 60, 101, 0.f));
+    // Bodies 5 px wide: a band 5 px wide, fully lit
+    trails.body_diameter_px = 5;
+    moved({{.pos = {20.5f, 140.5f}}}, {{.pos = {60.5f, 140.5f}}});
+    bool band = row(22, 58, 137, 0.f) && row(22, 58, 143, 0.f);
+    for (uint32_t y = 138; y <= 142; y++) {
+        band &= row(20, 60, y, 1.f);
+    }
+    CHECK(band);
+    // Two bodies moving together leave their light added up all along, as at their heads; a body
+    // entering a crowd brings none of the crowd's light out of it
+    moved({{.pos = {20.5f, 140.5f}}, {.pos = {20.5f, 140.5f}}},
+            {{.pos = {60.5f, 140.5f}}, {.pos = {60.5f, 140.5f}}});
+    CHECK(row(20, 60, 140, 2.f));
+    std::vector<Body> crowd = stack(100, 140, 10);
+    crowd.push_back({.pos = {60.5f, 140.5f}});
+    std::vector<Body> entered = crowd;
+    entered.back().pos = {100.5f, 140.5f};
+    moved(crowd, entered);
+    CHECK(row(60, 95, 140, 1.f) && near(pixel(renderer, 100, 140), {11.f, 11.f, 11.f}, 1e-5f));
+    trails.body_diameter_px = 1;
+    // Diagonal: the line's pixels as bright as the body, also where another segment crosses it;
+    // a selected body's segment shows the selection
+    moved({{.pos = {100.5f, 100.5f}}, {.pos = {120.5f, 100.5f}},
+                  {.pos = {100.5f, 170.5f}, .highlight = true}},
+            {{.pos = {140.5f, 140.5f}}, {.pos = {120.5f, 140.5f}},
+                    {.pos = {140.5f, 170.5f}, .highlight = true}});
+    bool diagonal = true;
+    for (uint32_t k = 0; k <= 40; k++) {
+        diagonal &= near(pixel(renderer, 100 + k, 100 + k), {1.f, 1.f, 1.f}, 1e-4f);
+    }
+    CHECK(diagonal && alpha(renderer, 120, 170) == -1.f && alpha(renderer, 110, 110) == 0.f);
     // Paused: no segment
     trails.paused = true;
-    renderer.draw(window, vertices({{.pos = {60.5f, 100.5f}}}), trails);
-    CHECK(pixel(renderer, 60, 80) == sf::Vector3f());
+    renderer.draw(window, vertices({{.pos = {60.5f, 180.5f}}}), trails);
+    CHECK(pixel(renderer, 60, 150) == sf::Vector3f());
     // After a reset, the first frame has none either
     trails.paused = false;
     renderer.reset_trails();
-    renderer.draw(window, vertices({{.pos = {60.5f, 140.5f}}}), trails);
-    CHECK(pixel(renderer, 60, 120) == sf::Vector3f() && pixel(renderer, 60, 60) == sf::Vector3f());
-    // Diagonal: a fragment per column
-    renderer.draw(window, vertices({{.pos = {100.5f, 180.5f}}}), trails);
-    float diagonal = 0.f;
-    for (uint32_t x = 65; x <= 95; x++) {
-        for (const uint32_t y : {x + 79, x + 80, x + 81}) {
-            diagonal += pixel(renderer, x, y).x;
-        }
-    }
-    CHECK(std::abs(diagonal - 31.f) < 1e-5f);
+    renderer.draw(window, vertices({{.pos = {60.5f, 60.5f}}}), trails);
+    CHECK(pixel(renderer, 60, 120) == sf::Vector3f() && pixel(renderer, 40, 60) == sf::Vector3f());
 }
 
 // Speed and Doppler colours match the CPU ramps; the density colormap spans inferno
@@ -400,6 +447,13 @@ void test_exposure(HdrRenderer& renderer, sf::RenderTexture& window) {
     renderer.resize(SIZE);
     renderer.draw(window, vertices(blocks_of(bright)), slow);
     CHECK(octaves(renderer.read_white_point(), 4000.f) <= 1.f / EXPOSURE_BINS_PER_OCTAVE);
+    // This frame's light, not the trails' (which still hold the bright blocks)
+    HdrRenderer::Frame trails = slow;
+    trails.trails_fade_s = 100.0;
+    trails.frame_time_s = 10.0;  // the white point follows at once
+    renderer.draw(window, vertices(blocks_of(bright)), trails);
+    renderer.draw(window, vertices(stack(50, 50, 3)), trails);
+    CHECK(octaves(renderer.read_white_point(), 3.f) <= 1.f / EXPOSURE_BINS_PER_OCTAVE);
     renderer.set_groups(std::vector{group(sf::Color::White, 0.1f)});
     renderer.resize(SIZE);
     renderer.draw(window, vertices(stack(50, 50, 3)), frame());
@@ -450,6 +504,20 @@ void test_tonemap(HdrRenderer& renderer, sf::RenderTexture& window) {
     image = window.getTexture().copyToImage();
     CHECK(shown(5, 5) == grey && std::abs(shown(20, 30).r - 64) <= 1);
     CHECK(shown(28, 30).r >= 254 && shown(40, 30).r > 100 && shown(40, 30).g <= 1);
+    // Trails half way through their fade: at half their level, the selection's at half its colour
+    HdrRenderer::Frame trails = locked;
+    trails.trails_fade_s = 2.0;
+    std::vector<Body> lit = stack(28, 30, 16);
+    lit.push_back({.pos = {50.5f, 30.5f}, .highlight = true});
+    renderer.reset_trails();
+    renderer.draw(window, vertices(lit), trails);
+    trails.frame_time_s = 1.0;
+    window.clear(sf::Color::Black);
+    renderer.draw(window, vertices({}), trails);
+    window.display();
+    image = window.getTexture().copyToImage();
+    CHECK(std::abs(shown(28, 30).r - 128) <= 2 && std::abs(shown(50, 30).r - 128) <= 2
+            && shown(50, 30).g <= 1);
     // Selected bodies: the selection colour at full brightness in every mode, from a quarter of a
     // pixel (a body on the corner of four)
     const std::vector<Body> selected = {{.pos = {50.5f, 30.5f}, .highlight = true},

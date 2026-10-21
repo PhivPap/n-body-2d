@@ -25,6 +25,8 @@ down.
 ## Requirements
 
 - Linux on x86-64.
+- For the window: OpenGL 3.2 or newer, with float render targets (any recent driver: Mesa's,
+  its software renderer llvmpipe included, and NVIDIA's).
 - CMake 3.24 or newer and a C++20 compiler (GCC or Clang).
 - For the GPU algorithm: an NVIDIA GPU and the CUDA Toolkit 12 or newer. The CUDA code is compiled
   for the card that CMake finds (or for `-DNBODY_CUDA_ARCHITECTURES=...`). Without CUDA (or with
@@ -122,7 +124,7 @@ bright light, so a galaxy's dense core shows its structure next to its faint tid
 covers the grid: only light fainter than the grid's lines lets them show through.
 
 - **Exposure** is automatic: the white point follows the brightest pixels on screen (the 99.9th
-  percentile of the brightest pixel in each 8×8 block), smoothly over 0.4 s. `[` and `]` make the
+  percentile of the brightest pixel in each 8×8 block, trails aside), smoothly over 0.4 s. `[` and `]` make the
   image darker or brighter by half a stop (EV), and `E` locks the current white point, so the
   brightness stops adapting, for example while two galaxies merge.
 - **Colour modes** (`V` cycles them):
@@ -143,10 +145,12 @@ covers the grid: only light fainter than the grid's lines lets them show through
   named, largest first: their colour, size and key. `1`-`9` hide or show one, `Shift`+`1`-`9`
   shows only that one, and `0` shows them all. Hidden bodies can't be hovered or selected. In
   `galaxy-collision`, `3` and `4` hide the faint violet haze of the dark-matter halos.
-- **Trails** are a phosphor: each pixel keeps the brightest light it saw lately and fades, so a
-  trail at full brightness disappears in `trails_fade_time_s`, and fainter trails sooner. Bodies
-  that move more than a pixel per frame leave continuous lines. Trails freeze while the
-  simulation is paused, and start anew when the view jumps (zoom, pan, resize, `C`).
+- **Trails** are a phosphor: each pixel keeps the brightest light it saw lately, and every trail
+  fades evenly from its body to nothing in `trails_fade_time_s`, however bright it is. A trail is
+  as wide as its body and continuous at any speed, and where a newer trail runs over an older
+  one, the newer is on top. Selected bodies' trails keep the selection colour until they fade.
+  Trails freeze while the simulation is paused, and start anew when the view jumps (zoom, pan,
+  resize, `C`).
 - **Bloom** (`B`) adds a soft glow around light brighter than about half the white point, such
   as galaxy cores and dense clusters.
 
