@@ -13,7 +13,11 @@ down.
 - **24 ready-made scenarios**, from the Solar System with its moons to Saturn's rings, colliding
   galaxies and a toy cosmic web. A generator script sets each one up in equilibrium and picks its
   algorithm, timestep and softening.
-- Fading trails, box or click selection with a centre-of-mass marker, and a follow mode.
+- **Long-exposure rendering:** bodies add up as light in floating-point buffers, tone mapped
+  with an automatic exposure, so a galaxy's dense core and its faint tidal tails show together.
+  Colour bodies by group, speed, line-of-sight velocity or density, hide groups from the legend,
+  and watch continuous fading trails.
+- Box or click selection with a centre-of-mass marker, and a follow mode.
 - Named bodies (planets, moons, stars, black holes) are labelled and drawn by mass. Hover any body
   for its name, mass and orbit; the inspector panel shows the selection, and a single body's
   orbital elements and predicted orbit.
@@ -52,7 +56,9 @@ ctest --test-dir build --output-on-failure   # after building, ~10 s
 The tests check config parsing, CSV files, and the physics of every algorithm: a circular orbit
 stays circular, the Barnes-Hut trees with `theta` 0 match All Pairs, pausing doesn't change the
 result, and massless or coincident bodies are handled. They also check the viewer's orbital
-elements (against the elements the Solar System was generated from), named bodies and labels.
+elements (against the elements the Solar System was generated from), named bodies and labels,
+and the renderer: its colours and tone curve, and its GPU passes, read back from the float
+buffers (`renderer-gl`, skipped without a display).
 The GPU algorithm's tests need a CUDA build (`-E gpu` skips them). If CMake finds Python 3 with
 numpy and scipy, the `scenarios` tests also run the scenario generator's `--verify` on a few
 scenarios.
@@ -97,7 +103,49 @@ around the planet, press F to follow it and zoom in with the mouse wheel.
 | L                   | Show or hide the names of named bodies                     |
 | M                   | Draw named bodies by mass, or all the same size            |
 | G                   | Show or hide the grid                                      |
-| F1 / F2 / F3 / F4 / F5 | Show or hide the commands, config, stats, message and inspector panels |
+| V                   | Next colour mode: White, Groups, Speed, Doppler, Density   |
+| [ / ]               | Darker / brighter, by half a stop (EV)                     |
+| E                   | Lock the exposure, or let it adapt again                   |
+| B                   | Bloom on or off                                            |
+| 1 - 9               | Hide or show a group of the legend                         |
+| Shift + 1 - 9       | Show only that group of the legend                         |
+| 0                   | Show every group                                           |
+| F1 / F2 / F3 / F4 / F5 / F6 | Show or hide the commands, config, stats, message, inspector and legend panels |
+
+## Colours, exposure and trails
+
+The window works like a long-exposure photograph. Every body adds the same amount of light,
+spread over the pixels around it, into a floating-point image that never saturates: a pixel
+holding 400 bodies is 400 times as bright as one holding a single body. The image is then
+compressed onto the screen with a curve that is linear for faint light and logarithmic for
+bright light, so a galaxy's dense core shows its structure next to its faint tidal tails.
+
+- **Exposure** is automatic: the white point follows the brightest pixels on screen (the 99.9th
+  percentile of the brightest pixel in each 8×8 block), smoothly over 0.4 s. `[` and `]` make the
+  image darker or brighter by half a stop (EV), and `E` locks the current white point, so the
+  brightness stops adapting, for example while two galaxies merge.
+- **Colour modes** (`V` cycles them):
+  - *White*: every body alike.
+  - *Groups*: each group of bodies in its own colour, from the config (see `render.groups`
+    below) or an automatic palette.
+  - *Speed*: pale for slow bodies, orange-red for fast ones.
+  - *Doppler*: the velocity along the screen's vertical, as an observer below the window would
+    measure it: red for bodies moving up the screen (receding), blue for bodies moving down
+    (approaching), grey across. A rotating disk turns red on one side and blue on the other.
+  - *Density*: the brightness through the inferno colormap, from dark purple to yellow-white.
+
+  Velocities are relative to the followed selection (`F`), or to the whole system's centre of
+  mass, and the colours span the speeds of the bodies on screen.
+- **The legend** (`F6`, bottom left) lists the populations, the groups of bodies that aren't
+  named, largest first: their colour, size and key. `1`-`9` hide or show one, `Shift`+`1`-`9`
+  shows only that one, and `0` shows them all. Hidden bodies can't be hovered or selected. In
+  `galaxy-collision`, `3` and `4` hide the faint violet haze of the dark-matter halos.
+- **Trails** are a phosphor: each pixel keeps the brightest light it saw lately and fades, so a
+  trail at full brightness disappears in `trails_fade_time_s`, and fainter trails sooner. Bodies
+  that move more than a pixel per frame leave continuous lines. Trails freeze while the
+  simulation is paused, and start anew when the view jumps (zoom, pan, resize, `C`).
+- **Bloom** (`B`) adds a soft glow around light brighter than about half the white point, such
+  as galaxy cores and dense clusters.
 
 ## Named bodies and the inspector
 
@@ -117,9 +165,9 @@ and `Io` or `Kepler-16b` in a group of its own. Then:
 The 1024 heaviest named bodies are kept.
 
 - Named bodies are drawn above the trails as markers 2 to 12 px wider than the other bodies, by
-  mass, and labelled with their ids, right of their markers. Heaviest first: a label that would
-  overlap one shown is hidden, and the one shown gets a `+`, like `Earth +` for the Earth and
-  the Moon from afar.
+  mass, in their colour at full brightness, and labelled with their ids, right of their
+  markers. Heaviest first: a label that would overlap one shown is hidden, and the one shown
+  gets a `+`, like `Earth +` for the Earth and the Moon from afar.
 - Hovering over any body shows its id, mass and what it orbits (of several bodies under the
   cursor, the heaviest); right-clicking it selects it, and right-clicking empty space clears the
   selection.
@@ -158,7 +206,10 @@ numpy and scipy by itself.
 Each scenario is a pair of files in `scenarios/`: `<name>.csv` holds the bodies and `<name>.json`
 is the config that runs them. The `Scenario` block in the config describes the scenario, gives
 tips, and states `timestep_max_s`: the largest timestep at which its tightest orbits still hold.
-You can speed a scenario up with the Right arrow until you reach it.
+You can speed a scenario up with the Right arrow until you reach it. The config also gives the
+scenario its look (`Graphics.render`): galaxies have blue-white disks, golden bulges and a faint
+violet dark-matter halo, and the cosmic web starts in Density mode. The tips name the keys worth
+pressing.
 
 | Scenario                  | Bodies | What you see                                                         |
 | ------------------------- | -----: | -------------------------------------------------------------------- |
@@ -230,7 +281,7 @@ softening takes one of two keys; keys the simulator doesn't know are ignored.
 | `selection`             | `show`, `show_center_of_mass`, `follow` and `show_orbit`: the selection settings at startup |
 | `named_bodies`          | `show_labels` and `scale_by_mass`: how named bodies are drawn at startup |
 | `trails_fade_time_s`    | Seconds a trail takes to fade (0 for no trails)            |
-| `render`                | How bodies are drawn at startup: `color_mode` (`"White"`, `"Groups"`, `"Speed"`, `"Doppler"` or `"Density"`, in any letter case), `exposure_ev` (-10 to 10), `bloom`, and `groups`, which styles bodies by id or id group: `{"Sun": {"color": "#ffd27f", "brightness": 1.0}}` (`brightness` 0 to 16, 0 hides them; `{}` for none) |
+| `render`                | How bodies are drawn at startup: `color_mode` (`"White"`, `"Groups"`, `"Speed"`, `"Doppler"` or `"Density"`, in any letter case), `exposure_ev` (-10 to 10), `bloom`, and `groups`, which styles bodies by exact id or id group (an exact id first): `{"Sun": {"color": "#ffd27f", "brightness": 1.0}}`, `color` in sRGB and `brightness` from 0 to 16 (0 hides them), `{}` for none. Populations not styled take an automatic palette, other bodies white. |
 | `enabled`               | Open a window. `false` runs headless until `iterations` or Ctrl+C |
 
 ## Universe files
