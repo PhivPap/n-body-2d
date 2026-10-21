@@ -165,7 +165,8 @@ and `Io` or `Kepler-16b` in a group of its own. Then:
 The 1024 heaviest named bodies are kept.
 
 - Named bodies are drawn above the trails as markers 2 to 12 px wider than the other bodies, by
-  mass, in their colour at full brightness, and labelled with their ids, right of their
+  mass, in their colour at full brightness, heavier ones over lighter ones (a planet hides its
+  moons from afar) and selected ones over all. They are labelled with their ids, right of their
   markers. Heaviest first: a label that would overlap one shown is hidden, and the one shown
   gets a `+`, like `Earth +` for the Earth and the Moon from afar.
 - Hovering over any body shows its id, mass and what it orbits (of several bodies under the
