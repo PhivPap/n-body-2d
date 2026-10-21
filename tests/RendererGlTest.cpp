@@ -66,6 +66,11 @@ sf::Vector3f pixel(HdrRenderer& renderer, uint32_t x, uint32_t y) {
     return {rgba[0], rgba[1], rgba[2]};
 }
 
+// A pixel's alpha in the HDR image the last frame showed
+float alpha(HdrRenderer& renderer, uint32_t x, uint32_t y) {
+    return renderer.read_image({{static_cast<int>(x), static_cast<int>(y)}, {1, 1}})[3];
+}
+
 // The image's luminance summed over a square around (x, y)
 float luminance_around(HdrRenderer& renderer, uint32_t x, uint32_t y, int radius) {
     const std::vector<float> rgba = renderer.read_image({{static_cast<int>(x) - radius,
@@ -112,6 +117,7 @@ void test_deposits(HdrRenderer& renderer, sf::RenderTexture& window) {
     CHECK(pixel(renderer, 7, 5) == sf::Vector3f());  // hidden
     const sf::Vector3f select = Colors::unit_luminance(Colors::to_linear(SELECT_COLOR));
     CHECK(near(pixel(renderer, 9, 5), 2.f * select, 1e-5f));
+    CHECK(alpha(renderer, 9, 5) == 1.f && alpha(renderer, 5, 5) == 0.f);  // the selection's
     CHECK(pixel(renderer, 11, 5) == sf::Vector3f());  // group 255 reads the last, unused, entry
     groups[MAX_RENDER_GROUPS - 1] = group(sf::Color::Red, 3.f);
     renderer.set_groups(groups);
@@ -444,6 +450,21 @@ void test_tonemap(HdrRenderer& renderer, sf::RenderTexture& window) {
     image = window.getTexture().copyToImage();
     CHECK(shown(5, 5) == grey && std::abs(shown(20, 30).r - 64) <= 1);
     CHECK(shown(28, 30).r >= 254 && shown(40, 30).r > 100 && shown(40, 30).g <= 1);
+    // Selected bodies: the selection colour at full brightness in every mode, from a quarter of a
+    // pixel (a body on the corner of four)
+    const std::vector<Body> selected = {{.pos = {50.5f, 30.5f}, .highlight = true},
+            {.pos = {60.f, 30.f}, .highlight = true}};
+    for (const ColorMode mode : {ColorMode::GROUPS, ColorMode::DENSITY}) {
+        HdrRenderer::Frame f = locked;
+        f.color_mode = mode;
+        window.clear(sf::Color::Black);
+        renderer.draw(window, vertices(selected), f);
+        window.display();
+        image = window.getTexture().copyToImage();
+        using Constants::Graphics::SELECT_COLOR;
+        CHECK(shown(50, 30) == SELECT_COLOR && shown(59, 29) == SELECT_COLOR
+                && shown(60, 30) == SELECT_COLOR && shown(52, 30) == sf::Color::Black);
+    }
 }
 }  // namespace
 

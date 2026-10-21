@@ -45,6 +45,9 @@ constexpr Range<uint8_t> BODY_DIAMETER_PIXELS_RANGE = {1, 50};
 constexpr sf::Color BG_COLOR(0, 0, 0, 255);
 constexpr sf::Color GRID_COLOR(255, 255, 255, 64);
 constexpr sf::Color SELECT_COLOR(255, 0, 0, 255);
+// Selected bodies are shown in SELECT_COLOR at full brightness, over SELECT_COVERAGE_GAIN times
+// their coverage of a pixel: a body 1 px wide covers at least a quarter of its brightest pixel
+constexpr float SELECT_COVERAGE_GAIN = 4.f;
 constexpr uint8_t FPS_CALC_BUFFER_LEN = 60;
 constexpr Range<float> PANEL_UPDATE_HZ_RANGE = {0.1, 30};
 // Exposure compensation of the bodies' light, and group brightness (0: drawn as hidden)
@@ -174,6 +177,7 @@ static_assert(GRID_SPACING_FACTOR >= 2.0);
 static_assert(TRAILS_FADE_CHANGE_STEP.count() > 0);
 static_assert(INIT_BODY_PIXEL_DIAMETER >= BODY_DIAMETER_PIXELS_RANGE.first);
 static_assert(INIT_BODY_PIXEL_DIAMETER <= BODY_DIAMETER_PIXELS_RANGE.second);
+static_assert(SELECT_COVERAGE_GAIN >= 1);
 static_assert(NAMED_GROUP_MAX_SIZE >= 1 && NAMED_BODIES_MAX >= 1);
 static_assert(NAMED_SEQUENCE_MAX_SIZE <= NAMED_GROUP_MAX_SIZE);
 static_assert(NAMED_MARKER_MIN_EXTRA_PX > 0);

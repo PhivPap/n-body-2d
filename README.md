@@ -137,6 +137,8 @@ covers the grid: only light fainter than the grid's lines lets them show through
 
   Velocities are relative to the followed selection (`F`), or to the whole system's centre of
   mass, and the colours span the speeds of the bodies on screen.
+- **Selected bodies** are shown in red at full brightness in every mode, so that they stand out
+  even among thousands of others.
 - **The legend** (`F6`, bottom left) lists the populations, the groups of bodies that aren't
   named, largest first: their colour, size and key. `1`-`9` hide or show one, `Shift`+`1`-`9`
   shows only that one, and `0` shows them all. Hidden bodies can't be hovered or selected. In
