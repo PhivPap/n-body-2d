@@ -91,6 +91,39 @@ void Controller::handle_events(sf::RenderWindow& window) {
             case sf::Keyboard::Scan::M:
                 graphics.toggle_mass_scaled_markers();
                 break;
+            case sf::Keyboard::Scan::V:
+                graphics.cycle_color_mode();
+                break;
+            case sf::Keyboard::Scan::E:
+                graphics.toggle_exposure_lock();
+                break;
+            case sf::Keyboard::Scan::LBracket:
+                graphics.exposure_decrease();
+                break;
+            case sf::Keyboard::Scan::RBracket:
+                graphics.exposure_increase();
+                break;
+            case sf::Keyboard::Scan::B:
+                graphics.toggle_bloom();
+                break;
+            case sf::Keyboard::Scan::Num1:
+            case sf::Keyboard::Scan::Num2:
+            case sf::Keyboard::Scan::Num3:
+            case sf::Keyboard::Scan::Num4:
+            case sf::Keyboard::Scan::Num5:
+            case sf::Keyboard::Scan::Num6:
+            case sf::Keyboard::Scan::Num7:
+            case sf::Keyboard::Scan::Num8:
+            case sf::Keyboard::Scan::Num9: {
+                // Legend rows: Num1 to Num9 are in sequence
+                const auto row = static_cast<uint32_t>(key_pressed->scancode)
+                                 - static_cast<uint32_t>(sf::Keyboard::Scan::Num1);
+                key_pressed->shift ? graphics.solo_group(row) : graphics.toggle_group(row);
+                break;
+            }
+            case sf::Keyboard::Scan::Num0:
+                graphics.show_all_groups();
+                break;
             case sf::Keyboard::Scan::Left:
                 key_pressed->control ? graphics.trails_length_decrease() : timestep_decrease();
                 break;
@@ -117,6 +150,9 @@ void Controller::handle_events(sf::RenderWindow& window) {
                 break;
             case sf::Keyboard::Scan::F5:
                 graphics.toggle_inspector_panel();
+                break;
+            case sf::Keyboard::Scan::F6:
+                graphics.toggle_legend_panel();
                 break;
             default:
                 break;

@@ -147,6 +147,10 @@ void PanelBase<Derived, DisplayedData>::bake() {
     auto_height();
     clear();
     texture.draw(text);
+    // Swatches and the like, of the panels that have some
+    if constexpr (requires(Derived& d, sf::RenderTexture& t) { d.draw_decorations(t); }) {
+        static_cast<Derived*>(this)->draw_decorations(texture);
+    }
 }
 
 template <typename Derived, typename DisplayedData>

@@ -14,7 +14,7 @@ void CommandsPanel::set_panel_text() {
  O:               Toggle selection orbit
  A:               Toggle named orbits
  L/M:             Toggle labels/mass sizes
- F1-F5:           Toggle panels
+ F1-F6:           Toggle panels
  Left/Right:      Decrease/Increase timestep
  Up/Down:         Increase/Decrease body size
  Scroll:          Zoom view
