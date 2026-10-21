@@ -118,7 +118,8 @@ The window works like a long-exposure photograph. Every body adds the same amoun
 spread over the pixels around it, into a floating-point image that never saturates: a pixel
 holding 400 bodies is 400 times as bright as one holding a single body. The image is then
 compressed onto the screen with a curve that is linear for faint light and logarithmic for
-bright light, so a galaxy's dense core shows its structure next to its faint tidal tails.
+bright light, so a galaxy's dense core shows its structure next to its faint tidal tails. Light
+covers the grid: only light fainter than the grid's lines lets them show through.
 
 - **Exposure** is automatic: the white point follows the brightest pixels on screen (the 99.9th
   percentile of the brightest pixel in each 8×8 block), smoothly over 0.4 s. `[` and `]` make the
