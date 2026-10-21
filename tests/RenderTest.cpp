@@ -12,6 +12,7 @@
 #include "NamedBodies/NamedBodies.hpp"
 #include "Render/BodyVertex.hpp"
 #include "Render/Colors.hpp"
+#include "Render/HdrRenderer.hpp"
 #include "Render/RenderGroups.hpp"
 #include "Render/ToneMath.hpp"
 
@@ -234,6 +235,55 @@ void test_visibility() {
     }));
 }
 
+void test_trail_segments() {
+    std::array<uint8_t, 256> visible{};
+    visible[0] = 1;  // group 1 hidden
+    // Where each body was, where it is, its group, and whether it draws a segment
+    struct Move {
+        sf::Vector2f from, to;
+        uint8_t group;
+        bool segment;
+    };
+    const float nan = std::numeric_limits<float>::quiet_NaN();
+    const std::vector<Move> moves = {{{10.f, 10.f}, {10.5f, 10.f}, 0, false},  // under 1 px
+            {{10.f, 10.f}, {11.f, 10.f}, 0, true},
+            {{0.f, 0.f}, {4000.f, 500.f}, 0, true},  // 4031 px
+            {{0.f, 0.f}, {4096.f, 100.f}, 0, false},  // over 4096 px
+            {{-2e5f, 0.f}, {-2e5f + 10.f, 0.f}, 0, false},  // outside the guard box
+            {{nan, 0.f}, {5.f, 5.f}, 0, false},
+            {{0.f, 0.f}, {5.f, std::numeric_limits<float>::infinity()}, 0, false},
+            {{0.f, 0.f}, {50.f, 50.f}, 1, false},  // hidden
+            {{100.f, 100.f}, {90.f, 120.f}, 0, true}};
+    sf::VertexArray bodies(sf::PrimitiveType::Points, moves.size());
+    std::vector<sf::Vector2f> previous;
+    for (size_t i = 0; i < moves.size(); i++) {
+        bodies[i].position = moves[i].to;
+        bodies[i].texCoords = {3.f * i, -4.f};
+        BodyVertex::set_group(bodies[i], moves[i].group);
+        previous.push_back(moves[i].from);
+    }
+    BodyVertex::set_highlight(bodies[8], true);
+    sf::VertexArray segments(sf::PrimitiveType::Lines);
+    segments.append({});  // appended to
+    append_trail_segments(bodies, visible, previous, segments);
+    CHECK(segments.getVertexCount() == 7);
+    const auto is_segment = [&](size_t s, size_t i) {
+        const sf::Vertex& a = segments[1 + 2 * s];
+        const sf::Vertex& b = segments[2 + 2 * s];
+        return a.position == moves[i].from && b.position == moves[i].to
+               && a.color == bodies[i].color && b.color == bodies[i].color
+               && a.texCoords == bodies[i].texCoords && b.texCoords == bodies[i].texCoords;
+    };
+    CHECK(is_segment(0, 1) && is_segment(1, 2) && is_segment(2, 8));
+    CHECK(BodyVertex::highlighted(segments[5]) && BodyVertex::highlighted(segments[6]));
+    // Every body's position is kept, hidden ones' included
+    bool kept = true;
+    for (size_t i = 0; i < moves.size(); i++) {
+        kept &= previous[i] == moves[i].to;
+    }
+    CHECK(kept);
+}
+
 void test_tone_curve() {
     using ToneMath::level;
     const float white = 37.f, beta = 2.f;
@@ -330,6 +380,7 @@ int main() {
     test_other_group();
     test_group_capacity();
     test_visibility();
+    test_trail_segments();
     test_tone_curve();
     test_fade();
     test_white_from_histogram();

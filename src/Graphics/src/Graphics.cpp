@@ -811,6 +811,7 @@ void Graphics::toggle_mass_scaled_markers() {
 void Graphics::center_on_selection_center_of_mass() {
     if (cached_selection_stats) {
         vp.center_on_coords(cached_selection_stats->center_of_mass);
+        reset_trails();  // or every body draws a segment across the jump
         action_log.log("Centered on selection CoM");
     }
 }

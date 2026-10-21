@@ -200,6 +200,47 @@ void test_trails(HdrRenderer& renderer, sf::RenderTexture& window) {
     CHECK(pixel(renderer, 30, 10) == sf::Vector3f());
 }
 
+// A segment deposits weight 1 on each pixel along its line; none on the first frame of trails,
+// after a reset or while paused
+void test_segments(HdrRenderer& renderer, sf::RenderTexture& window) {
+    renderer.set_groups(std::vector{group(sf::Color::White)});
+    HdrRenderer::Frame trails = frame(ColorMode::WHITE);
+    trails.trails_fade_s = 1.0;
+    trails.frame_time_s = 0.0;  // no fading
+    trails.locked_white = 1.f;
+    const auto row_lit = [&renderer](uint32_t x0, uint32_t x1, uint32_t y) {
+        bool lit = true;
+        for (uint32_t x = x0; x <= x1; x++) {
+            lit &= pixel(renderer, x, y) == sf::Vector3f(1.f, 1.f, 1.f);
+        }
+        return lit;
+    };
+    renderer.reset_trails();
+    renderer.draw(window, vertices({{.pos = {20.5f, 60.5f}}}), trails);
+    CHECK(std::abs(luminance_around(renderer, 40, 60, 25) - 1.f) < 1e-5f);  // the dot alone
+    renderer.draw(window, vertices({{.pos = {60.5f, 60.5f}}}), trails);
+    CHECK(row_lit(22, 58, 60));
+    CHECK(pixel(renderer, 40, 59) == sf::Vector3f() && pixel(renderer, 40, 61) == sf::Vector3f());
+    // Paused: no segment
+    trails.paused = true;
+    renderer.draw(window, vertices({{.pos = {60.5f, 100.5f}}}), trails);
+    CHECK(pixel(renderer, 60, 80) == sf::Vector3f());
+    // After a reset, the first frame has none either
+    trails.paused = false;
+    renderer.reset_trails();
+    renderer.draw(window, vertices({{.pos = {60.5f, 140.5f}}}), trails);
+    CHECK(pixel(renderer, 60, 120) == sf::Vector3f() && pixel(renderer, 60, 60) == sf::Vector3f());
+    // Diagonal: a fragment per column
+    renderer.draw(window, vertices({{.pos = {100.5f, 180.5f}}}), trails);
+    float diagonal = 0.f;
+    for (uint32_t x = 65; x <= 95; x++) {
+        for (const uint32_t y : {x + 79, x + 80, x + 81}) {
+            diagonal += pixel(renderer, x, y).x;
+        }
+    }
+    CHECK(std::abs(diagonal - 31.f) < 1e-5f);
+}
+
 // Block maxima of `counts` bodies, one block each
 std::vector<Body> blocks_of(const std::vector<uint32_t>& counts) {
     const uint32_t per_row = SIZE.x / Constants::Graphics::EXPOSURE_BLOCK_PX;
@@ -319,6 +360,7 @@ int main() {
     test_float_targets(*renderer, window);
     test_deposits(*renderer, window);
     test_trails(*renderer, window);
+    test_segments(*renderer, window);
     test_exposure(*renderer, window);
     test_tonemap(*renderer, window);
     return Check::result();
