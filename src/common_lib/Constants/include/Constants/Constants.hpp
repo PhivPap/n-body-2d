@@ -232,12 +232,14 @@ namespace Ui {
 constexpr float TEXT_FONT_SIZE = 17.f;   // Ubuntu: labels and text, titles in Ubuntu Medium
 constexpr float MONO_FONT_SIZE = 15.f;   // Ubuntu Mono: numbers, ids and keys
 constexpr float SMALL_FONT_SIZE = 13.f;  // Ubuntu Mono: keycaps and key hints
+constexpr float HEADING_FONT_SIZE = 24.f;  // Ubuntu Medium: the hub's scenario names
 constexpr sf::Color PANEL_BG(14, 16, 20, 204);
 constexpr sf::Color BORDER(255, 255, 255, 20);
 constexpr sf::Color TEXT(228, 231, 236);
 constexpr sf::Color DIM_TEXT(140, 148, 160);  // labels, hints and units
 constexpr sf::Color ACCENT(110, 170, 255);
 constexpr sf::Color ON_COLOR(96, 200, 140);   // a setting's dot while it is on
+constexpr sf::Color ERROR_TEXT(240, 128, 128);
 constexpr sf::Color KEYCAP_FILL(255, 255, 255, 18);
 constexpr sf::Color KEYCAP_BORDER(255, 255, 255, 46);
 constexpr float KEYCAP_ROUNDING = 3.f;
@@ -252,8 +254,20 @@ constexpr sf::Vector2f WINDOW_PADDING(12.f, 10.f);
 constexpr sf::Vector2f ITEM_SPACING(8.f, 4.f);
 constexpr sf::Vector2f CELL_PADDING(6.f, 1.f);
 constexpr float PANEL_MARGIN_PX = 10.f;  // between panels, and from the window's edges
+// The scenario hub: HUB_SIZE_PX at most, and HUB_SIZE_SHARE of the window, centred in it, over
+// HUB_BG. Started without a config, the window opens at HUB_RESOLUTION, at HUB_FPS frames per
+// second until a scenario sets its own.
+constexpr sf::Vector2f HUB_SIZE_PX(1100.f, 700.f);
+constexpr sf::Vector2f HUB_SIZE_SHARE(0.9f, 0.88f);
+constexpr float HUB_LIST_WIDTH_PX = 340.f;
+constexpr sf::Color HUB_BG(14, 16, 20, 240);
+constexpr sf::Vector2u HUB_RESOLUTION(1600, 900);
+constexpr uint32_t HUB_FPS = 60;
 
 static_assert(MONO_FONT_SIZE > 0 && SMALL_FONT_SIZE > 0 && SMALL_FONT_SIZE <= MONO_FONT_SIZE);
 static_assert(TEXT_FONT_SIZE >= MONO_FONT_SIZE);  // other fonts sit on the text's baseline
+static_assert(HUB_SIZE_SHARE.x > 0 && HUB_SIZE_SHARE.x <= 1);
+static_assert(HUB_SIZE_SHARE.y > 0 && HUB_SIZE_SHARE.y <= 1);
+static_assert(HUB_LIST_WIDTH_PX < HUB_SIZE_PX.x);
 }  // namespace Ui
 }  // namespace Constants

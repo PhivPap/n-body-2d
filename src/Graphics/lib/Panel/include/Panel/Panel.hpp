@@ -50,10 +50,3 @@ public:
 protected:
     DisplayedData displayed_data{};
 };
-
-// Numbers as panels show them
-namespace PanelFormat {
-std::string with_thousands(uint64_t n);  // "296,297"
-// Three significant digits, with a k, M or G prefix from a thousand on: "358", "1.31 M"
-std::string si(double x);
-}  // namespace PanelFormat

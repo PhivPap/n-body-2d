@@ -2,6 +2,7 @@
 
 #include "Constants/Constants.hpp"
 #include "Ui/Ui.hpp"
+#include "Ui/Format.hpp"
 #include "Ui/Widgets.hpp"
 #include "fmt/format.h"
 
@@ -89,7 +90,7 @@ void LegendPanel::draw_contents() {
             ImGui::TableNextColumn();
             Ui::text(short_name(row.name), Ui::fonts().text, color);
             ImGui::TableNextColumn();
-            Ui::text_right(PanelFormat::with_thousands(row.count), Ui::fonts().mono, color);
+            Ui::text_right(Ui::Format::with_thousands(row.count), Ui::fonts().mono, color);
             ImGui::TableNextColumn();
             if (row.hidden) {
                 Ui::text("hidden", Ui::fonts().text, DIM_TEXT);

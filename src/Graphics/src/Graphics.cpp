@@ -205,11 +205,13 @@ bool Graphics::is_box_selecting() const {
            && select_grab_max_drag_px > Constants::Graphics::CLICK_MAX_DRAG_PX;
 }
 
-// Bodies under the cursor are looked for while it is in the window and no pan or box selection is
-// going on. XWayland may not update the cursor position once it left the window.
+// Bodies under the cursor are looked for while it is in the window, not over the scenario hub,
+// and no pan or box selection is going on. XWayland may not update the cursor position once it
+// left the window.
 void Graphics::update_hover_cursor() {
     hover_cursor = std::nullopt;
-    if (!cursor_in_window || opt_view_grabbed_pos || is_box_selecting()) {
+    if (!cursor_in_window || ImGui::GetIO().WantCaptureMouse || opt_view_grabbed_pos
+            || is_box_selecting()) {
         return;
     }
     const sf::Vector2i cursor = sf::Mouse::getPosition(window);

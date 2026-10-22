@@ -3,9 +3,13 @@
 #include <csignal>
 #include <unistd.h>
 
+#include <cfloat>
+#include <cmath>
+
 #include "Constants/Constants.hpp"
 #include "Logger/Logger.hpp"
 #include "Logger/Time.hpp"
+#include "Ui/Widgets.hpp"
 
 
 // A signal handler may only use lock-free atomics, and not volatile std::sig_atomic_t from another
@@ -13,14 +17,19 @@
 static_assert(std::atomic<bool>::is_always_lock_free);
 std::atomic<bool> Controller::sigint_flag = false;
 
-Controller::Controller(const Config& cfg, Simulation& sim, Graphics& graphics, Ui::Context& ui)
-        : sim(sim), graphics(graphics), ui(ui),
+Controller::Controller(const Config& cfg, Simulation& sim, Graphics& graphics, Ui::Context& ui,
+        Hub::ScenarioHub& hub, const std::filesystem::path& config_path)
+        : sim(sim), graphics(graphics), ui(ui), hub(hub), config_path(config_path),
           stats_update_rate_limiter(
                   std::chrono::duration<float>(1 / cfg.graphics.panel_update_hz)) {}
 
+// Dear ImGui gets every event first. The view ignores presses and scrolls over the hub (as of the
+// last frame), and the app's keys while it is open, except Esc, which opens and closes it. Releases
+// always reach the view, or a pan that ends over the hub would go on.
 void Controller::handle_events(sf::RenderWindow& window) {
     while (const std::optional event = window.pollEvent()) {
         ui.process_event(*event);
+        const bool over_ui = ImGui::GetIO().WantCaptureMouse;
         if (event->is<sf::Event::Closed>()) {
             window.close();
             Log::info("Closed window");
@@ -29,7 +38,9 @@ void Controller::handle_events(sf::RenderWindow& window) {
             graphics.resize_view(sf::Vector2f(resized->size));
         }
         else if (const auto* scrolled = event->getIf<sf::Event::MouseWheelScrolled>()) {
-            graphics.zoom_view(scrolled->delta);
+            if (!over_ui) {
+                graphics.zoom_view(scrolled->delta);
+            }
         }
         else if (event->is<sf::Event::MouseLeft>()) {
             graphics.set_cursor_in_window(false);
@@ -38,6 +49,9 @@ void Controller::handle_events(sf::RenderWindow& window) {
             graphics.set_cursor_in_window(true);
         }
         else if (const auto* mouse_clicked = event->getIf<sf::Event::MouseButtonPressed>()) {
+            if (over_ui) {
+                continue;
+            }
             if (mouse_clicked->button == sf::Mouse::Button::Left) {
                 graphics.grab_view();
             }
@@ -54,6 +68,13 @@ void Controller::handle_events(sf::RenderWindow& window) {
             }
         }
         else if (const auto* key_pressed = event->getIf<sf::Event::KeyPressed>()) {
+            if (key_pressed->scancode == sf::Keyboard::Scan::Escape) {
+                hub.is_open() ? hub.close() : hub.open(config_path);
+                continue;
+            }
+            if (hub.is_open()) {
+                continue;  // typed into the hub
+            }
             switch (key_pressed->scancode) {
             case sf::Keyboard::Scan::Space:
                 if (sim.get_state() == Simulation::State::PAUSED) {
@@ -200,14 +221,17 @@ std::optional<std::filesystem::path> Controller::run() {
     StopWatch sw;
     sim.run();
     sf::RenderWindow& window = graphics.get_window();
-    while (!sim.is_finished() && !sigint_flag && window.isOpen()) {
+    std::optional<std::filesystem::path> next;
+    while (!next && !sim.is_finished() && !sigint_flag && window.isOpen()) {
         handle_events(window);
         if (!window.isOpen()) {
             break;  // closed: nothing to draw on
         }
         stats_update_rate_limiter.try_call(std::bind(&Controller::update_panels, this));
+        hub.poll();
         ui.new_frame();
         graphics.draw_frame();
+        next = hub.draw(window.getSize(), config_path);
         ui.render();
         window.display();
     }
@@ -216,7 +240,50 @@ std::optional<std::filesystem::path> Controller::run() {
         sim.pause();
     }
     Log::debug("Sim done: [{}]", sw);
-    return std::nullopt;
+    return next;
+}
+
+std::optional<std::filesystem::path> Controller::run_hub(sf::RenderWindow& window,
+        Ui::Context& ui, Hub::ScenarioHub& hub) {
+    window.setFramerateLimit(Constants::Ui::HUB_FPS);  // until a scenario sets its own
+    std::optional<std::filesystem::path> picked;
+    while (!picked && !sigint_flag && window.isOpen()) {
+        while (const std::optional event = window.pollEvent()) {
+            ui.process_event(*event);
+            if (event->is<sf::Event::Closed>()) {
+                window.close();
+                Log::info("Closed window");
+            }
+            else if (const auto* resized = event->getIf<sf::Event::Resized>()) {
+                window.setView(sf::View(sf::FloatRect({0.f, 0.f}, sf::Vector2f(resized->size))));
+            }
+        }
+        if (!window.isOpen()) {
+            break;
+        }
+        hub.poll();
+        ui.new_frame();
+        window.clear(Constants::Graphics::BG_COLOR);
+        picked = hub.draw(window.getSize(), std::nullopt);
+        ui.render();
+        window.display();
+    }
+    return picked;
+}
+
+void Controller::show_loading(sf::RenderWindow& window, Ui::Context& ui,
+        const std::filesystem::path& config_path) {
+    const std::string text = fmt::format("Loading {}…", config_path.stem().string());
+    ImFont* font = Ui::fonts().heading;
+    const ImVec2 size = font->CalcTextSizeA(font->FontSize, FLT_MAX, 0.f, text.c_str());
+    const sf::Vector2f window_size(window.getSize());
+    ui.new_frame();
+    window.clear(Constants::Graphics::BG_COLOR);
+    ImGui::GetForegroundDrawList()->AddText(font, font->FontSize,
+            {std::round((window_size.x - size.x) / 2.f), std::round((window_size.y - size.y) / 2.f)},
+            Ui::u32(Constants::Ui::TEXT), text.c_str());
+    ui.render();
+    window.display();
 }
 
 void Controller::run_headless(Simulation& sim) {
