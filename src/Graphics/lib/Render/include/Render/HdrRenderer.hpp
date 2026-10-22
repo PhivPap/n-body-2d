@@ -24,7 +24,8 @@ void append_trail_segments(const sf::VertexArray& bodies,
 // The VELOCITY_SCALE_QUANTILE of the speeds (with `line_of_sight`, of |v_y|) in the texture
 // coordinates of up to VELOCITY_SCALE_SAMPLES bodies spread evenly over the indices, of those
 // drawn (`group_visible`, by group) inside the window; nullopt with fewer than
-// VELOCITY_SCALE_MIN_SAMPLES. `samples`: scratch space.
+// VELOCITY_SCALE_MIN_SAMPLES, or than all of the bodies if there are fewer. `samples`: scratch
+// space.
 std::optional<float> velocity_quantile(const sf::VertexArray& bodies,
         const std::vector<uint8_t>& group_visible, sf::Vector2f window_size, bool line_of_sight,
         std::vector<float>& samples);

@@ -559,7 +559,8 @@ std::optional<float> velocity_quantile(const sf::VertexArray& bodies,
             }
         }
     }
-    if (samples.size() < VELOCITY_SCALE_MIN_SAMPLES) {
+    // Systems of fewer bodies (three suns) need all of them
+    if (samples.empty() || samples.size() < std::min<uint64_t>(count, VELOCITY_SCALE_MIN_SAMPLES)) {
         return std::nullopt;
     }
     return ToneMath::quantile(samples, VELOCITY_SCALE_QUANTILE);

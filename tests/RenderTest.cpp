@@ -313,8 +313,17 @@ void test_velocity_quantile() {
     sf::VertexArray few(sf::PrimitiveType::Points);
     for (int k = 0; k < 15; k++) {
         few.append(bodies[k]);
+        few.append(bodies[200 + k]);  // off screen
     }
     CHECK(!velocity_quantile(few, visible, window, false, samples));
+    // Fewer bodies in all: once they are all on screen
+    sf::VertexArray three(sf::PrimitiveType::Points);
+    for (int k = 0; k < 3; k++) {
+        three.append(bodies[k]);
+    }
+    CHECK(velocity_quantile(three, visible, window, false, samples) == 5.f * 3.f);
+    three[2].position = {-1.f, 10.f};
+    CHECK(!velocity_quantile(three, visible, window, false, samples));
 }
 
 void test_tone_curve() {
