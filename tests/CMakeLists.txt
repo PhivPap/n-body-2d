@@ -36,6 +36,11 @@ add_executable(test-ui ${CMAKE_CURRENT_LIST_DIR}/UiTest.cpp)
 target_link_libraries(test-ui PRIVATE lib-ui lib-logger)
 add_test(NAME ui COMMAND test-ui)
 
+# test-hub: the scenario hub's catalogue, and running the generator
+add_executable(test-hub ${CMAKE_CURRENT_LIST_DIR}/HubTest.cpp)
+target_link_libraries(test-hub PRIVATE lib-hub lib-logger)
+add_test(NAME hub COMMAND test-hub)
+
 add_executable(test-named-bodies ${CMAKE_CURRENT_LIST_DIR}/NamedBodiesTest.cpp)
 target_link_libraries(test-named-bodies PRIVATE lib-graphics-named-bodies
         lib-graphics-selector lib-graphics-render lib-graphics-text lib-body lib-constants
