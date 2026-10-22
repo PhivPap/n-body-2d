@@ -97,6 +97,7 @@ add_subdirectory(${LIB_DIR}/RLCaller)
 
 add_subdirectory(${SRC_DIR}/Simulation)
 add_subdirectory(${SRC_DIR}/Ui)
+add_subdirectory(${SRC_DIR}/Hub)
 add_subdirectory(${SRC_DIR}/Graphics)
 add_subdirectory(${SRC_DIR}/Controller)
 
