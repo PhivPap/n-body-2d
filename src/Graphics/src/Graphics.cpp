@@ -3,6 +3,7 @@
 #include <GL/gl.h>
 #include <algorithm>
 #include <numbers>
+#include <numeric>
 
 #include "Constants/Constants.hpp"
 #include "Logger/Logger.hpp"
@@ -103,20 +104,12 @@ void find_bodies_near(HeaviestBody& heaviest, sf::Vector2f point, float radius,
         }
         Log::warning("Config::Graphics::render::groups: no body has the id or id group {}", keys);
     }
-    // The velocity frame without a followed selection: momentum over mass, or the mean velocity
-    // of massless bodies
-    double total_mass = 0.0;
-    sf::Vector2<double> momentum, velocity_sum;
-    for (uint64_t i = 0; i < bodies.n; i++) {
-        total_mass += bodies.mass(i);
-        momentum += bodies.mass(i) * bodies.vel(i);
-        velocity_sum += bodies.vel(i);
-    }
-    if (total_mass > 0.0) {
-        barycentre_velocity = momentum / total_mass;
-    }
-    else if (bodies.n > 0) {
-        barycentre_velocity = velocity_sum / static_cast<double>(bodies.n);
+    // The velocity frame without a followed selection: the barycentre's, of all the bodies
+    if (bodies.n > 0) {
+        std::vector<uint32_t> all(bodies.n);
+        std::iota(all.begin(), all.end(), 0u);
+        barycentre_velocity = Orbit::barycentre(all, bodies.mass_data(), bodies.pos_data(),
+                bodies.vel_data()).vel;
     }
     update_marker_colors();
 
