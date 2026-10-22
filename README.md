@@ -320,4 +320,5 @@ but don't pull anything.
 
 ## License
 
-MIT, see [LICENSE](LICENSE).
+MIT, see [LICENSE](LICENSE). The Ubuntu fonts in `assets/fonts/` are under the Ubuntu Font
+Licence, see [assets/fonts/LICENCE.txt](assets/fonts/LICENCE.txt).

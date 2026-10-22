@@ -227,4 +227,26 @@ static_assert(std::size(DENSITY_STOPS) >= 2);
 static_assert(BLOOM_THRESHOLD >= 0 && BLOOM_KNEE > 0 && BLOOM_STRENGTH >= 0);
 static_assert(BLOOM_LEVELS >= 1);
 }  // namespace Graphics
+
+// The look of what Dear ImGui draws: the panels, the tooltip and the hub
+namespace Ui {
+constexpr float FONT_SIZE = 16.f;        // as SFML's character size 16
+constexpr float SMALL_FONT_SIZE = 14.f;  // keycaps and key hints
+constexpr sf::Color PANEL_BG(14, 16, 20, 204);
+constexpr sf::Color BORDER(255, 255, 255, 20);
+constexpr sf::Color TEXT(228, 231, 236);
+constexpr sf::Color DIM_TEXT(140, 148, 160);  // labels, hints and units
+constexpr sf::Color ACCENT(110, 170, 255);
+constexpr sf::Color ON_COLOR(96, 200, 140);   // a setting's dot while it is on
+constexpr sf::Color KEYCAP_FILL(255, 255, 255, 18);
+constexpr sf::Color KEYCAP_BORDER(255, 255, 255, 46);
+constexpr float KEYCAP_ROUNDING = 3.f;
+constexpr float WINDOW_ROUNDING = 6.f;
+constexpr float FRAME_ROUNDING = 4.f;
+constexpr sf::Vector2f WINDOW_PADDING(12.f, 10.f);
+constexpr sf::Vector2f ITEM_SPACING(8.f, 4.f);
+constexpr sf::Vector2f CELL_PADDING(6.f, 2.f);
+
+static_assert(SMALL_FONT_SIZE > 0 && SMALL_FONT_SIZE <= FONT_SIZE);
+}  // namespace Ui
 }  // namespace Constants

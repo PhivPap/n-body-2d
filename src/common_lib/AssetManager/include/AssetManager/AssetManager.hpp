@@ -11,6 +11,9 @@ public:
     static AssetManager& instance();
     template <typename Asset>
     Asset& get(const std::filesystem::path& rel_path);
+    // An asset's absolute path, for libraries that load files themselves. Throws if it doesn't
+    // exist.
+    std::filesystem::path path(const std::filesystem::path& rel_path) const;
 
 private:
     template <typename T>

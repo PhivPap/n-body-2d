@@ -96,6 +96,7 @@ add_subdirectory(${LIB_DIR}/AssetManager)
 add_subdirectory(${LIB_DIR}/RLCaller)
 
 add_subdirectory(${SRC_DIR}/Simulation)
+add_subdirectory(${SRC_DIR}/Ui)
 add_subdirectory(${SRC_DIR}/Graphics)
 add_subdirectory(${SRC_DIR}/Controller)
 
@@ -108,6 +109,7 @@ target_link_options(${PROJECT_NAME} PRIVATE $<$<CXX_COMPILER_ID:GNU>:-mdaz-ftz>)
 # Link libraries & Set include paths
 target_link_libraries(${PROJECT_NAME} PRIVATE lib-simulation)
 target_link_libraries(${PROJECT_NAME} PRIVATE lib-graphics)
+target_link_libraries(${PROJECT_NAME} PRIVATE lib-ui)
 target_link_libraries(${PROJECT_NAME} PRIVATE lib-controller)
 target_link_libraries(${PROJECT_NAME} PRIVATE lib-logger)
 target_link_libraries(${PROJECT_NAME} PRIVATE lib-input-output)
