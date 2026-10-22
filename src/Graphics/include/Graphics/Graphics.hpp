@@ -37,7 +37,8 @@ public:
         double timestep_s;
     };
 
-    Graphics(const Config& cfg, const Bodies& bodies);
+    // Draws on `window`, which it applies the config's frame rate and vsync to
+    Graphics(const Config& cfg, const Bodies& bodies, sf::RenderWindow& window);
     sf::RenderWindow& get_window();
     void resize_view(sf::Vector2f new_size);
     void zoom_view(double delta);
@@ -83,6 +84,7 @@ public:
     void notify_resumed();
     void notify_timestep_changed(double old_dt, double new_dt);
     void update_simulation_stats(const SimulationStats& sim_stats);
+    // Draws the frame, which the caller displays: Dear ImGui's windows go over it
     void draw_frame();
 
 private:
@@ -115,7 +117,7 @@ private:
     std::vector<sf::Vector2<double>> body_velocities_cache;
     StopWatch sw;
     sf::VertexArray body_vertex_array;
-    sf::RenderWindow window;
+    sf::RenderWindow& window;
     HdrRenderer renderer{window.getSize()};
     StopWatch frame_sw;  // since the last frame, for the trail fade and the exposure
     // Speed and Doppler: velocities relative to the followed selection's, else to the

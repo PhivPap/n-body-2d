@@ -79,16 +79,16 @@ void find_bodies_near(HeaviestBody& heaviest, sf::Vector2f point, float radius,
 }
 }  // namespace
 
- Graphics::Graphics(const Config& cfg, const Bodies& bodies)
+ Graphics::Graphics(const Config& cfg, const Bodies& bodies, sf::RenderWindow& window)
         : graphics_cfg(cfg.graphics), bodies(bodies), body_positions_cache(bodies.n),
           body_velocities_cache(bodies.n), body_vertex_array(sf::PrimitiveType::Points, bodies.n),
-          window(sf::VideoMode(sf::Vector2u(graphics_cfg.resolution)), "N-Body Sim"),
-          vp(sf::Vector2f(graphics_cfg.resolution), graphics_cfg.pixel_scale),
+          window(window), vp(sf::Vector2f(window.getSize()), graphics_cfg.pixel_scale),
           selector(bodies, body_positions_cache, body_vertex_array),
           tooltip_text(Text::font(), "", Constants::Graphics::TOOLTIP_CHARACTER_SIZE),
           apsis_label(Text::font(), "", Constants::Graphics::APSIS_CHARACTER_SIZE) {
     window.setFramerateLimit(graphics_cfg.fps);
     window.setVerticalSyncEnabled(graphics_cfg.vsync_enabled);
+    window.setView(sf::View(sf::FloatRect({0.f, 0.f}, sf::Vector2f(window.getSize()))));
 
     // A default vertex is white, which decodes as render group 255
     for (uint64_t i = 0; i < body_vertex_array.getVertexCount(); i++) {
@@ -1125,7 +1125,6 @@ void Graphics::draw_frame() {
     draw_selection_orbit();
     draw_named_bodies();
     draw_ui();
-    window.display();
     frame++;
     stats_update_rate_limiter.try_call(std::bind(&Graphics::update_stats, this));
 }

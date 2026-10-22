@@ -13,13 +13,14 @@
 static_assert(std::atomic<bool>::is_always_lock_free);
 std::atomic<bool> Controller::sigint_flag = false;
 
-Controller::Controller(const Config& cfg, Simulation& sim, Graphics& graphics)
-        : sim(sim), graphics(graphics),
+Controller::Controller(const Config& cfg, Simulation& sim, Graphics& graphics, Ui::Context& ui)
+        : sim(sim), graphics(graphics), ui(ui),
           stats_update_rate_limiter(
                   std::chrono::duration<float>(1 / cfg.graphics.panel_update_hz)) {}
 
 void Controller::handle_events(sf::RenderWindow& window) {
     while (const std::optional event = window.pollEvent()) {
+        ui.process_event(*event);
         if (event->is<sf::Event::Closed>()) {
             window.close();
             Log::info("Closed window");
@@ -201,8 +202,14 @@ void Controller::run() {
     sf::RenderWindow& window = graphics.get_window();
     while (!sim.is_finished() && !sigint_flag && window.isOpen()) {
         handle_events(window);
+        if (!window.isOpen()) {
+            break;  // closed: nothing to draw on
+        }
         stats_update_rate_limiter.try_call(std::bind(&Controller::update_panels, this));
+        ui.new_frame();
         graphics.draw_frame();
+        ui.render();
+        window.display();
     }
     // Also joins the threads of a finished simulation
     if (sim.get_state() == Simulation::State::RUNNING) {

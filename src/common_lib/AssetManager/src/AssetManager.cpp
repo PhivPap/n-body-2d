@@ -21,7 +21,15 @@ AssetManager& AssetManager::instance() {
 
 AssetManager::AssetManager() : assets_dir(executable_dir() / "assets") {
     if (!std::filesystem::exists(assets_dir) || !std::filesystem::is_directory(assets_dir)) {
-        throw std::runtime_error("Assets directory `" + assets_dir.string() + 
+        throw std::runtime_error("Assets directory `" + assets_dir.string() +
                 "` does not exist or is not a directory");
     }
+}
+
+std::filesystem::path AssetManager::path(const std::filesystem::path& rel_path) const {
+    const std::filesystem::path asset = assets_dir / rel_path;
+    if (!std::filesystem::exists(asset)) {
+        throw std::runtime_error("Asset `" + asset.string() + "` does not exist");
+    }
+    return asset;
 }

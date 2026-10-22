@@ -17,6 +17,7 @@
 #include "Simulation/BarnesHutCuda.hpp"
 #endif
 #include "Simulation/Simulation.hpp"
+#include "Ui/Ui.hpp"
 
 // Signal handler can only use signal-safe code
 void sigint_handler([[maybe_unused]] int signum) {
@@ -49,15 +50,21 @@ int main(int argc, const char* argv[]) {
         Bodies bodies = IO::parse_csv(cfg.io.universe_infile.string(), cfg.io.echo_bodies);
 
         std::unique_ptr<Simulation> sim = create_sim(cfg.sim, bodies);
+        // Destroyed in reverse: the Graphics first, whose GL resources need the window, then
+        // Dear ImGui, which closes the window
+        std::optional<sf::RenderWindow> window;
+        std::optional<Ui::Context> ui;
         std::optional<Graphics> graphics;
         if (cfg.graphics.enabled) {
-            graphics.emplace(cfg, bodies);
+            window.emplace(sf::VideoMode(sf::Vector2u(cfg.graphics.resolution)), "N-Body Sim");
+            ui.emplace(*window);
+            graphics.emplace(cfg, bodies, *window);
         }
 
         signal(SIGINT, sigint_handler);
 
         if (graphics) {
-            Controller(cfg, *sim, *graphics).run();
+            Controller(cfg, *sim, *graphics, *ui).run();
         }
         else {
             Controller::run_headless(*sim);
