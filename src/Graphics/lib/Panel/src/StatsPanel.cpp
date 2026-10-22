@@ -1,28 +1,28 @@
 #include "Panel/StatsPanel.hpp"
 
+#include <cmath>
+
 #include "Logger/Time.hpp"
+#include "Ui/Widgets.hpp"
+#include "fmt/format.h"
 
 
-StatsPanel::StatsPanel(uint32_t width) : Base(width) {}
+StatsPanel::StatsPanel(float width) : DataPanel("Stats", "F3", width) {}
 
-void StatsPanel::set_panel_text() {
-    const auto &d = displayed_data;
-    auto txt = fmt::format(
-        "Stats:\n"
-        " Iteration:     {}\n"
-        " IPS:           {:.3f}\n"
-        " Frame:         {}\n"
-        " FPS:           {:.3f}\n"
-        " Elapsed:       {}\n"
-        " Sim. Time:     {}\n"
-        " Sim. Rate:     {}/s\n",
-        d.iteration,
-        d.iter_per_sec,
-        d.frame,
-        d.fps,
-        Log::Time::from(d.elapsed_s),
-        Log::Time::from(d.simulated_time_s),
-        Log::Time::from(d.simulation_rate)
-    );
-    text.setString(txt);
+void StatsPanel::draw_contents() {
+    const StatsDisplayedData& d = displayed_data;
+    const auto time = [](double s) {
+        return std::isfinite(s) ? Log::Time::from(s).to_string() : std::string("-");
+    };
+    if (!Ui::begin_rows("##stats")) {
+        return;
+    }
+    Ui::row("Iteration", PanelFormat::with_thousands(d.iteration));
+    Ui::row("Steps/s", PanelFormat::si(d.iter_per_sec));
+    Ui::row("Frame", PanelFormat::with_thousands(d.frame));
+    Ui::row("FPS", fmt::format("{:.1f}", d.fps));
+    Ui::row("Elapsed", time(d.elapsed_s));
+    Ui::row("Sim. time", time(d.simulated_time_s));
+    Ui::row("Sim. rate", std::isfinite(d.simulation_rate) ? time(d.simulation_rate) + "/s" : "-");
+    Ui::end_rows();
 }

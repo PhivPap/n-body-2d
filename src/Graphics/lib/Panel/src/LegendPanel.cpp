@@ -1,18 +1,31 @@
 #include "Panel/LegendPanel.hpp"
 
+#include "Constants/Constants.hpp"
+#include "Ui/Ui.hpp"
+#include "Ui/Widgets.hpp"
+#include "fmt/format.h"
+
 
 namespace {
-constexpr uint32_t NAME_MAX_CHARS = 14;
-constexpr uint32_t SWATCH_CHARS = 2;  // placeholder spaces
-constexpr uint32_t GRADIENT_CHARS = 12;
+constexpr size_t NAME_MAX_CHARS = 14;
+constexpr float SWATCH_WIDTH_PX = 14.f;
+constexpr float GRADIENT_WIDTH_PX = 120.f;
 
-// "296,297"
-std::string with_thousands(uint32_t n) {
-    std::string digits = std::to_string(n);
-    for (size_t k = digits.size(); k > 3; k -= 3) {
-        digits.insert(k - 3, ",");
+// `name`, cut to NAME_MAX_CHARS characters with "…" if it is longer
+std::string short_name(std::string_view name) {
+    size_t chars = 0;
+    size_t cut = name.size();  // where the "…" goes
+    for (size_t i = 0; i < name.size(); i++) {
+        if ((static_cast<uint8_t>(name[i]) & 0xC0) != 0x80) {  // a character's first byte
+            if (chars == NAME_MAX_CHARS - 1) {
+                cut = i;
+            }
+            if (++chars > NAME_MAX_CHARS) {
+                return std::string(name.substr(0, cut)) + "…";
+            }
+        }
     }
-    return digits;
+    return std::string(name);
 }
 
 // A white point in bodies/px: "6.79", "401", "1016"
@@ -20,77 +33,87 @@ std::string white_text(float white) {
     return white < 999.5f ? fmt::format("{:.3g}", white) : fmt::format("{:.0f}", white);
 }
 
-// The box of `chars` characters from character `index` of `text`, from the top of a capital
-// letter to the baseline, a pixel short of the next character
-sf::FloatRect cell(const sf::Text& text, size_t index, uint32_t chars) {
-    const sf::Font& font = text.getFont();
-    const uint32_t size = text.getCharacterSize();
-    const sf::FloatRect capital = font.getGlyph(U'M', size, false).bounds;
-    const float advance = font.getGlyph(U' ', size, false).advance;
-    const sf::Vector2f top_left = text.findCharacterPos(index);
-    return {{top_left.x, top_left.y + static_cast<float>(size) + capital.position.y},
-            {advance * static_cast<float>(chars) - 1.f, capital.size.y}};
+// Filled, or hollow while hidden
+void swatch(sf::Color color, bool hidden) {
+    const auto [min, max] = Ui::capitals_box(SWATCH_WIDTH_PX);
+    ImDrawList* draw_list = ImGui::GetWindowDrawList();
+    if (hidden) {
+        draw_list->AddRect(min, max, Ui::draw_color(color));
+    }
+    else {
+        draw_list->AddRectFilled(min, max, Ui::draw_color(color));
+    }
+}
+
+void gradient_bar(const std::vector<sf::Color>& gradient) {
+    const auto [min, max] = Ui::capitals_box(GRADIENT_WIDTH_PX);
+    ImDrawList* draw_list = ImGui::GetWindowDrawList();
+    const float step = GRADIENT_WIDTH_PX / static_cast<float>(gradient.size() - 1);
+    for (size_t k = 0; k + 1 < gradient.size(); k++) {
+        const ImU32 left = Ui::draw_color(gradient[k]);
+        const ImU32 right = Ui::draw_color(gradient[k + 1]);
+        draw_list->AddRectFilledMultiColor({min.x + step * static_cast<float>(k), min.y},
+                {min.x + step * static_cast<float>(k + 1), max.y}, left, right, right, left);
+    }
 }
 }  // namespace
 
 
-LegendPanel::LegendPanel(uint32_t width) : Base(width) {}
+LegendPanel::LegendPanel(float width) : DataPanel("Colours", "V", width) {}
 
-void LegendPanel::set_panel_text() {
-    const auto& d = displayed_data;
-    sf::String txt = Text::from_utf8(fmt::format("Colours: {} (V)\n", d.mode));
-    swatch_indices.clear();
-    for (size_t k = 0; k < d.rows.size(); k++) {
-        const LegendDisplayedData::Row& row = d.rows[k];
-        sf::String name = Text::from_utf8(row.name);
-        if (name.getSize() > NAME_MAX_CHARS) {
-            name = name.substring(0, NAME_MAX_CHARS - 3) + "...";
-        }
-        name += std::string(NAME_MAX_CHARS - name.getSize(), ' ');
-        txt += fmt::format(" {} ", k + 1);
-        swatch_indices.push_back(txt.getSize());
-        txt += std::string(SWATCH_CHARS + 1, ' ') + name
-               + fmt::format(" {:>9}{}\n", with_thousands(row.count), row.hidden ? " hidden" : "");
-    }
-    gradient_index.reset();
-    if (!d.gradient.empty()) {
-        txt += " ";
-        gradient_index = txt.getSize();
-        txt += std::string(GRADIENT_CHARS + 1, ' ') + Text::from_utf8(d.scale) + "\n";
-    }
-    txt += d.locked_white ? fmt::format(" Exposure: Locked at {}/px {:+.1f} EV\n",
-                                    white_text(*d.locked_white), d.exposure_ev)
-                          : fmt::format(" Exposure: Auto {:+.1f} EV (E [ ])\n", d.exposure_ev);
-    txt += fmt::format(" Stretch: {} (Ctrl Up/Down)\n", d.stretch);
-    txt += fmt::format(" Bloom: {} (B)\n", d.bloom ? "ON" : "OFF");
-    if (!d.rows.empty()) {
-        txt += " 1-9 toggle, Shift solo, 0 all\n";
-    }
-    text.setString(txt);
+std::string_view LegendPanel::subtitle() const {
+    return displayed_data.mode;
 }
 
-void LegendPanel::draw_decorations(sf::RenderTexture& target) {
-    const auto& d = displayed_data;
-    for (size_t k = 0; k < swatch_indices.size(); k++) {
-        // Filled, or hollow while hidden
-        const sf::FloatRect box = cell(text, swatch_indices[k], SWATCH_CHARS);
-        sf::RectangleShape swatch(box.size - sf::Vector2f(2.f, 2.f));
-        swatch.setPosition(box.position + sf::Vector2f(1.f, 1.f));
-        swatch.setFillColor(d.rows[k].hidden ? sf::Color::Transparent : d.rows[k].swatch);
-        swatch.setOutlineColor(d.rows[k].swatch);
-        swatch.setOutlineThickness(1.f);
-        target.draw(swatch);
-    }
-    if (gradient_index && d.gradient.size() >= 2) {
-        const sf::FloatRect box = cell(text, *gradient_index, GRADIENT_CHARS);
-        sf::VertexArray bar(sf::PrimitiveType::TriangleStrip);
-        for (size_t k = 0; k < d.gradient.size(); k++) {
-            const float x = box.position.x
-                            + box.size.x * static_cast<float>(k)
-                                      / static_cast<float>(d.gradient.size() - 1);
-            bar.append({{x, box.position.y}, d.gradient[k]});
-            bar.append({{x, box.position.y + box.size.y}, d.gradient[k]});
+void LegendPanel::draw_contents() {
+    using namespace Constants::Ui;
+    const LegendDisplayedData& d = displayed_data;
+    if (!d.rows.empty()
+            && ImGui::BeginTable("##groups", 5,
+                    ImGuiTableFlags_SizingFixedFit | ImGuiTableFlags_NoPadOuterX)) {
+        // The counts right-aligned in the column that takes the rest of the width: a column that
+        // fits its contents would keep the width they were aligned to
+        ImGui::TableSetupColumn("swatch", ImGuiTableColumnFlags_WidthFixed);
+        ImGui::TableSetupColumn("key", ImGuiTableColumnFlags_WidthFixed);
+        ImGui::TableSetupColumn("name", ImGuiTableColumnFlags_WidthFixed);
+        ImGui::TableSetupColumn("count", ImGuiTableColumnFlags_WidthStretch);
+        ImGui::TableSetupColumn("hidden", ImGuiTableColumnFlags_WidthFixed);
+        for (size_t k = 0; k < d.rows.size(); k++) {
+            const LegendDisplayedData::Row& row = d.rows[k];
+            const sf::Color color = row.hidden ? DIM_TEXT : TEXT;
+            ImGui::TableNextRow();
+            ImGui::TableNextColumn();
+            swatch(row.swatch, row.hidden);
+            ImGui::TableNextColumn();
+            Ui::keycap(std::to_string(k + 1));
+            ImGui::TableNextColumn();
+            Ui::text(short_name(row.name), Ui::fonts().text, color);
+            ImGui::TableNextColumn();
+            Ui::text_right(PanelFormat::with_thousands(row.count), Ui::fonts().mono, color);
+            ImGui::TableNextColumn();
+            if (row.hidden) {
+                Ui::text("hidden", Ui::fonts().text, DIM_TEXT);
+            }
         }
-        target.draw(bar);
+        ImGui::EndTable();
+    }
+    if (d.gradient.size() >= 2) {
+        gradient_bar(d.gradient);
+        ImGui::SameLine();
+        Ui::text(d.scale, Ui::fonts().mono, TEXT);
+    }
+    if (Ui::begin_rows("##settings")) {
+        Ui::row("Exposure", d.locked_white ? fmt::format("Locked at {}/px {:+.1f} EV",
+                                                     white_text(*d.locked_white), d.exposure_ev)
+                                           : fmt::format("Auto {:+.1f} EV", d.exposure_ev));
+        Ui::hint_right("E [ ]");
+        Ui::row("Stretch", d.stretch);
+        Ui::hint_right("Ctrl Up/Down");
+        Ui::flag_row("Bloom", d.bloom);
+        Ui::hint_right("B");
+        Ui::end_rows();
+    }
+    if (!d.rows.empty()) {
+        Ui::text("1–9 toggle · Shift solo · 0 all", Ui::fonts().text, DIM_TEXT);
     }
 }

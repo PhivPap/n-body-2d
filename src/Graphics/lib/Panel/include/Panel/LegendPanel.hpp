@@ -5,19 +5,17 @@
 #include <vector>
 
 #include "Panel.hpp"
+#include "SFML/Graphics/Color.hpp"
 
 
 // How bodies are coloured: the colour mode, the legend's groups (keys 1-9), the velocity and
-// density modes' gradient, the exposure, stretch and bloom. Never NaN, which would never compare
-// equal and re-render the panel every frame.
+// density modes' gradient, the exposure, stretch and bloom
 struct LegendDisplayedData {
     struct Row {
         std::string name;  // the group's, as UTF-8
         uint32_t count;    // bodies
         sf::Color swatch;  // its colour at full brightness
         bool hidden;
-
-        bool operator==(const Row&) const = default;
     };
 
     std::string mode;                   // the colour mode's name
@@ -28,19 +26,13 @@ struct LegendDisplayedData {
     std::optional<float> locked_white;  // bodies/px, while the exposure is locked
     std::string stretch;                // e.g. "x4"
     bool bloom = false;
-
-    bool operator==(const LegendDisplayedData&) const = default;
 };
 
-class LegendPanel : public PanelBase<LegendPanel, LegendDisplayedData> {
+class LegendPanel : public DataPanel<LegendDisplayedData> {
 public:
-    using Base = PanelBase<LegendPanel, LegendDisplayedData>;
-    LegendPanel(uint32_t width);
-    void set_panel_text();
-    void draw_decorations(sf::RenderTexture& target);  // the swatches and the gradient
+    LegendPanel(float width);
 
 private:
-    // Where in the text the swatches and the gradient go: their first placeholder space
-    std::vector<size_t> swatch_indices;
-    std::optional<size_t> gradient_index;
+    std::string_view subtitle() const override;
+    void draw_contents() override;
 };

@@ -1,5 +1,7 @@
 #pragma once
 
+#include <optional>
+#include <string>
 #include <string_view>
 
 #include "Panel.hpp"
@@ -14,9 +16,8 @@ std::string mass(double kg);
 std::string attractor(std::string_view id, uint32_t inner_count);  // "Mars (+1 inner)"
 }  // namespace InspectorFormat
 
-// The selection: a single body and its orbit, or several bodies as a whole. Values are never NaN,
-// which would never compare equal and re-render the panel every frame; others that aren't finite
-// show as "-".
+// The selection: a single body and its orbit, or several bodies as a whole. Values that aren't
+// finite show as "-".
 struct InspectorDisplayedData {
     struct Orbit {
         std::string attractor;  // the primary's id
@@ -33,8 +34,6 @@ struct InspectorDisplayedData {
         bool clockwise;                             // on screen
         bool retrograde;
         uint32_t satellite_count;                   // orbiting along with the body
-
-        bool operator==(const Orbit&) const = default;
     };
 
     uint32_t count = 0;                  // selected bodies, 0 for none
@@ -43,13 +42,12 @@ struct InspectorDisplayedData {
     sf::Vector2<double> position_m{};    // the centre of mass
     sf::Vector2<double> velocity_m_s{};  // mass-weighted
     std::optional<Orbit> orbit;          // a single body's, nullopt without an attractor
-
-    bool operator==(const InspectorDisplayedData&) const = default;
 };
 
-class InspectorPanel : public PanelBase<InspectorPanel, InspectorDisplayedData> {
+class InspectorPanel : public DataPanel<InspectorDisplayedData> {
 public:
-    using Base = PanelBase<InspectorPanel, InspectorDisplayedData>;
-    InspectorPanel(uint32_t width);
-    void set_panel_text();
+    InspectorPanel(float width);
+
+private:
+    void draw_contents() override;
 };

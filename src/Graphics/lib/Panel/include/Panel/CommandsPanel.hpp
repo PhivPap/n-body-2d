@@ -3,9 +3,10 @@
 #include "Panel.hpp"
 
 
-class CommandsPanel : public PanelBase<CommandsPanel, std::monostate> {
+class CommandsPanel : public Panel {
 public:
-    using Base = PanelBase<CommandsPanel, std::monostate>;
-    CommandsPanel(uint32_t width);
-    void set_panel_text();
+    CommandsPanel(float width);
+
+private:
+    void draw_contents() override;
 };

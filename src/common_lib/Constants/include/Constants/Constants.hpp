@@ -230,8 +230,11 @@ static_assert(BLOOM_LEVELS >= 1);
 
 // The look of what Dear ImGui draws: the panels, the tooltip and the hub
 namespace Ui {
-constexpr float FONT_SIZE = 16.f;        // as SFML's character size 16
-constexpr float SMALL_FONT_SIZE = 14.f;  // keycaps and key hints
+// Dear ImGui sizes fonts by their ascent + descent, 1.121 em for Ubuntu and 1 em for Ubuntu Mono:
+// Ubuntu at 17 px has about the letters of Ubuntu Mono at 15 px
+constexpr float TEXT_FONT_SIZE = 17.f;   // Ubuntu: labels and text, titles in Ubuntu Medium
+constexpr float MONO_FONT_SIZE = 15.f;   // Ubuntu Mono: numbers, ids and keys
+constexpr float SMALL_FONT_SIZE = 13.f;  // Ubuntu Mono: keycaps and key hints
 constexpr sf::Color PANEL_BG(14, 16, 20, 204);
 constexpr sf::Color BORDER(255, 255, 255, 20);
 constexpr sf::Color TEXT(228, 231, 236);
@@ -241,12 +244,19 @@ constexpr sf::Color ON_COLOR(96, 200, 140);   // a setting's dot while it is on
 constexpr sf::Color KEYCAP_FILL(255, 255, 255, 18);
 constexpr sf::Color KEYCAP_BORDER(255, 255, 255, 46);
 constexpr float KEYCAP_ROUNDING = 3.f;
+constexpr float KEYCAP_PADDING_PX = 4.f;  // left and right of its key
+constexpr float KEYS_SPACING_PX = 3.f;    // between keycaps
+constexpr float DOT_RADIUS_PX = 3.5f;     // a setting's on/off dot
+constexpr float DOT_GAP_PX = 5.f;         // between the dot and "On"
+constexpr float ROW_GAP_PX = 6.f;         // between groups of rows
 constexpr float WINDOW_ROUNDING = 6.f;
 constexpr float FRAME_ROUNDING = 4.f;
 constexpr sf::Vector2f WINDOW_PADDING(12.f, 10.f);
 constexpr sf::Vector2f ITEM_SPACING(8.f, 4.f);
-constexpr sf::Vector2f CELL_PADDING(6.f, 2.f);
+constexpr sf::Vector2f CELL_PADDING(6.f, 1.f);
+constexpr float PANEL_MARGIN_PX = 10.f;  // between panels, and from the window's edges
 
-static_assert(SMALL_FONT_SIZE > 0 && SMALL_FONT_SIZE <= FONT_SIZE);
+static_assert(MONO_FONT_SIZE > 0 && SMALL_FONT_SIZE > 0 && SMALL_FONT_SIZE <= MONO_FONT_SIZE);
+static_assert(TEXT_FONT_SIZE >= MONO_FONT_SIZE);  // other fonts sit on the text's baseline
 }  // namespace Ui
 }  // namespace Constants

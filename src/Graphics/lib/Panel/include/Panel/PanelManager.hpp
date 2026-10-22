@@ -1,21 +1,25 @@
 #pragma once
 
-#include "Panel.hpp"
+#include <utility>
+#include <vector>
 
-class PanelManager : public sf::Drawable, public sf::Transformable {
+#include "Panel.hpp"
+#include "Ui/Layout.hpp"
+
+class PanelManager {
 public:
-    enum class Position { TOP_LEFT, TOP_RIGHT, BOTTOM_LEFT, BOTTOM_RIGHT };
+    using Position = Ui::Corner;
 
     PanelManager() = default;
-    ~PanelManager() = default;
-    void register_panel(IPanel* panel, Position position);
-
-private:
-    static constexpr float PANEL_MARGIN = 10.f;
-    
-    std::vector<std::pair<IPanel*, Position>> panels;
-
     PanelManager(const PanelManager&) = delete;
     PanelManager& operator=(const PanelManager&) = delete;
-    void draw(sf::RenderTarget& target, sf::RenderStates states) const override;
+    // Panels are stacked in their corners in the order they were registered
+    void register_panel(Panel* panel, Position position);
+    // Draws the shown panels that fit in the window this frame, placed by their sizes in the last
+    // frame they were drawn
+    void draw(sf::Vector2f window_size);
+
+private:
+    std::vector<std::pair<Panel*, Position>> panels;
+    std::vector<Ui::PanelSlot> slots;
 };

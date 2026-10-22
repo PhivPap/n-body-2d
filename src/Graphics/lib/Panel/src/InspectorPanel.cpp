@@ -2,8 +2,11 @@
 
 #include <cmath>
 
+#include "Constants/Constants.hpp"
 #include "Logger/Distance.hpp"
 #include "Logger/Time.hpp"
+#include "Ui/Ui.hpp"
+#include "Ui/Widgets.hpp"
 
 
 namespace InspectorFormat {
@@ -32,67 +35,60 @@ std::string attractor(std::string_view id, uint32_t inner_count) {
 namespace {
 using namespace InspectorFormat;
 
-// What the inspector shows of a single body's orbit
-std::string orbit_text(const InspectorDisplayedData::Orbit& o) {
-    std::string txt = fmt::format(
-        " Orbits:        {}\n"
-        " Distance:      {}\n"
-        " Rel. Speed:    {}\n",
-        attractor(o.attractor, o.inner_count),
-        distance(o.distance_m),
-        speed(o.relative_speed_m_s)
-    );
+std::string vector(const sf::Vector2<double>& v, std::string (*format)(double)) {
+    return fmt::format("({}, {})", format(v.x), format(v.y));
+}
+
+// The rows of a single body's orbit
+void orbit_rows(const InspectorDisplayedData::Orbit& o) {
+    Ui::row("Orbits", attractor(o.attractor, o.inner_count));
+    Ui::row("Distance", distance(o.distance_m));
+    Ui::row("Rel. speed", speed(o.relative_speed_m_s));
     if (o.semi_major_axis_m) {
-        txt += fmt::format(" Semi-major:    {}\n", distance(*o.semi_major_axis_m));
+        Ui::row("Semi-major", distance(*o.semi_major_axis_m));
     }
-    txt += o.eccentricity < 10.0 ? fmt::format(" Eccentricity:  {:.5f}\n", o.eccentricity)
-                                 : fmt::format(" Eccentricity:  {:.4g}\n", o.eccentricity);
+    Ui::row("Eccentricity", o.eccentricity < 10.0 ? fmt::format("{:.5f}", o.eccentricity)
+                                                  : fmt::format("{:.4g}", o.eccentricity));
     if (o.period_s) {
-        txt += fmt::format(" Period:        {}\n", time(*o.period_s));
+        Ui::row("Period", time(*o.period_s));
     }
-    // On one line: under the commands, with the action log below, the panel fits 900 px
-    txt += o.apoapsis_m ? fmt::format(" Pe / Ap:       {} / {}\n", distance(o.periapsis_m),
-                                  distance(*o.apoapsis_m))
-                        : fmt::format(" Periapsis:     {}\n", distance(o.periapsis_m));
+    // On one row: under the commands, with the messages below, the panel fits 900 px
+    if (o.apoapsis_m) {
+        Ui::row("Pe / Ap", fmt::format("{} / {}", distance(o.periapsis_m), distance(*o.apoapsis_m)));
+    }
+    else {
+        Ui::row("Periapsis", distance(o.periapsis_m));
+    }
     if (o.excess_speed_m_s) {
-        txt += fmt::format(" Excess Speed:  {}\n", speed(*o.excess_speed_m_s));
+        Ui::row("Excess speed", speed(*o.excess_speed_m_s));
     }
-    txt += fmt::format(
-        " Next Pe in:    {}\n"
-        " Direction:     {}{}\n",
-        o.time_to_periapsis_s ? time(*o.time_to_periapsis_s) : "passed",
-        o.clockwise ? "clockwise" : "counter-clockwise",
-        o.retrograde ? " (retrograde)" : ""
-    );
-    return txt;
+    Ui::row("Next Pe in", o.time_to_periapsis_s ? time(*o.time_to_periapsis_s) : "passed");
+    Ui::row("Direction", fmt::format("{}{}", o.clockwise ? "clockwise" : "counter-clockwise",
+                                 o.retrograde ? " (retrograde)" : ""));
 }
 }  // namespace
 
 
-InspectorPanel::InspectorPanel(uint32_t width) : Base(width) {}
+InspectorPanel::InspectorPanel(float width) : DataPanel("Inspector", "F5", width) {}
 
-void InspectorPanel::set_panel_text() {
-    const auto& d = displayed_data;
-    std::string txt = "Inspector:\n";
+void InspectorPanel::draw_contents() {
+    const InspectorDisplayedData& d = displayed_data;
     if (d.count == 0) {
-        txt += " Right-click a body, or right-drag a box\n"
-               " around bodies, to inspect them\n";
+        ImGui::PushTextWrapPos(0.f);
+        Ui::text("Right-click a body, or right-drag a box around bodies, to inspect them",
+                Ui::fonts().text, Constants::Ui::DIM_TEXT);
+        ImGui::PopTextWrapPos();
+        return;
     }
-    else if (d.count > 1) {
-        txt += fmt::format(
-            " Selected:      {} bodies\n"
-            " Heaviest:      {}\n"
-            " Total Mass:    {}\n"
-            " CoM:           ({}, {})\n"
-            " CoM Velocity:  ({}, {})\n",
-            d.count,
-            d.body,
-            mass(d.mass_kg),
-            distance(d.position_m.x),
-            distance(d.position_m.y),
-            speed(d.velocity_m_s.x),
-            speed(d.velocity_m_s.y)
-        );
+    if (!Ui::begin_rows("##inspector")) {
+        return;
+    }
+    if (d.count > 1) {
+        Ui::row("Selected", fmt::format("{} bodies", d.count));
+        Ui::row("Heaviest", d.body);
+        Ui::row("Total mass", mass(d.mass_kg));
+        Ui::row("CoM", vector(d.position_m, distance));
+        Ui::row("CoM velocity", vector(d.velocity_m_s, speed));
     }
     else {
         // Which orbit along with it
@@ -100,20 +96,16 @@ void InspectorPanel::set_panel_text() {
         if (const uint32_t n = d.orbit ? d.orbit->satellite_count : 0; n > 0) {
             satellites = fmt::format(" (+{} satellite{})", n, n == 1 ? "" : "s");
         }
-        txt += fmt::format(
-            " Body:          {}{}\n"
-            " Mass:          {}\n"
-            " Position:      ({}, {})\n"
-            " Velocity:      ({}, {})\n",
-            d.body,
-            satellites,
-            mass(d.mass_kg),
-            distance(d.position_m.x),
-            distance(d.position_m.y),
-            speed(d.velocity_m_s.x),
-            speed(d.velocity_m_s.y)
-        );
-        txt += d.orbit ? orbit_text(*d.orbit) : " Orbits:        none\n";
+        Ui::row("Body", d.body + satellites);
+        Ui::row("Mass", mass(d.mass_kg));
+        Ui::row("Position", vector(d.position_m, distance));
+        Ui::row("Velocity", vector(d.velocity_m_s, speed));
+        if (d.orbit) {
+            orbit_rows(*d.orbit);
+        }
+        else {
+            Ui::row("Orbits", "none");
+        }
     }
-    text.setString(Text::from_utf8(txt));
+    Ui::end_rows();
 }

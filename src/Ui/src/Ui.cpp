@@ -74,7 +74,7 @@ const Fonts& fonts() {
 }
 
 Context::Context(sf::RenderWindow& window) : window(window) {
-    using Constants::Ui::FONT_SIZE, Constants::Ui::SMALL_FONT_SIZE;
+    using namespace Constants::Ui;
     if (!ImGui::SFML::Init(window, false)) {
         throw std::runtime_error("Failed to initialize Dear ImGui");
     }
@@ -83,9 +83,9 @@ Context::Context(sf::RenderWindow& window) : window(window) {
     // The app sets its own cursors (panning); keyboard navigation is for the hub
     io.ConfigFlags |= ImGuiConfigFlags_NoMouseCursorChange | ImGuiConfigFlags_NavEnableKeyboard;
     try {
-        loaded_fonts = Fonts{.text = add_font("Ubuntu-R.ttf", FONT_SIZE),
-                .title = add_font("Ubuntu-M.ttf", FONT_SIZE),
-                .mono = add_font("UbuntuMono-R.ttf", FONT_SIZE),
+        loaded_fonts = Fonts{.text = add_font("Ubuntu-R.ttf", TEXT_FONT_SIZE),
+                .title = add_font("Ubuntu-M.ttf", TEXT_FONT_SIZE),
+                .mono = add_font("UbuntuMono-R.ttf", MONO_FONT_SIZE),
                 .mono_small = add_font("UbuntuMono-R.ttf", SMALL_FONT_SIZE)};
         if (!ImGui::SFML::UpdateFontTexture()) {
             throw std::runtime_error("Failed to create the font texture of Dear ImGui");
