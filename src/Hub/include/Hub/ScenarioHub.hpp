@@ -1,5 +1,6 @@
 #pragma once
 
+#include <chrono>
 #include <filesystem>
 #include <map>
 #include <optional>
@@ -16,8 +17,9 @@ namespace Hub {
 fs::path repository_scenarios();
 
 // The scenario hub: a Dear ImGui window, over the running scenario or alone, that lists the
-// scenarios of a folder and those the generator makes, shows what they are and runs them. It asks
-// the generator for its scenarios in the background, the first time it opens.
+// scenarios of a folder and those the generator makes, shows what they are, runs them, and has the
+// generator make the missing ones. It asks the generator for its scenarios in the background, the
+// first time it opens.
 class ScenarioHub {
 public:
     explicit ScenarioHub(fs::path folder);
@@ -38,6 +40,18 @@ public:
 private:
     enum class ListState { NOT_ASKED, ASKING, LISTED, FAILED };
 
+    // The generator making a missing scenario, one at a time, and how that went
+    struct Generation {
+        fs::path config;  // the one it makes
+        std::optional<Subprocess> process;
+        std::vector<std::string> output;
+        std::chrono::steady_clock::time_point start;
+        std::chrono::duration<double> took{};
+        std::optional<int> exit_code;  // once it ended
+        bool cancelled = false;
+        bool new_output = false;  // which the output box scrolls to
+    };
+
     const fs::path folder;
     const fs::path script;  // the generator
     bool open_ = false;
@@ -53,9 +67,15 @@ private:
     char search[128] = {};
     bool focus_search = false;
     bool scroll_to_selected = false;
+    std::optional<Generation> generation;  // the last one
 
     void ask_generator();
     void list_received(int exit_code);
+    bool generating() const;
+    void generate(const Entry& entry);
+    void poll_generation();
+    // How the entry's generation goes or went, if it is the last one
+    void draw_generation(const Entry& entry);
     // The entries that match the search, grouped as listed
     std::vector<size_t> shown_entries() const;
     std::optional<fs::path> draw_list(const std::vector<size_t>& shown,

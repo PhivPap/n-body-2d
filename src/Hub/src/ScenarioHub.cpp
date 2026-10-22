@@ -90,6 +90,17 @@ void wrapped(std::string_view text, sf::Color color) {
     Ui::text(text, Ui::fonts().text, color);
     ImGui::PopTextWrapPos();
 }
+
+// A turning arc, a line high, on a line of buttons
+void spinner() {
+    const float size = ImGui::GetTextLineHeight();
+    const ImVec2 pos = ImGui::GetCursorScreenPos() + ImVec2(0.f, ImGui::GetStyle().FramePadding.y);
+    const auto turn = static_cast<float>(ImGui::GetTime() * 6.0);
+    ImDrawList* draw_list = ImGui::GetWindowDrawList();
+    draw_list->PathArcTo(pos + ImVec2(size, size) / 2.f, 0.35f * size, turn, turn + 4.5f, 24);
+    draw_list->PathStroke(Ui::draw_color(Constants::Ui::ACCENT), ImDrawFlags_None, 2.f);
+    ImGui::Dummy({size, size});
+}
 }  // namespace
 
 
@@ -153,6 +164,7 @@ void ScenarioHub::ask_generator() {
 }
 
 void ScenarioHub::poll() {
+    poll_generation();
     if (!list_process) {
         return;
     }
@@ -192,6 +204,54 @@ void ScenarioHub::list_received(int exit_code) {
     if (!chosen) {
         selected.clear();  // the first of the full list
     }
+}
+
+bool ScenarioHub::generating() const {
+    return generation && !generation->exit_code;
+}
+
+// Runs `python3 -u <generator> --out-dir <folder> <name>`. It writes the CSV, then the config: a
+// cancelled run leaves no config, and the next one writes the CSV again.
+void ScenarioHub::generate(const Entry& entry) {
+    generation.emplace();
+    generation->config = entry.config;
+    generation->start = std::chrono::steady_clock::now();
+    Log::info("Generating {} into {}", entry.name, folder);
+    try {
+        generation->process.emplace(std::vector<std::string>{"python3", "-u", script.string(),
+                "--out-dir", folder.string(), entry.name});
+    }
+    catch (const std::exception& e) {
+        generation->output.push_back(e.what());
+        generation->exit_code = 127;  // as a shell says it found no command
+    }
+}
+
+void ScenarioHub::poll_generation() {
+    if (!generating() || !generation->process) {
+        return;
+    }
+    Generation& g = *generation;
+    for (std::string& line : g.process->poll()) {
+        g.output.push_back(std::move(line));
+        g.new_output = true;
+    }
+    if (!g.process->finished()) {
+        return;
+    }
+    g.exit_code = g.process->exit_code();
+    g.took = std::chrono::steady_clock::now() - g.start;
+    g.process.reset();
+    if (*g.exit_code != 0) {
+        Log::warning("Generating {} {}: exit code {}", g.config.stem(),
+                g.cancelled ? "was cancelled" : "failed", *g.exit_code);
+        return;
+    }
+    // Ready to run
+    Log::info("Generated {} [{:.1f} s]", g.config.stem(), g.took.count());
+    entries = build_catalogue(folder, generator);
+    selected = g.config;
+    chosen = scroll_to_selected = true;
 }
 
 std::vector<size_t> ScenarioHub::shown_entries() const {
@@ -278,8 +338,12 @@ std::optional<fs::path> ScenarioHub::draw(sf::Vector2u window_size,
             }
             const bool enter =
                     ImGui::IsKeyPressed(ImGuiKey_Enter) || ImGui::IsKeyPressed(ImGuiKey_KeypadEnter);
-            if (enter && runnable(entries[*current])) {
-                picked = entries[*current].config;
+            const Entry& entry = entries[*current];
+            if (enter && runnable(entry)) {
+                picked = entry.config;
+            }
+            else if (enter && entry.status == Entry::Status::NOT_GENERATED && !generating()) {
+                generate(entry);
             }
         }
 
@@ -461,6 +525,8 @@ std::optional<fs::path> ScenarioHub::draw_details(const Entry& entry,
     if (const auto error = load_errors.find(entry.config); error != load_errors.end()) {
         wrapped(fmt::format("{}: the terminal says why", error->second), ERROR_TEXT);
     }
+    const std::string command =
+            fmt::format("python3 {} --out-dir {} {}", script, folder, entry.name);
     switch (entry.status) {
     case Entry::Status::READY: {
         const std::optional<std::string> why_not = unsupported(entry);
@@ -472,18 +538,75 @@ std::optional<fs::path> ScenarioHub::draw_details(const Entry& entry,
         if (why_not) {
             wrapped(*why_not, DIM_TEXT);
         }
+        draw_generation(entry);
+        // Never from here: configs may hold changes
+        wrapped(fmt::format("To generate it again, losing any changes to its config, run "
+                            "in a terminal: {}",
+                        command),
+                DIM_TEXT);
         break;
     }
     case Entry::Status::NOT_GENERATED:
-        wrapped(fmt::format("Not generated yet. In a terminal, from the repository: python3 "
-                            "scripts/scenario-generator.py --out-dir {} {}",
-                        folder, entry.name),
-                DIM_TEXT);
+        if (!generating() || generation->config != entry.config) {
+            ImGui::BeginDisabled(generating());
+            if (ImGui::Button("Generate", {120.f, 0.f})) {
+                generate(entry);
+            }
+            ImGui::EndDisabled();
+            wrapped(generating()
+                            ? fmt::format("Generating {} first", generation->config.stem())
+                            : fmt::format("Writes {0}.json and {0}.csv into {1}", entry.name, folder),
+                    DIM_TEXT);
+        }
+        draw_generation(entry);
         break;
     case Entry::Status::BROKEN:
         wrapped(entry.error, ERROR_TEXT);
         break;
     }
     return picked;
+}
+
+void ScenarioHub::draw_generation(const Entry& entry) {
+    using namespace Constants::Ui;
+    if (!generation || generation->config != entry.config) {
+        return;
+    }
+    Generation& g = *generation;
+    if (generating()) {
+        const std::chrono::duration<double> elapsed = std::chrono::steady_clock::now() - g.start;
+        ImGui::AlignTextToFramePadding();  // with the Cancel button
+        spinner();
+        ImGui::SameLine();
+        Ui::text(fmt::format("Generating… {:.0f} s", elapsed.count()), Ui::fonts().text, TEXT);
+        ImGui::SameLine();
+        if (ImGui::Button("Cancel") && g.process) {
+            g.cancelled = true;
+            g.process->terminate();  // the next poll() finds it ended
+        }
+    }
+    else if (g.exit_code == 0) {
+        wrapped(fmt::format("Generated in {:.1f} s", g.took.count()), DIM_TEXT);
+    }
+    else {
+        wrapped(g.cancelled ? std::string("Cancelled")
+                            : fmt::format("The generator failed (exit code {})", *g.exit_code),
+                ERROR_TEXT);
+    }
+    // Its output, in a box that keeps its last lines in view
+    ImFont* font = Ui::fonts().mono_small;
+    const float height = HUB_OUTPUT_LINES * font->FontSize + 2.f * ImGui::GetStyle().WindowPadding.y;
+    ImGui::BeginChild("##output", {0.f, height}, ImGuiChildFlags_Borders,
+            ImGuiWindowFlags_NoNavInputs | ImGuiWindowFlags_HorizontalScrollbar);
+    ImGui::PushFont(font);
+    for (const std::string& line : g.output) {
+        ImGui::TextUnformatted(line.c_str());
+    }
+    ImGui::PopFont();
+    if (g.new_output) {
+        ImGui::SetScrollHereY(1.f);
+        g.new_output = false;
+    }
+    ImGui::EndChild();
 }
 }  // namespace Hub
