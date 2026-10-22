@@ -31,12 +31,15 @@ void main() {
 )glsl";
 
 namespace {
+// A number with three significant digits, without an exponent from 1000 on: "4.5", "401", "1016"
+std::string three_digits(double x) {
+    return x < 999.5 ? fmt::format("{:.3g}", x) : fmt::format("{:.0f}", x);  // not "1e+03"
+}
+
 // A speed with three significant digits: "230 km/s", "4.5 m/s"
 std::string speed_text(double m_s) {
-    const bool km = m_s >= 1000.0;
-    const double speed = km ? m_s / 1000.0 : m_s;
-    return (speed < 1000.0 ? fmt::format("{:.3g}", speed) : fmt::format("{:.0f}", speed))
-           + (km ? " km/s" : " m/s");
+    const bool km = m_s >= 999.5;
+    return three_digits(km ? m_s / 1000.0 : m_s) + (km ? " km/s" : " m/s");
 }
 
 // A stretch of `steps` STRETCH_FACTOR steps: "x4", "x1/4"
@@ -972,7 +975,7 @@ void Graphics::toggle_exposure_lock() {
     else {
         locked_white = renderer.read_white_point();
         window.resetGLStates();
-        action_log.log(fmt::format("Exposure: locked at {:.3g}/px", *locked_white));
+        action_log.log(fmt::format("Exposure: locked at {}/px", three_digits(*locked_white)));
     }
     update_legend_panel();
 }

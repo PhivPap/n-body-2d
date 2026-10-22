@@ -17,7 +17,7 @@ std::string with_thousands(uint32_t n) {
 
 // A white point in bodies/px: "6.79", "401", "1016"
 std::string white_text(float white) {
-    return white < 1000.f ? fmt::format("{:.3g}", white) : fmt::format("{:.0f}", white);
+    return white < 999.5f ? fmt::format("{:.3g}", white) : fmt::format("{:.0f}", white);
 }
 
 // The box of `chars` characters from character `index` of `text`, from the top of a capital
