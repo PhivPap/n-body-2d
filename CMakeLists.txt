@@ -63,6 +63,19 @@ add_subdirectory(${THIRD_PARTY_DIR}/json)
 add_subdirectory(${THIRD_PARTY_DIR}/SFML)
 add_subdirectory(${THIRD_PARTY_DIR}/argparse)
 
+# Dear ImGui and its SFML backend, which have no CMake build to add as a subdirectory here
+add_library(imgui
+    ${THIRD_PARTY_DIR}/imgui/imgui.cpp
+    ${THIRD_PARTY_DIR}/imgui/imgui_draw.cpp
+    ${THIRD_PARTY_DIR}/imgui/imgui_tables.cpp
+    ${THIRD_PARTY_DIR}/imgui/imgui_widgets.cpp
+    ${THIRD_PARTY_DIR}/imgui-sfml/imgui-SFML.cpp)
+target_include_directories(imgui SYSTEM PUBLIC ${THIRD_PARTY_DIR}/imgui
+        ${THIRD_PARTY_DIR}/imgui-sfml)
+# ImVec2 and ImVec4 convert to and from sf::Vector2 and sf::Color
+target_compile_definitions(imgui PUBLIC IMGUI_USER_CONFIG="imconfig-SFML.h")
+target_link_libraries(imgui PUBLIC sfml-graphics)
+
 # Warnings for this project's code. Only the simulation libraries use -ffast-math, which (on x86)
 # also stops LTO from inlining across them and the rest, so keep hot calls inline in headers.
 add_compile_options("$<$<COMPILE_LANGUAGE:CXX>:-Wall;-Wextra>")
