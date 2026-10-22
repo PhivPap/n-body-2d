@@ -8,6 +8,7 @@ target_include_directories(${PROJECT_NAME} PUBLIC ${CMAKE_CURRENT_LIST_DIR}/incl
 target_link_libraries(${PROJECT_NAME} PUBLIC lib-simulation)
 target_link_libraries(${PROJECT_NAME} PUBLIC lib-graphics)
 target_link_libraries(${PROJECT_NAME} PUBLIC lib-ui)
+target_link_libraries(${PROJECT_NAME} PUBLIC lib-hub)
 target_link_libraries(${PROJECT_NAME} PUBLIC lib-config)
 target_link_libraries(${PROJECT_NAME} PUBLIC lib-rlcaller)
 target_link_libraries(${PROJECT_NAME} PRIVATE lib-logger)

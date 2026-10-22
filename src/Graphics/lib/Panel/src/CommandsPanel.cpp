@@ -14,7 +14,7 @@ struct Command {
     bool mouse = false;
 };
 
-constexpr Command COMMANDS[] = {{"Space", "Pause / run"}, {"G", "Grid"},
+constexpr Command COMMANDS[] = {{"Esc", "Scenarios"}, {"Space", "Pause / run"}, {"G", "Grid"},
         {"S", "Selection highlight"}, {"D", "Selection centre of mass"},
         {"F", "Follow the selection"}, {"C", "Centre on the selection"},
         {"O", "Selection orbit"}, {"A", "Named orbits"}, {"L / M", "Labels / mass sizes"},

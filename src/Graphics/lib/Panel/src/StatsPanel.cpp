@@ -3,6 +3,7 @@
 #include <cmath>
 
 #include "Logger/Time.hpp"
+#include "Ui/Format.hpp"
 #include "Ui/Widgets.hpp"
 #include "fmt/format.h"
 
@@ -17,9 +18,9 @@ void StatsPanel::draw_contents() {
     if (!Ui::begin_rows("##stats")) {
         return;
     }
-    Ui::row("Iteration", PanelFormat::with_thousands(d.iteration));
-    Ui::row("Steps/s", PanelFormat::si(d.iter_per_sec));
-    Ui::row("Frame", PanelFormat::with_thousands(d.frame));
+    Ui::row("Iteration", Ui::Format::with_thousands(d.iteration));
+    Ui::row("Steps/s", Ui::Format::si(d.iter_per_sec));
+    Ui::row("Frame", Ui::Format::with_thousands(d.frame));
     Ui::row("FPS", fmt::format("{:.1f}", d.fps));
     Ui::row("Elapsed", time(d.elapsed_s));
     Ui::row("Sim. time", time(d.simulated_time_s));

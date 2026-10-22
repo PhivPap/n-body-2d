@@ -34,7 +34,8 @@ down.
 - The development packages SFML needs on Linux: X11, Xrandr, Xcursor, Xi, udev and OpenGL (see
   [SFML's build guide](https://www.sfml-dev.org/tutorials/3.0/getting-started/build-from-source/)).
   SFML downloads its other dependencies, such as FreeType, the first time CMake runs.
-- To generate more scenarios: Python 3.10 or newer with numpy and scipy.
+- To generate more scenarios, from the command line or from the scenario hub: Python 3.10 or
+  newer with numpy and scipy.
 
 ## Build
 
@@ -68,8 +69,18 @@ scenarios.
 ## Run
 
 ```sh
-./build/n-body-2d scenarios/solar-system.json
+./build/n-body-2d                                # the scenario hub
+./build/n-body-2d scenarios/solar-system.json    # a scenario
 ```
+
+Without a config, the window opens on the **scenario hub**, which lists the scenarios in
+`scenarios/`: those generated, and those the generator can make (it asks the generator, which
+needs Python 3 with numpy and scipy). Search them by typing, pick one with the mouse or the arrow
+keys, and run it with Enter, a double-click or Run; each shows its description, tips and what it
+runs on. Press **Esc** during a run to bring the hub back over the running scenario, which keeps
+running, and to close it again. Running another scenario writes the current one's
+`universe_outfile` first, as on exit, then loads the new one in the same window. `--scenarios DIR`
+lists another folder; started with a config, the hub lists that config's folder.
 
 The repository includes one scenario: the Solar System, with the planets and 26 of their moons,
 dwarf planets, large asteroids and Halley's comet. To look at a planet's moons, right-drag a box
@@ -77,7 +88,8 @@ around the planet, press F to follow it and zoom in with the mouse wheel.
 
 - The simulation starts right away. Close the window (or press Ctrl+C in the terminal) to stop.
 - With `Graphics.enabled` set to `false` in the config it runs without a window, logging its
-  progress, until it reaches `iterations` or you press Ctrl+C.
+  progress, until it reaches `iterations` or you press Ctrl+C (the hub runs every scenario in its
+  window).
 - On exit, the final state of every body is written to the config's `universe_outfile` (here
   `scenarios/output.csv`, replaced on every run), in the same format as the input.
 - Paths in a config are relative to the config file, so you can start the simulator from any
@@ -88,6 +100,7 @@ around the planet, press F to follow it and zoom in with the mouse wheel.
 
 | Input               | Action                                                     |
 | ------------------- | ---------------------------------------------------------- |
+| Esc                 | Open or close the scenario hub                             |
 | Space               | Pause or resume                                            |
 | Left / Right        | Decrease / increase the timestep by 10%                    |
 | Ctrl + Left / Right | Shorter / longer trails                                    |

@@ -10,7 +10,9 @@
 #include "CLArgs/CLArgs.hpp"
 #include "Config/Config.hpp"
 #include "Controller/Controller.hpp"
+#include "Constants/Constants.hpp"
 #include "Graphics/Graphics.hpp"
+#include "Hub/ScenarioHub.hpp"
 #include "InputOutput/InputOutput.hpp"
 #include "Logger/Logger.hpp"
 #include "Simulation/AllPairs.hpp"
@@ -68,40 +70,75 @@ sf::String window_title(const fs::path& config_path) {
 int main(int argc, const char* argv[]) {
     try {
         const CLArgs clargs(argc, argv);
-        // The window, created for the first session that has one at its resolution, and Dear
-        // ImGui, which closes it, outlive the sessions drawn on them
+        // The hub's folder: --scenarios, else the config's, else the repository's scenarios/
+        Hub::ScenarioHub hub(clargs.scenarios ? *clargs.scenarios
+                             : clargs.config  ? clargs.config->parent_path()
+                                              : Hub::repository_scenarios());
+        // The window, created for the first session that has one, at its resolution, or for the
+        // hub, and Dear ImGui, which closes it, outlive the sessions drawn on them
         std::optional<sf::RenderWindow> window;
         std::optional<Ui::Context> ui;
         std::optional<fs::path> config_path = clargs.config;
+        if (!config_path) {
+            signal(SIGINT, sigint_handler);  // which ends the hub too
+            window.emplace(sf::VideoMode(Constants::Ui::HUB_RESOLUTION), "N-Body Sim");
+            ui.emplace(*window);
+            hub.open(std::nullopt);
+            config_path = Controller::run_hub(*window, *ui, hub);
+        }
+        // An error in the command line's config ends the program, before any window opens. A
+        // config picked in the hub runs in the window, and if it fails to load, the hub says why.
+        bool from_command_line = clargs.config.has_value();
         while (config_path) {
-            Session session(*config_path);
-            if (session.cfg.graphics.enabled) {
-                if (!window) {
-                    window.emplace(sf::VideoMode(sf::Vector2u(session.cfg.graphics.resolution)),
-                            window_title(*config_path));
-                    ui.emplace(*window);
+            std::optional<Session> session;
+            try {
+                session.emplace(*config_path);
+                if (window || session->cfg.graphics.enabled) {
+                    if (!window) {
+                        window.emplace(
+                                sf::VideoMode(sf::Vector2u(session->cfg.graphics.resolution)),
+                                window_title(*config_path));
+                        ui.emplace(*window);
+                    }
+                    else {
+                        window->setTitle(window_title(*config_path));
+                    }
+                    session->graphics.emplace(session->cfg, session->bodies, *window);
                 }
-                else {
-                    window->setTitle(window_title(*config_path));
-                }
-                session.graphics.emplace(session.cfg, session.bodies, *window);
             }
+            catch (const std::exception& e) {
+                if (from_command_line || !window) {
+                    throw;
+                }
+                Log::error("{}", e.what());
+                hub.set_load_error(*config_path, e.what());
+                window->setTitle("N-Body Sim");
+                hub.open(*config_path);
+                config_path = Controller::run_hub(*window, *ui, hub);
+                continue;
+            }
+            hub.set_load_error(*config_path, std::nullopt);
+            from_command_line = false;
 
             signal(SIGINT, sigint_handler);
 
+            const fs::path running = *config_path;
             config_path = std::nullopt;
-            if (session.graphics) {
-                config_path =
-                        Controller(session.cfg, *session.sim, *session.graphics, *ui).run();
+            if (session->graphics) {
+                config_path = Controller(session->cfg, *session->sim, *session->graphics, *ui,
+                        hub, running).run();
+                if (config_path) {
+                    Controller::show_loading(*window, *ui, *config_path);
+                }
             }
             else {
-                Controller::run_headless(*session.sim);
+                Controller::run_headless(*session->sim);
             }
 
             // Also after a simulation error: `bodies` holds the last state it reached (whose
             // velocities may then lag its positions by half a step)
-            IO::write_csv(session.cfg.io.universe_outfile.string(), session.bodies);
-            session.sim->rethrow_error();
+            IO::write_csv(session->cfg.io.universe_outfile.string(), session->bodies);
+            session->sim->rethrow_error();
         }
     }
     catch (const std::exception& e) {
