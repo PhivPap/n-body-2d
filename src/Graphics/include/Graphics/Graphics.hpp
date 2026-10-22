@@ -150,8 +150,7 @@ private:
     bool cursor_in_window = true;
     std::optional<sf::Vector2f> hover_cursor{};
     std::optional<uint32_t> hovered_body{};
-    sf::Text tooltip_text;
-    sf::RectangleShape tooltip_box{};
+    sf::Vector2f tooltip_size{};  // when it was last drawn
     // Orbits' segments and dashes (the selection's, every named body's), reused every frame
     std::vector<Orbit::Segment> orbit_segments;
     sf::VertexArray orbit_lines{sf::PrimitiveType::Lines};

@@ -86,10 +86,7 @@ constexpr uint64_t HOVER_CHUNK_SIZE = 64;
 constexpr sf::Color HOVER_COLOR(255, 220, 0, 220);
 constexpr float CLICK_MAX_DRAG_PX = 3.f;
 constexpr auto PRIMARIES_UPDATE_TIMER = std::chrono::milliseconds(250);
-constexpr uint32_t TOOLTIP_CHARACTER_SIZE = 14;
-constexpr float TOOLTIP_OFFSET_PX = 16.f;
-constexpr float TOOLTIP_PADDING_PX = 6.f;
-constexpr sf::Color TOOLTIP_BACKGROUND_COLOR(40, 40, 40, 220);
+constexpr float TOOLTIP_OFFSET_PX = 16.f;  // from the cursor, beyond a hovered body's reach
 constexpr sf::Color ORBIT_COLOR(100, 180, 255, 220);
 constexpr sf::Color NAMED_ORBIT_COLOR(190, 190, 190, 150);  // every named body's orbit (A)
 constexpr float ORBIT_DASH_PX = 8.f;
