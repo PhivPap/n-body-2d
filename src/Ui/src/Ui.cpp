@@ -116,7 +116,8 @@ Context::Context(sf::RenderWindow& window) : window(window) {
                 .title = add_font("Ubuntu-M.ttf", TEXT_FONT_SIZE),
                 .mono = add_font("UbuntuMono-R.ttf", MONO_FONT_SIZE),
                 .mono_small = add_font("UbuntuMono-R.ttf", SMALL_FONT_SIZE),
-                .heading = add_font("Ubuntu-M.ttf", HEADING_FONT_SIZE)};
+                .heading = add_font("Ubuntu-M.ttf", HEADING_FONT_SIZE),
+                .card_title = add_font("Ubuntu-M.ttf", CARD_TITLE_FONT_SIZE)};
         if (!ImGui::SFML::UpdateFontTexture()) {
             throw std::runtime_error("Failed to create the font texture of Dear ImGui");
         }

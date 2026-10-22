@@ -233,6 +233,7 @@ constexpr float TEXT_FONT_SIZE = 17.f;   // Ubuntu: labels and text, titles in U
 constexpr float MONO_FONT_SIZE = 15.f;   // Ubuntu Mono: numbers, ids and keys
 constexpr float SMALL_FONT_SIZE = 13.f;  // Ubuntu Mono: keycaps and key hints
 constexpr float HEADING_FONT_SIZE = 24.f;  // Ubuntu Medium: the hub's scenario names
+constexpr float CARD_TITLE_FONT_SIZE = 30.f;  // Ubuntu Medium: the intro card's
 constexpr sf::Color PANEL_BG(14, 16, 20, 204);
 constexpr sf::Color BORDER(255, 255, 255, 20);
 constexpr sf::Color TEXT(228, 231, 236);
@@ -264,11 +265,23 @@ constexpr sf::Color HUB_BG(14, 16, 20, 240);
 constexpr sf::Vector2u HUB_RESOLUTION(1600, 900);
 constexpr uint32_t HUB_FPS = 60;
 constexpr float HUB_OUTPUT_LINES = 8.f;  // of the generator's, in view
+// The intro card shows a scenario's description for INTRO_CARD_TIME, then fades out over
+// INTRO_CARD_FADE_TIME: INTRO_CARD_WIDTH_PX wide at most, and INTRO_CARD_WIDTH_SHARE of the window,
+// centred at INTRO_CARD_CENTRE of its height
+constexpr auto INTRO_CARD_TIME = std::chrono::seconds(10);
+constexpr auto INTRO_CARD_FADE_TIME = std::chrono::milliseconds(1500);
+constexpr float INTRO_CARD_WIDTH_PX = 680.f;
+constexpr float INTRO_CARD_WIDTH_SHARE = 0.7f;
+constexpr float INTRO_CARD_CENTRE = 0.4f;
+constexpr sf::Vector2f INTRO_CARD_PADDING(24.f, 20.f);
 
 static_assert(MONO_FONT_SIZE > 0 && SMALL_FONT_SIZE > 0 && SMALL_FONT_SIZE <= MONO_FONT_SIZE);
 static_assert(TEXT_FONT_SIZE >= MONO_FONT_SIZE);  // other fonts sit on the text's baseline
 static_assert(HUB_SIZE_SHARE.x > 0 && HUB_SIZE_SHARE.x <= 1);
 static_assert(HUB_SIZE_SHARE.y > 0 && HUB_SIZE_SHARE.y <= 1);
 static_assert(HUB_LIST_WIDTH_PX < HUB_SIZE_PX.x);
+static_assert(INTRO_CARD_FADE_TIME.count() > 0);
+static_assert(INTRO_CARD_WIDTH_SHARE > 0 && INTRO_CARD_WIDTH_SHARE <= 1);
+static_assert(INTRO_CARD_CENTRE > 0 && INTRO_CARD_CENTRE < 1);
 }  // namespace Ui
 }  // namespace Constants

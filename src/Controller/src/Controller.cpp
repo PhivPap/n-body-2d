@@ -20,16 +20,21 @@ std::atomic<bool> Controller::sigint_flag = false;
 Controller::Controller(const Config& cfg, Simulation& sim, Graphics& graphics, Ui::Context& ui,
         Hub::ScenarioHub& hub, const std::filesystem::path& config_path)
         : sim(sim), graphics(graphics), ui(ui), hub(hub), config_path(config_path),
+          intro_card(Hub::read_scenario_info(config_path)),
           stats_update_rate_limiter(
                   std::chrono::duration<float>(1 / cfg.graphics.panel_update_hz)) {}
 
 // Dear ImGui gets every event first. The view ignores presses and scrolls over the hub (as of the
 // last frame), and the app's keys while it is open, except Esc, which opens and closes it. Releases
-// always reach the view, or a pan that ends over the hub would go on.
+// always reach the view, or a pan that ends over the hub would go on. A press of any key or button
+// also dismisses the intro card.
 void Controller::handle_events(sf::RenderWindow& window) {
     while (const std::optional event = window.pollEvent()) {
         ui.process_event(*event);
         const bool over_ui = ImGui::GetIO().WantCaptureMouse;
+        if (event->is<sf::Event::KeyPressed>() || event->is<sf::Event::MouseButtonPressed>()) {
+            intro_card.dismiss();
+        }
         if (event->is<sf::Event::Closed>()) {
             window.close();
             Log::info("Closed window");
@@ -230,6 +235,8 @@ std::optional<std::filesystem::path> Controller::run() {
         stats_update_rate_limiter.try_call(std::bind(&Controller::update_panels, this));
         hub.poll();
         ui.new_frame();
+        // Before the frame, whose hover tooltip goes over it
+        intro_card.draw(window.getSize());
         graphics.draw_frame();
         next = hub.draw(window.getSize(), config_path);
         ui.render();

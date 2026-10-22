@@ -6,6 +6,7 @@
 
 #include "Config/Config.hpp"
 #include "Graphics/Graphics.hpp"
+#include "Hub/IntroCard.hpp"
 #include "Hub/ScenarioHub.hpp"
 #include "RLCaller/RLCaller.hpp"
 #include "Simulation/Simulation.hpp"
@@ -38,6 +39,7 @@ private:
     Ui::Context& ui;
     Hub::ScenarioHub& hub;
     const std::filesystem::path& config_path;
+    Hub::IntroCard intro_card;
     RLCaller stats_update_rate_limiter;
 
     void handle_events(sf::RenderWindow& window);

@@ -15,6 +15,7 @@ struct Fonts {
     ImFont* mono = nullptr;        // Ubuntu Mono: numbers, ids and keys
     ImFont* mono_small = nullptr;  // Ubuntu Mono, smaller: keycaps and key hints
     ImFont* heading = nullptr;     // Ubuntu Medium, larger: the hub's scenario names
+    ImFont* card_title = nullptr;  // Ubuntu Medium, larger still: the intro card's title
 };
 const Fonts& fonts();
 
