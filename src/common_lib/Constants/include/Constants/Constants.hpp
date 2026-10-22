@@ -263,6 +263,7 @@ constexpr float HUB_LIST_WIDTH_PX = 340.f;
 constexpr sf::Color HUB_BG(14, 16, 20, 240);
 constexpr sf::Vector2u HUB_RESOLUTION(1600, 900);
 constexpr uint32_t HUB_FPS = 60;
+constexpr float HUB_OUTPUT_LINES = 8.f;  // of the generator's, in view
 
 static_assert(MONO_FONT_SIZE > 0 && SMALL_FONT_SIZE > 0 && SMALL_FONT_SIZE <= MONO_FONT_SIZE);
 static_assert(TEXT_FONT_SIZE >= MONO_FONT_SIZE);  // other fonts sit on the text's baseline

@@ -216,7 +216,9 @@ The 1024 heaviest named bodies are kept.
 
 ## Scenarios
 
-Generate the other scenarios with [scripts/scenario-generator.py](scripts/scenario-generator.py):
+Generate the other scenarios from the scenario hub (select one that isn't generated, then
+Generate or Enter: its output shows as it runs) or with
+[scripts/scenario-generator.py](scripts/scenario-generator.py):
 
 ```sh
 pip install numpy scipy
