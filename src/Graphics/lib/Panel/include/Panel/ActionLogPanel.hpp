@@ -1,11 +1,18 @@
 #pragma once
 
+#include <vector>
+
+#include "ActionLog/ActionLog.hpp"
 #include "Panel.hpp"
 
 
-class ActionLogPanel : public PanelBase<ActionLogPanel, std::string> {
+// The action log's messages, without a title. Hidden while there are none.
+class ActionLogPanel : public DataPanel<std::vector<ActionLog::Entry>> {
 public:
-    using Base = PanelBase<ActionLogPanel, std::string>;
-    ActionLogPanel(uint32_t width);
-    void set_panel_text();
+    ActionLogPanel(float width);
+    bool is_shown() const override;
+
+private:
+    void draw_contents() override;
+    float alpha() const override;
 };

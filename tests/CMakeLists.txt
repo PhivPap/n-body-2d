@@ -31,6 +31,11 @@ target_link_libraries(test-renderer-gl PRIVATE lib-graphics-render lib-constants
 add_test(NAME renderer-gl COMMAND test-renderer-gl)
 set_tests_properties(renderer-gl PROPERTIES SKIP_RETURN_CODE 77)
 
+# test-ui: where the panels go
+add_executable(test-ui ${CMAKE_CURRENT_LIST_DIR}/UiTest.cpp)
+target_link_libraries(test-ui PRIVATE lib-ui lib-logger)
+add_test(NAME ui COMMAND test-ui)
+
 add_executable(test-named-bodies ${CMAKE_CURRENT_LIST_DIR}/NamedBodiesTest.cpp)
 target_link_libraries(test-named-bodies PRIVATE lib-graphics-named-bodies
         lib-graphics-selector lib-graphics-render lib-graphics-text lib-body lib-constants

@@ -1,5 +1,8 @@
 #pragma once
 
+#include <optional>
+#include <string>
+
 #include "Panel.hpp"
 
 
@@ -24,13 +27,12 @@ struct ConfigDisplayedData {
     bool show_labels;
     bool show_named_orbits;
     bool scale_named_by_mass;
-
-    bool operator==(const ConfigDisplayedData&) const = default;
 };
 
-class ConfigPanel : public PanelBase<ConfigPanel, ConfigDisplayedData> {
+class ConfigPanel : public DataPanel<ConfigDisplayedData> {
 public:
-    using Base = PanelBase<ConfigPanel, ConfigDisplayedData>;
-    ConfigPanel(uint32_t width);
-    void set_panel_text();
+    ConfigPanel(float width);
+
+private:
+    void draw_contents() override;
 };

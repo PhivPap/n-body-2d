@@ -137,38 +137,38 @@ void find_bodies_near(HeaviestBody& heaviest, sf::Vector2f point, float radius,
     legend_panel.set_visible(graphics_cfg.show_legend_panel);
 
     {
-        auto write_handle = config_panel.write_handle();
-        write_handle->timestep_s = cfg.sim.timestep;
-        write_handle->algorithm = cfg.sim.simtype_str;
-        write_handle->theta = cfg.sim.theta;
-        write_handle->show_theta = cfg.sim.simtype != Config::Simulation::SimType::ALL_PAIRS;
-        write_handle->softening_factor = cfg.sim.softening_factor;
-        write_handle->softening_length_m = cfg.sim.softening_length_m;
-        write_handle->threads = cfg.sim.threads;
-        write_handle->show_threads = cfg.sim.simtype == Config::Simulation::SimType::BARNES_HUT;
-        write_handle->viewport_m = vp.get_rect().size;
-        write_handle->viewport_px = sf::Vector2<uint32_t>{vp.get_window_res()};
-        write_handle->vsync = graphics_cfg.vsync_enabled;
-        write_handle->grid = show_grid;
-        write_handle->max_fps = graphics_cfg.fps;
-        write_handle->selection_show = selection_show;
-        write_handle->selection_show_center_of_mass = selection_show_center_of_mass;
-        write_handle->selection_follow_center_of_mass = follow_selected;
-        write_handle->selection_show_orbit = selection_show_orbit;
-        write_handle->show_labels = show_labels;
-        write_handle->show_named_orbits = show_named_orbits;
-        write_handle->scale_named_by_mass = scale_named_by_mass;
+        ConfigDisplayedData& data = config_panel.data();
+        data.timestep_s = cfg.sim.timestep;
+        data.algorithm = cfg.sim.simtype_str;
+        data.theta = cfg.sim.theta;
+        data.show_theta = cfg.sim.simtype != Config::Simulation::SimType::ALL_PAIRS;
+        data.softening_factor = cfg.sim.softening_factor;
+        data.softening_length_m = cfg.sim.softening_length_m;
+        data.threads = cfg.sim.threads;
+        data.show_threads = cfg.sim.simtype == Config::Simulation::SimType::BARNES_HUT;
+        data.viewport_m = vp.get_rect().size;
+        data.viewport_px = sf::Vector2<uint32_t>{vp.get_window_res()};
+        data.vsync = graphics_cfg.vsync_enabled;
+        data.grid = show_grid;
+        data.max_fps = graphics_cfg.fps;
+        data.selection_show = selection_show;
+        data.selection_show_center_of_mass = selection_show_center_of_mass;
+        data.selection_follow_center_of_mass = follow_selected;
+        data.selection_show_orbit = selection_show_orbit;
+        data.show_labels = show_labels;
+        data.show_named_orbits = show_named_orbits;
+        data.scale_named_by_mass = scale_named_by_mass;
     }
 
     {
-        auto write_handle = stats_panel.write_handle();
-        write_handle->iteration = 0;
-        write_handle->iter_per_sec = 0;
-        write_handle->frame = 0;
-        write_handle->fps = 0;
-        write_handle->elapsed_s = 0;
-        write_handle->simulated_time_s = 0;
-        write_handle->simulation_rate = std::numeric_limits<double>::quiet_NaN();
+        StatsDisplayedData& data = stats_panel.data();
+        data.iteration = 0;
+        data.iter_per_sec = 0;
+        data.frame = 0;
+        data.fps = 0;
+        data.elapsed_s = 0;
+        data.simulated_time_s = 0;
+        data.simulation_rate = std::numeric_limits<double>::quiet_NaN();
     }
     update_inspector_panel();
     update_legend_panel();
@@ -561,35 +561,28 @@ void Graphics::update_selection_orbit() {
 }
 
 void Graphics::update_inspector_panel() {
-    // Panel values must not be NaN
-    const auto not_nan = [](double x) {
-        return std::isnan(x) ? std::numeric_limits<double>::infinity() : x;
-    };
-    const auto not_nan_vector = [&not_nan](sf::Vector2<double> v) {
-        return sf::Vector2<double>(not_nan(v.x), not_nan(v.y));
-    };
-    auto write_handle = inspector_panel.write_handle();
-    write_handle->count = 0;
-    write_handle->body.clear();
-    write_handle->mass_kg = 0.0;
-    write_handle->position_m = {};
-    write_handle->velocity_m_s = {};
-    write_handle->orbit = std::nullopt;
+    InspectorDisplayedData& data = inspector_panel.data();
+    data.count = 0;
+    data.body.clear();
+    data.mass_kg = 0.0;
+    data.position_m = {};
+    data.velocity_m_s = {};
+    data.orbit = std::nullopt;
     if (!cached_selection_stats) {
         return;
     }
     const Selector::SelectionStats& selection = *cached_selection_stats;
-    write_handle->count = selection.n;
-    write_handle->body = bodies.id(selection.heaviest);
-    write_handle->mass_kg = selection.total_mass;
-    write_handle->position_m = not_nan_vector(selection.center_of_mass);
-    write_handle->velocity_m_s = not_nan_vector(selection.weighted_velocity);
+    data.count = selection.n;
+    data.body = bodies.id(selection.heaviest);
+    data.mass_kg = selection.total_mass;
+    data.position_m = selection.center_of_mass;
+    data.velocity_m_s = selection.weighted_velocity;
     if (!selection_orbit) {
         return;
     }
     const Orbit::Elements& el = selection_orbit->elements;
     const auto closed = [&el](double x) { return el.closed() ? std::optional(x) : std::nullopt; };
-    write_handle->orbit = InspectorDisplayedData::Orbit{
+    data.orbit = InspectorDisplayedData::Orbit{
             .attractor = bodies.id(selection_orbit->attractor.primary),
             .inner_count = selection_orbit->attractor.inner_count,
             .distance_m = el.distance,
@@ -612,38 +605,38 @@ void Graphics::update_inspector_panel() {
 void Graphics::update_legend_panel() {
     using namespace Constants::Graphics;
     using ColorMode = Config::Graphics::ColorMode;
-    auto write_handle = legend_panel.write_handle();
-    write_handle->mode = Config::Graphics::color_mode_to_string(color_mode);
-    write_handle->rows.clear();
+    LegendDisplayedData& data = legend_panel.data();
+    data.mode = Config::Graphics::color_mode_to_string(color_mode);
+    data.rows.clear();
     for (const uint32_t g : render_groups.legend()) {
         const RenderGroup& group = render_groups.groups()[g];
-        write_handle->rows.push_back({.name = group.name, .count = group.count,
+        data.rows.push_back({.name = group.name, .count = group.count,
                 .swatch = Colors::display_hue(Colors::to_linear(group.color)),
                 .hidden = !group.visible});
     }
     // The bodies' colours at full brightness, as the ramps give them
     constexpr int GRADIENT_SAMPLES = 32;
-    write_handle->gradient.clear();
+    data.gradient.clear();
     if (color_mode != ColorMode::WHITE && color_mode != ColorMode::GROUPS) {
         const std::span<const sf::Color> ramp = color_mode == ColorMode::SPEED
                                                         ? std::span<const sf::Color>(SPEED_STOPS)
                                                         : std::span<const sf::Color>(DOPPLER_STOPS);
         for (int k = 0; k < GRADIENT_SAMPLES; k++) {
             const float t = static_cast<float>(k) / (GRADIENT_SAMPLES - 1);
-            write_handle->gradient.push_back(color_mode == ColorMode::DENSITY
+            data.gradient.push_back(color_mode == ColorMode::DENSITY
                             ? Colors::ramp_display(DENSITY_STOPS, t)
                             : Colors::display_hue(Colors::ramp_linear(ramp, t)));
         }
     }
-    write_handle->scale = color_mode == ColorMode::SPEED ? "0 – " + speed_text(velocity_scale)
-                          : color_mode == ColorMode::DOPPLER
-                                  ? "±" + speed_text(velocity_scale) + " (red recedes)"
-                          : color_mode == ColorMode::DENSITY ? "low – high"
-                                                             : "";
-    write_handle->exposure_ev = exposure_ev;
-    write_handle->locked_white = locked_white;
-    write_handle->stretch = stretch_text(stretch_steps);
-    write_handle->bloom = bloom;
+    data.scale = color_mode == ColorMode::SPEED ? "0 – " + speed_text(velocity_scale)
+                 : color_mode == ColorMode::DOPPLER
+                         ? "±" + speed_text(velocity_scale) + " (red recedes)"
+                 : color_mode == ColorMode::DENSITY ? "low – high"
+                                                    : "";
+    data.exposure_ev = exposure_ev;
+    data.locked_white = locked_white;
+    data.stretch = stretch_text(stretch_steps);
+    data.bloom = bloom;
 }
 
 // After the legend's visibility changed: the shader's table, and the panel
@@ -742,13 +735,13 @@ void Graphics::update_stats() {
     const auto dt = now - stats.timestamp_s;
     fps_calculator.register_value(frame_delta / dt);
     stats = Stats{.timestamp_s = now, .frame = frame, .fps = fps_calculator.get_mean<float>()};
-    action_log_panel.write_handle()->assign(action_log.to_string());
+    action_log_panel.data() = action_log.entries();
 }
 
 void Graphics::draw_ui() {
     draw_selection_overlay();
     draw_hover_ring();
-    window.draw(panel_manager);
+    panel_manager.draw(sf::Vector2f(window.getSize()));
     draw_tooltip();
 }
 
@@ -900,51 +893,51 @@ void Graphics::trails_length_decrease() {
 
 void Graphics::toggle_grid() {
     show_grid = !show_grid;
-    config_panel.write_handle()->grid = show_grid;
+    config_panel.data().grid = show_grid;
     action_log.log(fmt::format("Grid: {}", show_grid ? "Enabled" : "Disabled"));
 }
 
 void Graphics::toggle_selection_show() {
     selection_show = !selection_show;
     selector.set_show(selection_show);
-    config_panel.write_handle()->selection_show = selection_show;
+    config_panel.data().selection_show = selection_show;
     action_log.log(fmt::format("Selection overlay: {}", selection_show ? "Enabled" : "Disabled"));
 }
 
 void Graphics::toggle_selection_show_center_of_mass() {
     selection_show_center_of_mass = !selection_show_center_of_mass;
-    config_panel.write_handle()->selection_show_center_of_mass = selection_show_center_of_mass;
+    config_panel.data().selection_show_center_of_mass = selection_show_center_of_mass;
     action_log.log(fmt::format("CoM marker: {}", selection_show_center_of_mass ? "Enabled" : "Disabled"));
 }
 
 void Graphics::toggle_follow_selected() {
     follow_selected = !follow_selected;
-    config_panel.write_handle()->selection_follow_center_of_mass = follow_selected;
+    config_panel.data().selection_follow_center_of_mass = follow_selected;
     action_log.log(fmt::format("Selection follow: {}", follow_selected ? "Enabled" : "Disabled"));
 }
 
 void Graphics::toggle_selection_orbit() {
     selection_show_orbit = !selection_show_orbit;
-    config_panel.write_handle()->selection_show_orbit = selection_show_orbit;
+    config_panel.data().selection_show_orbit = selection_show_orbit;
     action_log.log(fmt::format("Selection orbit: {}",
             selection_show_orbit ? "Enabled" : "Disabled"));
 }
 
 void Graphics::toggle_named_orbits() {
     show_named_orbits = !show_named_orbits;
-    config_panel.write_handle()->show_named_orbits = show_named_orbits;
+    config_panel.data().show_named_orbits = show_named_orbits;
     action_log.log(fmt::format("Named orbits: {}", show_named_orbits ? "Enabled" : "Disabled"));
 }
 
 void Graphics::toggle_labels() {
     show_labels = !show_labels;
-    config_panel.write_handle()->show_labels = show_labels;
+    config_panel.data().show_labels = show_labels;
     action_log.log(fmt::format("Labels: {}", show_labels ? "Enabled" : "Disabled"));
 }
 
 void Graphics::toggle_mass_scaled_markers() {
     scale_named_by_mass = !scale_named_by_mass;
-    config_panel.write_handle()->scale_named_by_mass = scale_named_by_mass;
+    config_panel.data().scale_named_by_mass = scale_named_by_mass;
     action_log.log(fmt::format("Mass-scaled markers: {}",
             scale_named_by_mass ? "Enabled" : "Disabled"));
 }
@@ -1077,7 +1070,7 @@ void Graphics::notify_resumed() {
 }
 
 void Graphics::notify_timestep_changed(double old_dt, double new_dt) {
-    config_panel.write_handle()->timestep_s = new_dt;
+    config_panel.data().timestep_s = new_dt;
     using Time = Log::Time;
     action_log.log(fmt::format("Dt: {} -> {}", Time::from<Time::Unit::S>(old_dt),
             Time::from<Time::Unit::S>(new_dt)));
@@ -1085,20 +1078,20 @@ void Graphics::notify_timestep_changed(double old_dt, double new_dt) {
 
 void Graphics::update_simulation_stats(const SimulationStats& sim_stats) {
     {
-        auto write_handle = config_panel.write_handle();
-        write_handle->viewport_m = vp.get_rect().size;
-        write_handle->viewport_px = sf::Vector2<uint32_t>{vp.get_window_res()};
+        ConfigDisplayedData& data = config_panel.data();
+        data.viewport_m = vp.get_rect().size;
+        data.viewport_px = sf::Vector2<uint32_t>{vp.get_window_res()};
     }
 
     {
-        auto write_handle = stats_panel.write_handle();
-        write_handle->iteration = sim_stats.iteration;
-        write_handle->iter_per_sec = sim_stats.ips;
-        write_handle->frame = stats.frame;
-        write_handle->fps = stats.fps;
-        write_handle->elapsed_s = sim_stats.real_elapsed_s;
-        write_handle->simulated_time_s = sim_stats.simulated_elapsed_s;
-        write_handle->simulation_rate = sim_stats.ips * sim_stats.timestep_s;
+        StatsDisplayedData& data = stats_panel.data();
+        data.iteration = sim_stats.iteration;
+        data.iter_per_sec = sim_stats.ips;
+        data.frame = stats.frame;
+        data.fps = stats.fps;
+        data.elapsed_s = sim_stats.real_elapsed_s;
+        data.simulated_time_s = sim_stats.simulated_elapsed_s;
+        data.simulation_rate = sim_stats.ips * sim_stats.timestep_s;
     }
     update_inspector_panel();
     update_legend_panel();  // the velocity scale

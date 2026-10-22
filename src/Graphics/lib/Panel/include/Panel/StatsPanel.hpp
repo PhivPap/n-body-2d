@@ -11,13 +11,12 @@ struct StatsDisplayedData {
     double elapsed_s;
     double simulated_time_s;
     double simulation_rate;
-
-    bool operator==(const StatsDisplayedData&) const = default;
 };
 
-class StatsPanel : public PanelBase<StatsPanel, StatsDisplayedData> {
+class StatsPanel : public DataPanel<StatsDisplayedData> {
 public:
-    using Base = PanelBase<StatsPanel, StatsDisplayedData>;
-    StatsPanel(uint32_t width);
-    void set_panel_text();
+    StatsPanel(float width);
+
+private:
+    void draw_contents() override;
 };
