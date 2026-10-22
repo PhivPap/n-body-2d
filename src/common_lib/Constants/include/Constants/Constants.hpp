@@ -261,6 +261,7 @@ constexpr float PANEL_MARGIN_PX = 10.f;  // between panels, and from the window'
 constexpr sf::Vector2f HUB_SIZE_PX(1100.f, 700.f);
 constexpr sf::Vector2f HUB_SIZE_SHARE(0.9f, 0.88f);
 constexpr float HUB_LIST_WIDTH_PX = 340.f;
+constexpr float HUB_BUTTON_WIDTH_PX = 120.f;  // Run and Generate
 constexpr sf::Color HUB_BG(14, 16, 20, 240);
 constexpr sf::Vector2u HUB_RESOLUTION(1600, 900);
 constexpr uint32_t HUB_FPS = 60;

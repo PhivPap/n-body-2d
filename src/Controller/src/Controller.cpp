@@ -1,10 +1,9 @@
 #include "Controller/Controller.hpp"
 
-#include <csignal>
-#include <unistd.h>
-
 #include <cfloat>
 #include <cmath>
+#include <csignal>
+#include <unistd.h>
 
 #include "Constants/Constants.hpp"
 #include "Logger/Logger.hpp"
@@ -286,8 +285,9 @@ void Controller::show_loading(sf::RenderWindow& window, Ui::Context& ui,
     const sf::Vector2f window_size(window.getSize());
     ui.new_frame();
     window.clear(Constants::Graphics::BG_COLOR);
-    ImGui::GetForegroundDrawList()->AddText(font, font->FontSize,
-            {std::round((window_size.x - size.x) / 2.f), std::round((window_size.y - size.y) / 2.f)},
+    const ImVec2 pos(std::round((window_size.x - size.x) / 2.f),
+            std::round((window_size.y - size.y) / 2.f));
+    ImGui::GetForegroundDrawList()->AddText(font, font->FontSize, pos,
             Ui::u32(Constants::Ui::TEXT), text.c_str());
     ui.render();
     window.display();
