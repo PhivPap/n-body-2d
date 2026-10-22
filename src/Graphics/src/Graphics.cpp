@@ -12,6 +12,9 @@
 #include "Render/Colors.hpp"
 #include "Render/ToneMath.hpp"
 #include "Text/Text.hpp"
+#include "Ui/Ui.hpp"
+#include "Ui/Widgets.hpp"
+#include "imgui_internal.h"
 
 
 // Named bodies' markers: points as wide as their texture coordinate's x, drawn as circles
@@ -84,7 +87,6 @@ void find_bodies_near(HeaviestBody& heaviest, sf::Vector2f point, float radius,
           body_velocities_cache(bodies.n), body_vertex_array(sf::PrimitiveType::Points, bodies.n),
           window(window), vp(sf::Vector2f(window.getSize()), graphics_cfg.pixel_scale),
           selector(bodies, body_positions_cache, body_vertex_array),
-          tooltip_text(Text::font(), "", Constants::Graphics::TOOLTIP_CHARACTER_SIZE),
           apsis_label(Text::font(), "", Constants::Graphics::APSIS_CHARACTER_SIZE) {
     window.setFramerateLimit(graphics_cfg.fps);
     window.setVerticalSyncEnabled(graphics_cfg.vsync_enabled);
@@ -118,7 +120,6 @@ void find_bodies_near(HeaviestBody& heaviest, sf::Vector2f point, float radius,
     if (!marker_shader.loadFromMemory(marker_vertex_shader, marker_fragment_shader)) {
         throw std::runtime_error("Failed to load shaders");
     }
-    tooltip_box.setFillColor(Constants::Graphics::TOOLTIP_BACKGROUND_COLOR);
     constexpr float apsis_radius = Constants::Graphics::APSIS_MARKER_RADIUS_PX;
     apsis_marker.setOrigin({apsis_radius, apsis_radius});
     apsis_marker.setFillColor(Constants::Graphics::ORBIT_COLOR);
@@ -689,44 +690,42 @@ void Graphics::draw_hover_ring() {
 
 // The hovered body's id, mass, and what it orbits or else its speed, next to the cursor
 void Graphics::draw_tooltip() {
-    using namespace Constants::Graphics;
+    using Constants::Graphics::TOOLTIP_OFFSET_PX;
     if (!hovered_body || !hover_cursor) {
         return;
     }
     const uint32_t index = *hovered_body;
-    std::string text = fmt::format("{}\nMass: {}\n", bodies.id(index),
-            InspectorFormat::mass(bodies.mass(index)));
-    if (const auto orbit = body_orbit(index)) {
-        text += fmt::format("Around {}: {}, {}",
-                InspectorFormat::attractor(bodies.id(orbit->attractor.primary),
-                        orbit->attractor.inner_count),
-                InspectorFormat::distance(orbit->elements.distance),
-                InspectorFormat::speed(orbit->elements.speed));
-    }
-    else {
-        text += fmt::format("Speed: {}", InspectorFormat::speed(bodies.vel(index).length()));
-    }
-    tooltip_text.setString(Text::from_utf8(text));
-
-    // Below right of the cursor, or left of it or above it if it doesn't fit there
-    const sf::FloatRect bounds = tooltip_text.getLocalBounds();
-    const sf::Vector2f padding(TOOLTIP_PADDING_PX, TOOLTIP_PADDING_PX);
-    const sf::Vector2f size = bounds.size + 2.f * padding;
-    const sf::Vector2f window_size = window.getView().getSize();
+    // Below right of the cursor, or left of it or above it if it doesn't fit there, by its size
+    // when it was last drawn
+    const sf::Vector2f window_size(window.getSize());
     sf::Vector2f pos = *hover_cursor + sf::Vector2f(TOOLTIP_OFFSET_PX, TOOLTIP_OFFSET_PX);
-    if (pos.x + size.x > window_size.x) {
-        pos.x = hover_cursor->x - TOOLTIP_OFFSET_PX - size.x;
+    if (pos.x + tooltip_size.x > window_size.x) {
+        pos.x = hover_cursor->x - TOOLTIP_OFFSET_PX - tooltip_size.x;
     }
-    if (pos.y + size.y > window_size.y) {
-        pos.y = hover_cursor->y - TOOLTIP_OFFSET_PX - size.y;
+    if (pos.y + tooltip_size.y > window_size.y) {
+        pos.y = hover_cursor->y - TOOLTIP_OFFSET_PX - tooltip_size.y;
     }
-    pos = {std::round(pos.x), std::round(pos.y)};
-    tooltip_box.setSize(size);
-    tooltip_box.setPosition(pos);
-    const sf::Vector2f text_pos = pos + padding - bounds.position;
-    tooltip_text.setPosition({std::round(text_pos.x), std::round(text_pos.y)});
-    window.draw(tooltip_box);
-    window.draw(tooltip_text);
+    ImGui::SetNextWindowPos({std::round(pos.x), std::round(pos.y)});
+    if (ImGui::Begin("##tooltip", nullptr, Ui::OVERLAY_FLAGS | ImGuiWindowFlags_AlwaysAutoResize)) {
+        // Over the panels, also those first shown after it
+        ImGui::BringWindowToDisplayFront(ImGui::GetCurrentWindow());
+        Ui::text(bodies.id(index), Ui::fonts().title, Constants::Ui::TEXT);
+        if (Ui::begin_rows("##tooltip")) {
+            Ui::row("Mass", InspectorFormat::mass(bodies.mass(index)));
+            if (const auto orbit = body_orbit(index)) {
+                Ui::row("Orbits", InspectorFormat::attractor(bodies.id(orbit->attractor.primary),
+                                          orbit->attractor.inner_count));
+                Ui::row("Distance", InspectorFormat::distance(orbit->elements.distance));
+                Ui::row("Rel. speed", InspectorFormat::speed(orbit->elements.speed));
+            }
+            else {
+                Ui::row("Speed", InspectorFormat::speed(bodies.vel(index).length()));
+            }
+            Ui::end_rows();
+        }
+    }
+    tooltip_size = ImGui::GetWindowSize();
+    ImGui::End();
 }
 
 void Graphics::update_stats() {
