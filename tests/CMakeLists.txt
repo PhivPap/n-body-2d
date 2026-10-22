@@ -76,6 +76,9 @@ if(Python3_Interpreter_FOUND AND NOT python_modules_missing)
         list(REMOVE_ITEM scenarios solar-system)
     endif()
     add_test(NAME scenarios COMMAND ${generator} --scale 0.1 ${scenarios})
+    # The scenario hub lists the generator's scenarios with --list --json
+    add_test(NAME scenario-list COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_SOURCE_DIR}/scripts/scenario-generator.py --list --json)
     # Kepler-16 runs on the GPU at full scale (1.5k bodies), but on All Pairs at --scale 0.1
     if(NBODY_CUDA)
         add_test(NAME scenarios-gpu COMMAND ${generator} kepler-16)

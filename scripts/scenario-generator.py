@@ -14,6 +14,7 @@ simulator writes the final state to output.csv in the same folder when it exits.
 Usage (from anywhere; paths are resolved against the repo root). Needs numpy and scipy
 (`pip install numpy scipy`), or let uv install them: `uv run scripts/scenario-generator.py`.
     python3 scripts/scenario-generator.py --list
+    python3 scripts/scenario-generator.py --list --json      # as JSON, for the simulator's hub
     python3 scripts/scenario-generator.py                    # generate every scenario
     python3 scripts/scenario-generator.py solar-system 'galaxy-*'
     python3 scripts/scenario-generator.py --scale 0.1 ...    # 10x fewer particles (quick tests)
@@ -1971,6 +1972,8 @@ def main():
             epilog=__doc__.split("\n\n", 1)[1])
     parser.add_argument("names", nargs="*", help="scenario names or glob patterns (default: all)")
     parser.add_argument("--list", action="store_true", help="list the scenarios and exit")
+    parser.add_argument("--json", action="store_true",
+            help="with --list: as a JSON array of {name, group, summary}, in --list's order")
     parser.add_argument("--scale", type=float, default=1.0,
             help="multiply particle counts (e.g. 0.1 for quick tests; few-body systems ignore it)")
     parser.add_argument("--seed", type=int, default=0, help="random seed (default: 0)")
@@ -1983,7 +1986,13 @@ def main():
     parser.add_argument("--simulator", type=lambda path: Path(path).resolve(), default=SIMULATOR,
             help=f"simulator that --verify runs (default: {SIMULATOR.relative_to(REPO_ROOT)})")
     args = parser.parse_args()
+    if args.json and not args.list:
+        parser.error("--json goes with --list")
 
+    if args.list and args.json:
+        print(json.dumps([{"name": name, "group": group, "summary": summary}
+                for name, (group, summary, _) in SCENARIOS.items()], ensure_ascii=False))
+        return 0
     if args.list:
         width = max(map(len, SCENARIOS))
         for name, (group, summary, _) in SCENARIOS.items():
