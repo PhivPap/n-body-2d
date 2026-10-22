@@ -336,8 +336,8 @@ std::optional<fs::path> ScenarioHub::draw(sf::Vector2u window_size,
                 selected = entries[*--current].config;
                 chosen = scroll_to_selected = true;
             }
-            const bool enter =
-                    ImGui::IsKeyPressed(ImGuiKey_Enter) || ImGui::IsKeyPressed(ImGuiKey_KeypadEnter);
+            const bool enter = ImGui::IsKeyPressed(ImGuiKey_Enter)
+                               || ImGui::IsKeyPressed(ImGuiKey_KeypadEnter);
             const Entry& entry = entries[*current];
             if (enter && runnable(entry)) {
                 picked = entry.config;
@@ -485,9 +485,9 @@ std::optional<fs::path> ScenarioHub::draw_details(const Entry& entry,
                                                    *entry.theta));
         }
         if (entry.softening_length_m) {
-            Ui::row("Softening", *entry.softening_length_m > 0.0
-                                         ? Log::Distance::from(*entry.softening_length_m).to_string()
-                                         : "none");
+            const double softening = *entry.softening_length_m;
+            Ui::row("Softening",
+                    softening > 0.0 ? Log::Distance::from(softening).to_string() : "none");
         }
         else if (entry.softening_factor) {
             Ui::row("Softening", fmt::format("{:g} of the mean distance", *entry.softening_factor));
@@ -531,7 +531,8 @@ std::optional<fs::path> ScenarioHub::draw_details(const Entry& entry,
     case Entry::Status::READY: {
         const std::optional<std::string> why_not = unsupported(entry);
         ImGui::BeginDisabled(why_not.has_value());
-        if (ImGui::Button(entry.config == running ? "Restart" : "Run", {120.f, 0.f})) {
+        const char* action = entry.config == running ? "Restart" : "Run";
+        if (ImGui::Button(action, {HUB_BUTTON_WIDTH_PX, 0.f})) {
             picked = entry.config;
         }
         ImGui::EndDisabled();
@@ -540,22 +541,24 @@ std::optional<fs::path> ScenarioHub::draw_details(const Entry& entry,
         }
         draw_generation(entry);
         // Never from here: configs may hold changes
-        wrapped(fmt::format("To generate it again, losing any changes to its config, run "
-                            "in a terminal: {}",
-                        command),
-                DIM_TEXT);
+        if (!entry.group.empty()) {
+            wrapped(fmt::format("To generate it again, losing any changes to its config, run "
+                                "in a terminal: {}",
+                            command),
+                    DIM_TEXT);
+        }
         break;
     }
     case Entry::Status::NOT_GENERATED:
         if (!generating() || generation->config != entry.config) {
             ImGui::BeginDisabled(generating());
-            if (ImGui::Button("Generate", {120.f, 0.f})) {
+            if (ImGui::Button("Generate", {HUB_BUTTON_WIDTH_PX, 0.f})) {
                 generate(entry);
             }
             ImGui::EndDisabled();
-            wrapped(generating()
-                            ? fmt::format("Generating {} first", generation->config.stem())
-                            : fmt::format("Writes {0}.json and {0}.csv into {1}", entry.name, folder),
+            wrapped(generating() ? fmt::format("Generating {} first", generation->config.stem())
+                                 : fmt::format("Writes {0}.json and {0}.csv into {1}", entry.name,
+                                           folder),
                     DIM_TEXT);
         }
         draw_generation(entry);
@@ -595,7 +598,8 @@ void ScenarioHub::draw_generation(const Entry& entry) {
     }
     // Its output, in a box that keeps its last lines in view
     ImFont* font = Ui::fonts().mono_small;
-    const float height = HUB_OUTPUT_LINES * font->FontSize + 2.f * ImGui::GetStyle().WindowPadding.y;
+    const float height =
+            HUB_OUTPUT_LINES * font->FontSize + 2.f * ImGui::GetStyle().WindowPadding.y;
     ImGui::BeginChild("##output", {0.f, height}, ImGuiChildFlags_Borders,
             ImGuiWindowFlags_NoNavInputs | ImGuiWindowFlags_HorizontalScrollbar);
     ImGui::PushFont(font);

@@ -1,8 +1,8 @@
 #include "Panel/LegendPanel.hpp"
 
 #include "Constants/Constants.hpp"
-#include "Ui/Ui.hpp"
 #include "Ui/Format.hpp"
+#include "Ui/Ui.hpp"
 #include "Ui/Widgets.hpp"
 #include "fmt/format.h"
 

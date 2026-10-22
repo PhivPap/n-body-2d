@@ -54,7 +54,8 @@ void orbit_rows(const InspectorDisplayedData::Orbit& o) {
     }
     // On one row: under the commands, with the messages below, the panel fits 900 px
     if (o.apoapsis_m) {
-        Ui::row("Pe / Ap", fmt::format("{} / {}", distance(o.periapsis_m), distance(*o.apoapsis_m)));
+        Ui::row("Pe / Ap",
+                fmt::format("{} / {}", distance(o.periapsis_m), distance(*o.apoapsis_m)));
     }
     else {
         Ui::row("Periapsis", distance(o.periapsis_m));
