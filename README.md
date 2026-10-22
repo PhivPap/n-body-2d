@@ -80,7 +80,9 @@ keys, and run it with Enter, a double-click or Run; each shows its description, 
 runs on. Press **Esc** during a run to bring the hub back over the running scenario, which keeps
 running, and to close it again. Running another scenario writes the current one's
 `universe_outfile` first, as on exit, then loads the new one in the same window. `--scenarios DIR`
-lists another folder; started with a config, the hub lists that config's folder.
+lists another folder; started with a config, the hub lists that config's folder. When a generated
+scenario starts, a card shows its description and tips for 10 seconds; any key or click dismisses
+it.
 
 The repository includes one scenario: the Solar System, with the planets and 26 of their moons,
 dwarf planets, large asteroids and Halley's comet. To look at a planet's moons, right-drag a box

@@ -4,7 +4,8 @@ project(lib-hub)
 add_library(${PROJECT_NAME}
     ${CMAKE_CURRENT_LIST_DIR}/src/Catalogue.cpp
     ${CMAKE_CURRENT_LIST_DIR}/src/Subprocess.cpp
-    ${CMAKE_CURRENT_LIST_DIR}/src/ScenarioHub.cpp)
+    ${CMAKE_CURRENT_LIST_DIR}/src/ScenarioHub.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/src/IntroCard.cpp)
 target_include_directories(${PROJECT_NAME} PUBLIC ${CMAKE_CURRENT_LIST_DIR}/include)
 # The repository, where the hub finds the scenarios/ folder and the generator by default
 target_compile_definitions(${PROJECT_NAME} PRIVATE NBODY_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
