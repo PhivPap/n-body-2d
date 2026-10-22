@@ -196,7 +196,7 @@ void Controller::timestep_decrease() {
     }
 }
 
-void Controller::run() {
+std::optional<std::filesystem::path> Controller::run() {
     StopWatch sw;
     sim.run();
     sf::RenderWindow& window = graphics.get_window();
@@ -216,6 +216,7 @@ void Controller::run() {
         sim.pause();
     }
     Log::debug("Sim done: [{}]", sw);
+    return std::nullopt;
 }
 
 void Controller::run_headless(Simulation& sim) {

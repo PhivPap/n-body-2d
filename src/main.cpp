@@ -1,3 +1,5 @@
+#include <filesystem>
+#include <memory>
 #include <optional>
 #include <signal.h>
 #include <thread>
@@ -17,6 +19,7 @@
 #include "Simulation/BarnesHutCuda.hpp"
 #endif
 #include "Simulation/Simulation.hpp"
+#include "Text/Text.hpp"
 #include "Ui/Ui.hpp"
 
 // Signal handler can only use signal-safe code
@@ -43,37 +46,63 @@ std::unique_ptr<Simulation> create_sim(const Config::Simulation& sim_cfg, Bodies
     return nullptr;
 }
 
+// A scenario's run: its config, its bodies, their simulation and, with a window, their graphics.
+// Destroyed in reverse: the simulation and the graphics keep references to the config and bodies.
+struct Session {
+    const Config cfg;
+    Bodies bodies;
+    std::unique_ptr<Simulation> sim;
+    std::optional<Graphics> graphics;
+
+    explicit Session(const fs::path& config_path)
+            : cfg(config_path),
+              bodies(IO::parse_csv(cfg.io.universe_infile.string(), cfg.io.echo_bodies)),
+              sim(create_sim(cfg.sim, bodies)) {}
+};
+
+// "N-Body Sim - solar-system": the separator is ASCII, since X11's WM_NAME is Latin-1
+sf::String window_title(const fs::path& config_path) {
+    return sf::String("N-Body Sim - ") + Text::from_utf8(config_path.stem().string());
+}
+
 int main(int argc, const char* argv[]) {
     try {
         const CLArgs clargs(argc, argv);
-        const Config cfg(clargs.config);
-        Bodies bodies = IO::parse_csv(cfg.io.universe_infile.string(), cfg.io.echo_bodies);
-
-        std::unique_ptr<Simulation> sim = create_sim(cfg.sim, bodies);
-        // Destroyed in reverse: the Graphics first, whose GL resources need the window, then
-        // Dear ImGui, which closes the window
+        // The window, created for the first session that has one at its resolution, and Dear
+        // ImGui, which closes it, outlive the sessions drawn on them
         std::optional<sf::RenderWindow> window;
         std::optional<Ui::Context> ui;
-        std::optional<Graphics> graphics;
-        if (cfg.graphics.enabled) {
-            window.emplace(sf::VideoMode(sf::Vector2u(cfg.graphics.resolution)), "N-Body Sim");
-            ui.emplace(*window);
-            graphics.emplace(cfg, bodies, *window);
-        }
+        std::optional<fs::path> config_path = clargs.config;
+        while (config_path) {
+            Session session(*config_path);
+            if (session.cfg.graphics.enabled) {
+                if (!window) {
+                    window.emplace(sf::VideoMode(sf::Vector2u(session.cfg.graphics.resolution)),
+                            window_title(*config_path));
+                    ui.emplace(*window);
+                }
+                else {
+                    window->setTitle(window_title(*config_path));
+                }
+                session.graphics.emplace(session.cfg, session.bodies, *window);
+            }
 
-        signal(SIGINT, sigint_handler);
+            signal(SIGINT, sigint_handler);
 
-        if (graphics) {
-            Controller(cfg, *sim, *graphics, *ui).run();
-        }
-        else {
-            Controller::run_headless(*sim);
-        }
+            config_path = std::nullopt;
+            if (session.graphics) {
+                config_path =
+                        Controller(session.cfg, *session.sim, *session.graphics, *ui).run();
+            }
+            else {
+                Controller::run_headless(*session.sim);
+            }
 
-        // Also after a simulation error: `bodies` holds the last state it reached (whose
-        // velocities may then lag its positions by half a step)
-        IO::write_csv(cfg.io.universe_outfile.string(), bodies);
-        sim->rethrow_error();
+            // Also after a simulation error: `bodies` holds the last state it reached (whose
+            // velocities may then lag its positions by half a step)
+            IO::write_csv(session.cfg.io.universe_outfile.string(), session.bodies);
+            session.sim->rethrow_error();
+        }
     }
     catch (const std::exception& e) {
         Log::error("{}", e.what());
