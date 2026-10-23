@@ -5,6 +5,7 @@
 #include "Constants/Constants.hpp"
 #include "Ui/Ui.hpp"
 #include "Ui/Widgets.hpp"
+#include "imgui_internal.h"
 
 
 Panel::Panel(std::string title, std::string key, float width)
@@ -40,6 +41,9 @@ void Panel::draw(sf::Vector2f position) {
     ImGui::SetNextWindowSize({width, 0.f});  // as high as its contents
     ImGui::PushStyleVar(ImGuiStyleVar_Alpha, alpha());
     if (ImGui::Begin(window_id.c_str(), nullptr, Ui::OVERLAY_FLAGS)) {
+        // Under the other windows (the hub, the tooltip, the intro card), even those created
+        // before it
+        ImGui::BringWindowToDisplayBack(ImGui::GetCurrentWindow());
         if (!title.empty()) {
             Ui::text(title, Ui::fonts().title, Constants::Ui::TEXT);
             if (const std::string_view sub = subtitle(); !sub.empty()) {
