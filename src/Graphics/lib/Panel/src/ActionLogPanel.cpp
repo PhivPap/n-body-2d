@@ -8,13 +8,12 @@
 
 
 namespace {
-// Messages fade out over their last MESSAGE_FADE_S
-constexpr double MESSAGE_FADE_S = 1.5;
-
+// Messages fade out over their last MESSAGE_FADE_TIME
 float message_alpha(const ActionLog::Entry& entry) {
-    const double left_s =
-            std::chrono::duration<double>(ActionLog::ENTRY_DURATION).count() - entry.age_s;
-    return static_cast<float>(std::clamp(left_s / MESSAGE_FADE_S, 0.0, 1.0));
+    using Seconds = std::chrono::duration<double>;
+    const double left_s = Seconds(ActionLog::ENTRY_DURATION).count() - entry.age_s;
+    return static_cast<float>(std::clamp(
+            left_s / Seconds(Constants::Ui::MESSAGE_FADE_TIME).count(), 0.0, 1.0));
 }
 }  // namespace
 

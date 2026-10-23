@@ -255,6 +255,7 @@ constexpr sf::Vector2f WINDOW_PADDING(12.f, 10.f);
 constexpr sf::Vector2f ITEM_SPACING(8.f, 4.f);
 constexpr sf::Vector2f CELL_PADDING(6.f, 1.f);
 constexpr float PANEL_MARGIN_PX = 10.f;  // between panels, and from the window's edges
+constexpr auto MESSAGE_FADE_TIME = std::chrono::milliseconds(1500);  // a message's, as it expires
 // The scenario hub: HUB_SIZE_PX at most, and HUB_SIZE_SHARE of the window, centred in it, over
 // HUB_BG. Started without a config, the window opens at HUB_RESOLUTION, at HUB_FPS frames per
 // second until a scenario sets its own.
@@ -281,6 +282,7 @@ static_assert(TEXT_FONT_SIZE >= MONO_FONT_SIZE);  // other fonts sit on the text
 static_assert(HUB_SIZE_SHARE.x > 0 && HUB_SIZE_SHARE.x <= 1);
 static_assert(HUB_SIZE_SHARE.y > 0 && HUB_SIZE_SHARE.y <= 1);
 static_assert(HUB_LIST_WIDTH_PX < HUB_SIZE_PX.x);
+static_assert(MESSAGE_FADE_TIME.count() > 0);
 static_assert(INTRO_CARD_FADE_TIME.count() > 0);
 static_assert(INTRO_CARD_WIDTH_SHARE > 0 && INTRO_CARD_WIDTH_SHARE <= 1);
 static_assert(INTRO_CARD_CENTRE > 0 && INTRO_CARD_CENTRE < 1);
