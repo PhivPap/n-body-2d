@@ -596,10 +596,11 @@ void ScenarioHub::draw_generation(const Entry& entry) {
                             : fmt::format("The generator failed (exit code {})", *g.exit_code),
                 ERROR_TEXT);
     }
-    // Its output, in a box that keeps its last lines in view
+    // Its output, in a box that keeps its last lines in view, item spacing apart
     ImFont* font = Ui::fonts().mono_small;
-    const float height =
-            HUB_OUTPUT_LINES * font->FontSize + 2.f * ImGui::GetStyle().WindowPadding.y;
+    const ImGuiStyle& style = ImGui::GetStyle();
+    const float height = HUB_OUTPUT_LINES * (font->FontSize + style.ItemSpacing.y)
+                         - style.ItemSpacing.y + 2.f * style.WindowPadding.y;
     ImGui::BeginChild("##output", {0.f, height}, ImGuiChildFlags_Borders,
             ImGuiWindowFlags_NoNavInputs | ImGuiWindowFlags_HorizontalScrollbar);
     ImGui::PushFont(font);
