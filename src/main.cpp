@@ -112,6 +112,7 @@ int main(int argc, const char* argv[]) {
                 }
                 Log::error("{}", e.what());
                 hub.set_load_error(*config_path, e.what());
+                session.reset();  // what loaded of it (bodies, a simulation's GPU memory)
                 window->setTitle("N-Body Sim");
                 hub.open(*config_path);
                 config_path = Controller::run_hub(*window, *ui, hub);
