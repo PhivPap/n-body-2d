@@ -191,12 +191,12 @@ void ScenarioHub::list_received(int exit_code) {
         list_state = ListState::LISTED;
     }
     catch (const std::exception& e) {
-        // Its last line says why, such as a missing module
+        // Its last line says why, such as a missing module, unless it's the unreadable list
         const auto last = std::ranges::find_if(
                 reversed, [](const std::string& line) { return !line.empty(); });
         list_state = ListState::FAILED;
         list_notes = {"More scenarios need Python 3 with numpy and scipy: pip install numpy scipy",
-                last != reversed.end() ? *last : std::string(e.what())};
+                last != reversed.end() && last != list ? *last : std::string(e.what())};
         Log::warning("The scenario generator didn't list its scenarios: {}", list_notes.back());
     }
     list_output.clear();
